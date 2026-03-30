@@ -1,10 +1,11 @@
 """
-Functions to compute Eocene-specific fields:
-- slope from SD
-- remapped Herold fields
+Functions to compute Eocene-specific field:
 - vegetation mapping
-- albedo transformations
-- aerosol reconstructions
+
+
+Authors
+Renata Coppo (CNR-ISAC, Mar 2026)
+
 """
 
 import re
@@ -100,40 +101,6 @@ def vegetation_zhang(field, var=None, herold_path=None, gaussian=None, **kwargs)
         print(field)
         return field
 
-        # Sanity check
-        #print(f"Biome {biome_id}: mask shape {mask.shape}")
-        #for arr_name, arr in zip(['tvh','tvl'], [tvh, tvl]):
-        #    print(f"Array {arr_name} shape: {arr.shape}")
-         #   if mask.shape != arr.shape:
-         #       print(f"WARNING: mask shape {mask.shape} != {arr_name} shape {arr.shape}")
-    
-
-        #    if biome_id in biome_to_tvh:
-        #        tvh = xr.where(mask, biome_to_tvh[biome_id], tvh)
-        #        cvh = xr.where(mask, 1.0, cvh)
-        #    elif biome_id in biome_to_tvl:
-        #        tvl = xr.where(mask, biome_to_tvl[biome_id], tvl)
-        #        cvl = xr.where(mask, 1.0, cvl)
-        #    else:
-        #        print(f"Warning: biome {biome_id} not in mapping.")
-
-        # Final shape check before assignment
-        #for var_name, arr in zip(["tvh","tvl","cvh","cvl"], [tvh, tvl, cvh, cvl]):
-        #    print(f"Final {var_name} shape: {arr.shape}, field shape: {field[var_name].shape}")
-        #    if arr.shape != field[var_name].shape:
-        #        print(f"WARNING: {var_name} shape mismatch! {arr.shape} vs {field[var_name].shape}")
-
-        # Assign back to field
-        for name, arr in data_vars.items():
-            field[name].data = arr.data
-
-        return field
-        # Replace field variables
-        #for var, newval in zip(["tvh", "tvl", "cvh", "cvl"], [tvh, tvl, cvh, cvl]):
-        #    field[var].data = newval.data
-
-        #return field
-
 def prepare_vegetation_zhang(self):
         """"
         Alternative method to create the ICMGG vegetation data for the Eocene OIFS.
@@ -214,143 +181,6 @@ def prepare_vegetation_zhang(self):
 
         return output_path
 
-
-def albedo(field: xr.Dataset, var=None, lsm_present=None, landsea=None, **kwargs):
-    """
-    Apply both:
-    Land-sea mask-based albedo reconstruction using `lsm_present`
-    Eocene land-sea mask adjustment (albedo=0.05, LAI=NaN over ocean)
-    """
-
-    # VALIDATION
-    if lsm_present is None:
-        raise ValueError("You must provide `lsm_present` (present-day land-sea mask).")
-    if landsea is None:
-        raise ValueError("You must provide `landsea` (Eocene land-sea mask).")
-
-    print("Applying combined Albedo reconstruction + Eocene mask...")
-
-    # PREPROCESS MASKS
-    # Ensure ascending latitude
-    if not np.all(np.diff(lsm_present['lat']) > 0):
-        lsm_present = lsm_present.sortby('lat')
-    if not np.all(np.diff(landsea['lat']) > 0):
-        landsea = landsea.sortby('lat')
-
-    # Extract variable if landsea is a dataset
-    if isinstance(landsea, xr.Dataset):
-        mask_var = list(landsea.data_vars)[0]
-        landsea = landsea[mask_var]
-
-    # Interpolate Eocene mask to field grid
-    landsea_interp = landsea.interp(lat=field["lat"], lon=field["lon"], method="nearest")
-
-    # Match time dimension if needed
-    if "time" in field.dims:
-        ntime = field.dims["time"]
-        if "time" not in landsea_interp.dims or landsea_interp.sizes.get("time", 1) != ntime:
-            landsea_interp = landsea_interp.expand_dims("time").broadcast_like(field.isel(time=slice(0, 1)))
-            landsea_interp = xr.concat([landsea_interp] * ntime, dim="time")
-
-    # Boolean masks
-    present_mask = (lsm_present.broadcast_like(field)) > 0.5
-    eocene_mask = (landsea_interp > 0.5).transpose(*field[list(field.data_vars)[0]].dims)
-
-    # APPLY ALBEDO RECONSTRUCTION
-    for v in field.data_vars:
-        da = field[v]
-
-        # Apply the present-day mask (land only)
-        masked = da.where(present_mask)
-
-        # Sort latitude ascending
-        flip = False
-        if da["lat"].values[0] > da["lat"].values[-1]:
-            da = da.sortby("lat")
-            masked = masked.sortby("lat")
-            flip = True
-
-        # Zonal mean over land
-        zonal_mean = masked.mean(dim="lon", skipna=True)
-        zonal_mean_filled = zonal_mean.interpolate_na(dim="lat", method="nearest")
-        da_recon = zonal_mean_filled.broadcast_like(da)
-
-        # Polar band filling
-        lat = da["lat"]
-        if (lat < -52).any():
-            mean_s = da_recon.sel(lat=lat.where((lat >= -52) & (lat <= -46), drop=True)).mean(dim=("lat", "lon"), skipna=True)
-            da_recon = da_recon.where(~(lat < -52), other=mean_s)
-        if (lat > 75).any():
-            mean_n = da_recon.sel(lat=lat.where((lat >= 70) & (lat <= 75), drop=True)).mean(dim=("lat", "lon"), skipna=True)
-            da_recon = da_recon.where(~(lat > 75), other=mean_n)
-
-        if flip:
-            da_recon = da_recon.sortby("lat", ascending=False)
-
-        # Replace variable data
-        field[v].data = da_recon.data
-
-    print("Albedo reconstruction complete.")
-
-    # APPLY EOCENE MASK RULES
-    albedo_vars = ["al", "aluvp", "aluvd", "alnip", "alnid"]
-    lai_vars = ["lai_lv", "lai_hv"]
-
-    for v in albedo_vars:
-        if v in field:
-            field[v].data = np.where(eocene_mask, field[v].data, 0.05)
-
-    for v in lai_vars:
-        if v in field:
-            field[v].data = np.where(eocene_mask, field[v].data, 0)
-
-    print("Eocene land-sea mask applied successfully.")
-    print("Combined modification complete, GRIB structure preserved.")
-    return field
-
-def compute_slope (field, var=None, sd_eoc=None, a=4.376786e-05, b=2.476405e-04):
-    """
-    Replace a GRIB field (slor) using the linear transfer function:
-        slope = a * sd + b
-    Parameters
-    ----------
-    grib_field : xarray.DataArray
-        The existing slope field from GRIB (ignored except for shape alignment).
-    sd_eoc : xarray.DataArray
-        Eocene sd_orography on the model grid.
-    a, b : float
-        Linear transfer coefficients.
-    """
-    
-    # Compute slope
-    new_slope = a * sd_eoc + b
-    print("Computed new slope (before expanding dims):", new_slope.shape)
-
-    for v in var:
-        target = field[v]
-
-        # Ensure time dimension exists and shape matches
-        if 'time' in target.dims and len(target.dims) == 3:
-            # GRIB has time dimension (1, lat, lon)
-            if new_slope.shape != target.shape:
-                # expand time dim if missing
-                new_slope_exp = new_slope
-                if 'time' not in new_slope_exp.dims:
-                    new_slope_exp = new_slope_exp.expand_dims('time', axis=0)
-                # broadcast to match exactly
-                if new_slope_exp.shape != target.shape:
-                    new_slope_exp = np.broadcast_to(new_slope_exp, target.shape)
-                new_slope_to_assign = new_slope_exp
-            else:
-                new_slope_to_assign = new_slope
-        else:
-            new_slope_to_assign = new_slope
-
-        print(f"Assigning slope to variable '{v}' with shape {target.shape}")
-        field[v].data = new_slope_to_assign.data
-
-    return field
-
 def prepare_vegetation(self):
     """"
     Create the ICMGG vegetation data for the Eocene OIFS.
@@ -410,3 +240,4 @@ def prepare_vegetation(self):
     )
 
     return os.path.join(self.odir_init, "ICMGG_vegetation.nc")
+

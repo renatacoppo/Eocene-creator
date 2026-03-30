@@ -10,7 +10,9 @@ from utils import modify_value, replace_value, regrid_dataset
 from utils import extract_grid_info, spectral2gaussian
 from utils import GRIB2, NC4
 import subprocess
-from eocene_functions import albedo, compute_slope, vegetation_zhang
+from albedo import albedo 
+from subgrid_orog import compute_slope 
+from vegetation import vegetation_zhang
 from cdo import Cdo
 cdo = Cdo()
 
@@ -393,8 +395,6 @@ class EoceneOIFS():
         #    newfield= vegetation_
         #)
 
-
-        
 
     def create_iniua(self):
         """
