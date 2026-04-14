@@ -545,10 +545,11 @@ class EoceneOIFS():
             aer_ifs_paleo[varname2].data = new_var_rg_int.data.astype('float32')
 
         # Save Eocene aerosol climatology
-        output_path = os.path.join(self.odir, 'oifs', 'ifsdata/aerosol_cams_climatology_43R3a.nc')
+        output_path = os.path.join(self.odir, 'oifs', 'ifsdata')
         if os.path.exists(output_path):
             os.remove(output_path)
-        aer_ifs_paleo.to_netcdf(output_path)
+        os.makedirs(output_path, exist_ok=True)
+        aer_ifs_paleo.to_netcdf(os.path.join(output_path, 'aerosol_cams_climatology_43R3a.nc'))
         print(f"→ Eocene aerosol data saved at {output_path}")
         return output_path
 

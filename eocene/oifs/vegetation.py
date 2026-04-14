@@ -38,8 +38,8 @@ def vegetation_zhang(field, var=None, herold_path=None, gaussian=None, **kwargs)
         # --- Load Herold biome data and remap ---
         herold_file = os.path.join(herold_path, "herold_etal_eocene_biome_1x1.nc")
         herold_remap = cdo.remapnn(
-            f"N{gaussian}", input=herold_file, 
-            output=os.path.join(herold_path, "herold_etal_eocene_biome_1x1_N32.nc")
+            f"N{gaussian}", input=herold_file
+            #output=os.path.join(herold_path, "herold_etal_eocene_biome_1x1_N32.nc")
             )
 
         herold = xr.open_dataset(herold_remap)

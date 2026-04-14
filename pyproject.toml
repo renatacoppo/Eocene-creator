@@ -29,7 +29,8 @@ dependencies = [
     'sparse',
     "ipykernel",
     "matplotlib",
-    "jinja2"
+    "pyyaml",
+    "scipy"
 ]
 
 [project.urls]
