@@ -10,6 +10,7 @@ import numpy as np
 from eocene.common import load_yaml, setup_logger
 from eocene.oifs.eoceneOIFS import EoceneOIFS
 from eocene.nemo.eoceneNEMO import EoceneNEMO
+from eocene.oasis.eoceneOASIS import EoceneOASIS
 from eocene.rnfm.eoceneRNFM import iter_track, create_basin_data
 
 OIFS_RESO = "TL63L31"
@@ -59,7 +60,8 @@ def run_oifs(config):
         idir=config["dirs"]["input"],
         odir=config["dirs"]["output"],
         herold=config["dirs"]["herold"],
-        startdate='19900101'
+        startdate='19900101',
+        resolution=OIFS_RESO
     )
 
     # Load Herold datasets (land sea mask, orography, sd_orography)
@@ -141,16 +143,30 @@ def run_runoff(config):
     os.makedirs(os.path.dirname(final_file), exist_ok=True)
     create_basin_data(final_file, rnf_pd, rnf_map_merged_final, arrival_id, calving_id, oroslope.longitude, oroslope.latitude)
 
+def run_oasis(config):
+    
+    logger.info("Starting OASIS modifications")
+
+    # eocene class init
+    eocene_oasis = EoceneOASIS(
+        idir=config["dirs"]["input"],
+        odir=config["dirs"]["output"],
+        nemo_resolution=NEMO_RESO
+    )
+
+    # Create OASIS modifications
+    eocene_oasis.create_rstos()
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Duplicate job configuration for experiments.")
     parser.add_argument("-c", "--config", required=True, help="Path to the original job configuration file.")
-    parser.add_argument("-l", "--log", default="INFO", help="logger level (e.g., DEBUG, INFO, WARNING).")
-    parser.add_argument("-r", "--run", choices=["oifs", "nemo", "rnfm", "all"], default="all", help="Which part of the workflow to run.")
+    parser.add_argument("-l", "--loglevel", default="INFO", help="logger level (e.g., DEBUG, INFO, WARNING).")
+    parser.add_argument("-r", "--run", choices=["oasis", "oifs", "nemo", "rnfm", "all"], default="all", help="Which part of the workflow to run.")
     parser.add_argument("--copy", action="store_true", help="Whether to copy the original configuration file to the output directory.")
 
     args = parser.parse_args()
 
-    logger = setup_logger(level=args.log)
+    logger = setup_logger(level=args.loglevel)
     config = load_yaml(args.config)
 
     if args.copy:
@@ -159,6 +175,8 @@ if __name__ == "__main__":
         shutil.copy(os.path.join(config["dirs"]["oasisdir"], "rstos.nc"), os.path.join(config["dirs"]["output"], "oasis", NEMO_RESO, "rstos.nc"))
         
     logger.info(f"Loaded configuration: {config}")
+    if args.run in ["oasis", "all"]:
+        run_oasis(config)
     if args.run in ["oifs", "all"]:
         run_oifs(config)
     if args.run in ["nemo", "all"]:
