@@ -321,7 +321,7 @@ class EoceneOIFS():
         #    outputfile=output_spectral,
         #)
 
-    def create_init(self, landsea, sd_orog, **kwargs):
+    def create_init(self, lsm_present, landsea, sd_orog, **kwargs):
         """
         Create the ICMGGECE4INIT data for the Eocene OIFS.
         Replace landsea mask
@@ -349,13 +349,13 @@ class EoceneOIFS():
         )
 
         modify_single_grib(
-            inputfile=output_surface,
-            outputfile=output_surface,
-            variables=['tvh','tvl','cvh','cvl'],
-            spectral=False,
-            myfunction=vegetation_zhang,
-            herold_path=self.herold,
-            gaussian=self.gaussian
+           inputfile=output_surface,
+           outputfile=output_surface,
+           variables=['tvh','tvl','cvh','cvl'],
+           spectral=False,
+          myfunction=vegetation_zhang,
+           herold_path=self.herold,
+           gaussian=self.gaussian
         )
 
         # Insert sd_orography (sdor)
@@ -367,7 +367,8 @@ class EoceneOIFS():
             myfunction=replace_value,
             newfield=sd_orog
         )
-        print(type(sd_orog))
+        
+        #print(type(sd_orog))
         # Insert slope (slor) computed from sd
         modify_single_grib(
             inputfile=output_surface,
@@ -380,42 +381,63 @@ class EoceneOIFS():
 
         # Set anisotropy and soil type to 1
         modify_single_grib(
-            inputfile=output_surface,
-            outputfile=output_surface,
-            variables=['isor', 'slt'],
-            spectral=False,
-            myfunction=modify_value,
-            newvalue=1.  
+             inputfile=output_surface,
+             outputfile=output_surface,
+             variables=['isor', 'slt'],
+             spectral=False,
+             myfunction=modify_value,
+             newvalue=1.  
         )
 
         # Zero out other subgrid orographic fields
         modify_single_grib(
             inputfile=output_surface,
             outputfile=output_surface,
-            variables=['sdfor', 'anor', 'cl', 'chnk'],
+            variables=['sdfor', 'anor'],
             spectral=False,
             myfunction=modify_value,
             newvalue=0.  
         )
 
-        nullify_grib(
-            inputfile=output_surface,
-            outputfile=output_surface,
-            variables=['sd']
+        # # Zero out charnock
+        modify_single_grib(
+             inputfile=output_surface,
+             outputfile=output_surface,
+             variables=['chnk'],
+             spectral=False,
+             myfunction=modify_value,
+             newvalue=0.  
         )
 
-        #Modify vegetation variables
+        # # Zero out lakes 
+        modify_single_grib(
+             inputfile=output_surface,
+             outputfile=output_surface,
+             variables=['cl', 'dl', 'licd'],
+             spectral=False,
+             myfunction=modify_value,
+             newvalue=0.001  
+        )
+
+        nullify_grib(
+           inputfile=output_surface,
+           outputfile=output_surface,
+           variables=['sd']
+        )
         
+        albedo
+        variables = ['al', 'aluvp', 'aluvd', 'alnip', 'alnid', 'aluvpi', 'aluvpv', 'aluvpg', 'alnipi', 'alnipv', 'alnipg']
 
-
-        #modify_single_grib(
-        #    inputfile=output_surface,
-        #    outputfile=output_surface,
-        #    variables=['tvh','tvl','cvh','cvl'],
-        #    spectral=False,
-        #    myfunction=replace_value,
-        #    newfield= vegetation_
-        #)
+        modify_single_grib(
+          inputfile=output_surface,
+          outputfile=output_surface,
+          variables=variables,
+          spectral=False,
+          myfunction=albedo,
+          lsm_present=lsm_present,
+          landsea=landsea  
+          ) 
+        
 
 
     def create_iniua(self):
@@ -430,7 +452,7 @@ class EoceneOIFS():
         modify_single_grib(
             inputfile=input_levels,
             outputfile=output_levels,
-            variables='q',
+            variables=['q', 'crwc', 'cswc', 'clwc', 'ciwc', 'cc'],
             spectral=False,
             myfunction=modify_value,
             newvalue=0.  
