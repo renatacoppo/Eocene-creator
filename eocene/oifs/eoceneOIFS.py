@@ -2,18 +2,18 @@
 import os
 import xarray as xr
 import numpy as np
-import xesmf as xe
 import shutil
 import tempfile
-from utils import modify_single_grib, nullify_grib
-from utils import modify_value, replace_value, regrid_dataset 
-from utils import extract_grid_info, spectral2gaussian
-from utils import GRIB2, NC4
 import subprocess
-from albedo import albedo 
-from subgrid_orog import compute_slope 
-from vegetation import vegetation_zhang
 from cdo import Cdo
+
+from .utils import modify_single_grib, nullify_grib
+from .utils import modify_value, replace_value, regrid_dataset 
+from .utils import extract_grid_info, spectral2gaussian
+from .albedo import albedo 
+from .subgrid_orog import compute_slope 
+from .vegetation import vegetation_zhang
+
 cdo = Cdo()
 
 class EoceneOIFS():

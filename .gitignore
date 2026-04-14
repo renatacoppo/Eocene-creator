@@ -1,0 +1,5 @@
+eocene.egg-info
+dist
+__pycache__
+*.idx
+.vscode/
