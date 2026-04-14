@@ -30,7 +30,7 @@ def run_copy(input_dir, output_dir):
         
         if item in ["oifs", "nemo", "oasis"]:
             for subitem in os.listdir(os.path.join(input_dir, item)):
-                
+
                 if item == "oasis" and subitem not in [NEMO_RESO]:
                     continue
                 if item == "oifs" and subitem not in ["composition", "ifsdata", "vtables", "rtables", OIFS_RESO]:
@@ -155,6 +155,8 @@ if __name__ == "__main__":
 
     if args.copy:
         run_copy(config["dirs"]["input"], config["dirs"]["output"])
+        # HACK for rstos file which is the only one working so far, to be removed
+        shutil.copy(os.path.join(config["dirs"]["oasisdir"], "rstos.nc"), os.path.join(config["dirs"]["output"], "oasis", NEMO_RESO, "rstos.nc"))
         
     logger.info(f"Loaded configuration: {config}")
     if args.run in ["oifs", "all"]:
