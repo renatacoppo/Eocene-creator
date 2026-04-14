@@ -172,7 +172,7 @@ if __name__ == "__main__":
     if args.copy:
         run_copy(config["dirs"]["input"], config["dirs"]["output"])
         # HACK for rstos file which is the only one working so far, to be removed
-        shutil.copy(os.path.join(config["dirs"]["oasisdir"], "rstos.nc"), os.path.join(config["dirs"]["output"], "oasis", NEMO_RESO, "rstos.nc"))
+        # shutil.copy(os.path.join(config["dirs"]["oasisdir"], "rstos.nc"), os.path.join(config["dirs"]["output"], "oasis", NEMO_RESO, "rstos.nc"))
         
     logger.info(f"Loaded configuration: {config}")
     if args.run in ["oasis", "all"]:
