@@ -1,5 +1,6 @@
 """Class to generate Eocene OIFS data."""
 import os
+import logging
 import xarray as xr
 import numpy as np
 import shutil
@@ -15,6 +16,7 @@ from .subgrid_orog import compute_slope
 from .vegetation import vegetation_zhang
 
 cdo = Cdo()
+loggy = logging.getLogger(__name__)
 
 class EoceneOIFS():
 
@@ -152,7 +154,7 @@ class EoceneOIFS():
         with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
             icmgg_remap = tmp.name
 
-        print(f"→ Reading land-sea mask from {icmgg_file}")
+        loggy.info("Reading land-sea mask from %s", icmgg_file)
     
         # Convert GRIB to regular Gaussian NetCDF
         cdo.remapnn(
@@ -174,7 +176,7 @@ class EoceneOIFS():
         if lsm.dims != ("lat", "lon"):
             lsm = lsm.transpose("lat", "lon")
     
-        print(f"Land-sea mask prepared with shape {lsm.shape} and dims {lsm.dims}")
+        loggy.info("Land-sea mask prepared with shape %s and dims %s", lsm.shape, lsm.dims)
     
         # Clean up temporary file
         os.remove(icmgg_remap)
@@ -367,7 +369,7 @@ class EoceneOIFS():
             myfunction=replace_value,
             newfield=sd_orog
         )
-        print(type(sd_orog))
+        loggy.debug("sd_orog type: %s", type(sd_orog))
         # Insert slope (slor) computed from sd
         modify_single_grib(
             inputfile=output_surface,
@@ -442,7 +444,7 @@ class EoceneOIFS():
         on the IFS grid, using the US Standard Atmosphere for density interpolation.
         """
 
-        print("→ Loading Herold aerosol data")
+        loggy.info("Loading Herold aerosol data")
         paleoaerfile = os.path.join(self.herold, "herold_etal_eocene_CAM4_BAM_aerosols.nc")
         aer_paleo = xr.open_dataset(paleoaerfile)
 
@@ -463,7 +465,7 @@ class EoceneOIFS():
         # Check or generate US Standard Atmosphere
         ua_file = os.path.join(self.herold, "us_standard_atmosphere_newlevs.nc")
         if not os.path.exists(ua_file):
-            print("→ Generating US Standard Atmosphere data")
+            loggy.info("Generating US Standard Atmosphere data")
             # US Standard Atmosphere data (alt, temp, g, pressure, density, mu)
             data = """
             -1000   21.50   9.810   11.39   1.347   1.821
@@ -516,7 +518,7 @@ class EoceneOIFS():
             new_log_pressure = np.log(aer_paleo.lev)
             ds_interp = ds_new.interp(log_pressure=new_log_pressure, method='linear')
             ds_interp.to_netcdf(ua_file)
-            print(f"→ US Standard Atmosphere saved at {ua_file}")
+            loggy.info("US Standard Atmosphere saved at %s", ua_file)
         else:
             ds_interp = xr.open_dataset(ua_file)
 
@@ -538,7 +540,7 @@ class EoceneOIFS():
         # Convert to column mass and regrid
         for varname2 in var_dict:
             varname1 = var_dict[varname2]
-            print(f"→ Processing {varname1} -> {varname2}")
+            loggy.info("Processing %s -> %s", varname1, varname2)
             new_var = aer_paleo_newbin[varname1] * ds_interp.density
             new_var_rg = regrid_dataset(new_var, regrid_to_reference=aer_ifs_paleo[varname2])
             new_var_rg_int = -new_var_rg.integrate(coord='altitude')
@@ -550,7 +552,7 @@ class EoceneOIFS():
             os.remove(output_path)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         aer_ifs_paleo.to_netcdf(output_path)
-        print(f"→ Eocene aerosol data saved at {output_path}")
+        loggy.info("Eocene aerosol data saved at %s", output_path)
         return output_path
 
 

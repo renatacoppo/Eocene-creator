@@ -2,28 +2,29 @@
 """Command-line interface for running the Eocene modifications workflow, including OIFS, NEMO, and runoff mapper"""
 
 import argparse
-import logging
 import shutil
 import os
 import xarray as xr
 import numpy as np
 
-from common.yaml import load_yaml
-from oifs.eoceneOIFS import EoceneOIFS
-from nemo.eoceneNEMO import EoceneNEMO
-from rnfm.eoceneRNFM import iter_track, create_basin_data
+from eocene.common import load_yaml, setup_logger
+from eocene.oifs.eoceneOIFS import EoceneOIFS
+from eocene.nemo.eoceneNEMO import EoceneNEMO
+from eocene.rnfm.eoceneRNFM import iter_track, create_basin_data
 
 def run_copy(input_dir, output_dir):
     """Copy the input folder to the output folder to preserve original data."""
-    logging.info(f"Copying input data from {input_dir} to {output_dir}")
+    
+    logger.info(f"Copying input data from {input_dir} to {output_dir}")
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     if os.path.exists(output_dir):
-        logging.info(f"Output directory {output_dir} already exists. It will be overwritten.")
+        logger.info(f"Output directory {output_dir} already exists. It will be overwritten.")
         shutil.rmtree(output_dir)
+
     # loop through input directory and copy relevant subdirectories
     for item in os.listdir(input_dir):
-        logging.info(f"Processing {item}...")
+        logger.info(f"Processing {item}...")
         if item in ["oifs", "nemo"]:
             
             for subitem in os.listdir(os.path.join(input_dir, item)):
@@ -31,18 +32,18 @@ def run_copy(input_dir, output_dir):
                     continue
                 src = os.path.join(input_dir, item, subitem)
                 dst = os.path.join(output_dir, item, subitem)
-                logging.info(f"Copying {src} to {dst}")
+                logger.info(f"Copying {src} to {dst}")
                 shutil.copytree(src, dst, symlinks=True)
         if item in ["cmip6-data"]:
             src = os.path.join(input_dir, item)
             dst = os.path.join(output_dir, item)
-            logging.info(f"Copying {src} to {dst}")
+            logger.info(f"Copying {src} to {dst}")
             os.symlink(src, dst)  # use symlink for large CMIP6 data
 
 def run_oifs(config):
     """Run the OIFS modifications based on the provided configuration."""
 
-    logging.info("Starting OIFS modifications")
+    logger.info("Starting OIFS modifications")
 
     # eocene class init
     eocene_oifs = EoceneOIFS(
@@ -71,7 +72,7 @@ def run_oifs(config):
 def run_nemo(config):
     """Run the NEMO modifications based on the provided configuration."""
     
-    logging.info("Starting NEMO modifications")
+    logger.info("Starting NEMO modifications")
 
     # eocene class init
     eocene_nemo = EoceneNEMO(
@@ -87,7 +88,7 @@ def run_nemo(config):
         if os.path.exists(dst):
             os.remove(dst)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        logging.info(f"Copying {src} to {dst}")
+        logger.info(f"Copying {src} to {dst}")
         shutil.copy(src, dst)
 
     # Create NEMO modifications
@@ -97,7 +98,7 @@ def run_nemo(config):
 
 def run_runoff(config):
 
-    logging.info('Reading oroslope file...')
+    logger.info('Reading oroslope file...')
     oroslopefile = os.path.join(config["dirs"]["herold"], "herold_etal_eocene_runoff_1x1.nc")
     runoff_file = os.path.join(config["dirs"]["input"], "runoff-mapper/runoff_maps.nc")
     final_file = os.path.join(config["dirs"]["output"], "runoff-mapper/runoff_maps.nc")
@@ -106,12 +107,12 @@ def run_runoff(config):
     oroslope = oroslope.assign_coords(longitude = oroslope.longitude[0], latitude = oroslope.latitude[:, 0])
     flowdir = oroslope['RTM_FLOW_DIRECTION'].values
 
-    logging.info('Launching calc!')
+    logger.info('Launching calc!')
     rnf_map_merged_final, rivers_merged_final, rivers_end_point, not_assigned = iter_track(flowdir, lat = oroslope.latitude)
 
     if len(not_assigned) > 0:
-        logging.warning('Some points have not been assigned:')
-        logging.warning(not_assigned)
+        logger.warning('Some points have not been assigned:')
+        logger.warning(not_assigned)
 
     # Building arrival point id
     arrival_id = np.zeros(rnf_map_merged_final.shape) - 2
@@ -119,12 +120,12 @@ def run_runoff(config):
         for po in rivers_merged_final[num]:
             arrival_id[po[0], po[1]] = num
 
-    logging.info('Check!')
-    logging.info(f"{rnf_map_merged_final.min()} {rnf_map_merged_final.max()}")
-    logging.info(f"{arrival_id.min()} {arrival_id.max()}")
+    logger.info('Check!')
+    logger.info(f"{rnf_map_merged_final.min()} {rnf_map_merged_final.max()}")
+    logger.info(f"{arrival_id.min()} {arrival_id.max()}")
 
     ## Setting calving equal to runoff
-    logging.warning("WARNING!! Setting calving_id equal to arrival_id! To be changed if ice sheets are present")
+    logger.warning("WARNING!! Setting calving_id equal to arrival_id! To be changed if ice sheets are present")
     calving_id = arrival_id.copy()
 
     rnf_pd = xr.load_dataset(runoff_file)
@@ -134,19 +135,19 @@ def run_runoff(config):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Duplicate job configuration for experiments.")
     parser.add_argument("-c", "--config", required=True, help="Path to the original job configuration file.")
-    parser.add_argument("-l", "--log", default="INFO", help="Logging level (e.g., DEBUG, INFO, WARNING).")
+    parser.add_argument("-l", "--log", default="INFO", help="logger level (e.g., DEBUG, INFO, WARNING).")
     parser.add_argument("-r", "--run", choices=["oifs", "nemo", "rnfm", "all"], default="all", help="Which part of the workflow to run.")
     parser.add_argument("--copy", action="store_true", help="Whether to copy the original configuration file to the output directory.")
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=getattr(logging, args.log))
+    logger = setup_logger(level=args.log)
     config = load_yaml(args.config)
 
     if args.copy:
         run_copy(config["dirs"]["input"], config["dirs"]["output"])
         
-    logging.info(f"Loaded configuration: {config}")
+    logger.info(f"Loaded configuration: {config}")
     if args.run in ["oifs", "all"]:
         run_oifs(config)
     if args.run in ["nemo", "all"]:

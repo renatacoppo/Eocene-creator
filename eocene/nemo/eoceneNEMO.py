@@ -8,6 +8,7 @@ Functions to create boundary conditions for NEMO EOCENE
 """
 
 import os
+import logging
 import numpy as np
 import xarray as xr
 import shutil
@@ -17,6 +18,7 @@ import pandas as pd
 from cdo import Cdo
 
 cdo = Cdo()
+loggy = logging.getLogger(__name__)
 
 class EoceneNEMO():
 
@@ -40,7 +42,7 @@ class EoceneNEMO():
 
         if cleanup and os.path.exists(output_file):
             os.remove(output_file)
-            print(f"Cleaning file: {output_file}")
+            loggy.info("Cleaning file: %s", output_file)
 
         herold_file_remap = self.cdo.remapcon(self.grid, input=herold_file_orig)
 
@@ -70,7 +72,7 @@ class EoceneNEMO():
         # write output file
         os.makedirs(os.path.join(self.output_folder, "nemo/initial"), exist_ok=True)
         ds_out.to_netcdf(output_file)
-        print(f"Written NEMO 4.2 tidal file: {output_file}")
+        loggy.info("Written NEMO 4.2 tidal file: %s", output_file)
 
         ds_m2.close()
         ds_pd.close()
@@ -85,7 +87,7 @@ class EoceneNEMO():
 
         if cleanup and os.path.exists(gh_file_out):
             os.remove(gh_file_out)
-            print(f"Cleaning file: {gh_file_out}")
+            loggy.info("Cleaning file: %s", gh_file_out)
         
         # Loading Geothermal flux NEMO file
         ds_gh = xr.open_dataset(gh_file)
@@ -135,7 +137,7 @@ class EoceneNEMO():
 
         
         ds_gh.to_netcdf(gh_file_out)
-        print(f"Written NEMO 4.2 tidal file: {gh_file_out}")
+        loggy.info("Written NEMO 4.2 tidal file: %s", gh_file_out)
         ds_gh.close()
 
         return None
@@ -206,6 +208,6 @@ class EoceneNEMO():
 
         woa.to_netcdf(output_file, mode="w")
 
-        print(f"Ocean initial conditions written to {output_file}")
+        loggy.info("Ocean initial conditions written to %s", output_file)
 
         return woa

@@ -9,6 +9,9 @@ from matplotlib import pyplot as plt
 import numpy as np
 import xesmf as xe
 import argparse
+import logging
+
+loggy = logging.getLogger(__name__)
 
 # ### Functions
 
@@ -19,10 +22,12 @@ def follow_point(i, j, flowdir, verbose = False):
     
     compass = 'N NE E SE S SW W NW'.split()
 
-    if verbose: print(flowdir[i,j])
+    if verbose:
+        loggy.debug(flowdir[i, j])
 
     if flowdir[i,j] == 0:
-        if verbose: print('Sea point!')
+        if verbose:
+            loggy.debug('Sea point!')
         return np.nan
     
     dir_ok = compass[int(flowdir[i,j]-1)]
@@ -58,12 +63,14 @@ def find_sea(i, j, flowdir, verbose = False):
     val = flowdir[nupo[0], nupo[1]]
 
     if val == 0:
-        if verbose: print('Already a sea point!')
+        if verbose:
+            loggy.debug('Already a sea point!')
         return 2, np.nan, np.nan, np.nan
 
     count = 0
     while val > 0:
-        if verbose: print(f'step {count}')
+        if verbose:
+            loggy.debug('step %s', count)
         last = nupo.copy()
         nupo = follow_point(nupo[0], nupo[1], flowdir = flowdir)
         val = flowdir[nupo[0], nupo[1]]
@@ -72,10 +79,12 @@ def find_sea(i, j, flowdir, verbose = False):
         if count > 100: break
     
     if count > 100:
-        if verbose: print('Ended in a loophole!')
+        if verbose:
+            loggy.debug('Ended in a loophole!')
         return 1, np.nan, np.nan, np.nan
     else:
-        if verbose: print(f'Found sea at ({nupo[0]}, {nupo[1]})')
+        if verbose:
+            loggy.debug('Found sea at (%s, %s)', nupo[0], nupo[1])
         return 0, nupo, last, int(flowdir[last[0], last[1]])
     
 
@@ -109,7 +118,7 @@ def track_rivers(flowdir):
             elif res == 2:
                 rnf_map[i,j] = -2
         
-    print(f'Found {len(rivers)} rivers!')
+    loggy.info('Found %s rivers!', len(rivers))
     
     return rnf_map, rivers, rivers_dir
 
@@ -189,7 +198,7 @@ def calc_basins_dim(rnf_map, lat):
 def get_largest_basins(rnf_map, rivers, rivers_dir, lat, basin_thres = 50):
     basins = calc_basins_dim(rnf_map, lat = lat)
 
-    print(f'Selecting {np.sum(basins > basin_thres)} largest basins!')
+    loggy.info('Selecting %s largest basins!', np.sum(basins > basin_thres))
 
     big_basins = list(np.where(basins > basin_thres)[0])
 
@@ -226,9 +235,9 @@ def track_rivers_and_merge(big_rivers, big_rivers_dir, flowdir, riv_thres = 30, 
 
             if res == 0:
                 if tuple(po) in big_rivers: 
-                    print('This is a big river! keeping as is')
+                    loggy.debug('This is a big river, keeping as is')
                     if tuple(po) not in rivers_v2:
-                        print('WARNING! This section should be inactive, something weird is happening...')
+                        loggy.warning('This section should be inactive, something weird is happening...')
                         rivers_v2.append(tuple(po))
                         rivers_v2_dir.append(podir)
                         ind = rivers_v2.index(tuple(po))
@@ -236,7 +245,7 @@ def track_rivers_and_merge(big_rivers, big_rivers_dir, flowdir, riv_thres = 30, 
                 
                     rnf_map_merged[i,j] = rivers_v2.index(tuple(po))
                 else:
-                    print('Small river, checking nearby')
+                    loggy.debug('Small river, checking nearby')
                     if tuple(po) not in rivers_v2:
                         ## now for merged
                         # find a river close-by
@@ -272,14 +281,14 @@ def track_rivers_and_merge(big_rivers, big_rivers_dir, flowdir, riv_thres = 30, 
                         else:
                             dist = np.sqrt(np.min(sqdist))
 
-                        print(dist, closest)
+                        loggy.debug('distance=%s closest=%s', dist, closest)
                         if dist < riv_thres:
-                            print('Found small river nearby!')
+                            loggy.debug('Found small river nearby!')
                             rnf_map_merged[i,j] = closest
                             if not np.any(rivers_merged[closest] == po):
                                 rivers_merged[closest].append(po)
                         else:
-                            print('No small river nearby, adding one')
+                            loggy.debug('No small river nearby, adding one')
                             # not found a river close-by, adding new one
                             rivers_v2.append(tuple(po))
                             rivers_v2_dir.append(podir)
@@ -297,7 +306,7 @@ def track_rivers_and_merge(big_rivers, big_rivers_dir, flowdir, riv_thres = 30, 
             elif res == 2:
                 rnf_map_merged[i,j] = -2
         
-        print(f'Found {len(rivers_v2)} rivers with {len(big_rivers)} big rivers!')
+        loggy.info('Found %s rivers with %s big rivers!', len(rivers_v2), len(big_rivers))
 
     return rnf_map_merged, rivers_merged, rivers_v2, rivers_v2_dir
 
@@ -311,7 +320,7 @@ def drop_assign_fill(rnf_map_merged, rivers_merged, rivers_v2, rivers_v2_dir, la
 
     for ind in range(len(rivers_v2)):
         if ind not in list(ok_indx):
-            print(f'{ind}: small basin, deassigning..')
+            loggy.info('%s: small basin, deassigning..', ind)
             rnf_map_merged[rnf_map_merged == ind] = -1
 
     rnf_map_filled = rnf_map_merged.copy()
@@ -320,14 +329,14 @@ def drop_assign_fill(rnf_map_merged, rivers_merged, rivers_v2, rivers_v2_dir, la
     missing = True
     i_count = 0
     while missing and i_count < 20:
-        print(f'We are at {i_count} round of assignments')
+        loggy.info('We are at %s round of assignments', i_count)
         i_count += 1
         missing = False
         not_assigned = []
         for i in range(nla):
             for j in range(nlo):
                 if rnf_map_filled[i,j] == -1:
-                    print('To be assigned')
+                    loggy.debug('To be assigned')
                     # Search for neighboring points
 
                     #print(i-1, i+2, j-1, j+2)
@@ -336,12 +345,12 @@ def drop_assign_fill(rnf_map_merged, rivers_merged, rivers_v2, rivers_v2_dir, la
                     if ini_i < 0: ini_i = 0
                     if ini_j < 0: ini_j = 0
                     neighbors = rnf_map_filled[ini_i:i+2, ini_j:j+2].flatten()
-                    print(neighbors)
+                    loggy.debug('Neighbors: %s', neighbors)
 
                     if np.any(neighbors >= 0):
                         # assign closest non-zero
                         new_ind = neighbors[np.where(neighbors >= 0)[0][0]]
-                        print(f'Assigning to {new_ind}')
+                        loggy.debug('Assigning to %s', new_ind)
                         rnf_map_filled[i, j] = int(new_ind)
                     else:
                         missing = True
@@ -355,9 +364,9 @@ def drop_assign_fill(rnf_map_merged, rivers_merged, rivers_v2, rivers_v2_dir, la
         rnf_map_newnum[rnf_map_filled == inum] = ii
         rivers_newnum[ii] = rivers_merged[inum]
 
-    print('Sanity check')
-    print(rnf_map_newnum.max())
-    print(len(rivers_newnum))
+    loggy.info('Sanity check')
+    loggy.info('max basin id: %s', rnf_map_newnum.max())
+    loggy.info('num rivers: %s', len(rivers_newnum))
 
     if int(rnf_map_newnum.max()) != len(rivers_newnum)-1:
         raise ValueError('Inconsistency between number of basins and rivers!!')
@@ -372,9 +381,9 @@ def iter_track(flowdir, basin_thres = 50, riv_thres = 30, dir_thres = 1, lat = N
 
     rnf_map_merged, rivers_merged, rivers, rivers_dir = track_rivers_and_merge(big_rivers, big_rivers_dir, flowdir = flowdir, riv_thres = riv_thres, dir_thres = dir_thres, use_expanded = True, weight_for_lat = False, lat = lat)
 
-    print('Check!!')
-    print(rnf_map_merged.min(), rnf_map_merged.max())
-    print(len(rivers_merged))
+    loggy.info('Check!')
+    loggy.info('merged min/max: %s %s', rnf_map_merged.min(), rnf_map_merged.max())
+    loggy.info('merged rivers: %s', len(rivers_merged))
 
     ### Now, loop: keep only largest, assign remaining according to a fixed rivers_merged (not updating and not adding new rivers)
     rnf_map_merged_final, rivers_final, not_assigned = drop_assign_fill(rnf_map_merged, rivers_merged, rivers, rivers_dir, lat = lat, basin_thres = basin_thres)

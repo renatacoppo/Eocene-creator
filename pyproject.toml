@@ -20,13 +20,13 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    'numpy',
-    'xarray',
-    'xesmf',
-    'pandas',
-    'netcdf4',
-    'cdo',
-    'sparse',
+    "numpy",
+    "xarray",
+    "xesmf",
+    "pandas",
+    "netcdf4",
+    "cdo",
+    "sparse",
     "ipykernel",
     "matplotlib",
     "pyyaml",
@@ -41,3 +41,6 @@ dependencies = [
 
 [tool.setuptools]
 packages = ["eocene"]
+
+[tool.setuptools.dynamic]
+version = {attr = "eocene.__version__"}
