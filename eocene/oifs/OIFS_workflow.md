@@ -1,6 +1,6 @@
 # 🧭 OIFS TL63-EOCENE setup workflow
 
-This guies tries to put together some info on the procedure developed to set up the OIFS TL63-EOCENE configuration for OIFS. The entire machinery is built in a flexible way and it is based on python3, making use of external calls to eccodes and cdo
+This guide tries to put together some info on the procedure developed to set up the OIFS TL63-EOCENE configuration for OIFS. The entire machinery is built in a flexible way and it is based on python3, making use of external calls to eccodes and cdo
 
 > The guides assumes you already have a TL63L31 configuration up and running
 

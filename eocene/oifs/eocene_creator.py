@@ -10,7 +10,9 @@ from utils import modify_value, replace_value, regrid_dataset
 from utils import extract_grid_info, spectral2gaussian
 from utils import GRIB2, NC4
 import subprocess
-from eocene_functions import albedo, compute_slope, vegetation_zhang
+from albedo import albedo 
+from subgrid_orog import compute_slope 
+from vegetation import vegetation_zhang
 from cdo import Cdo
 cdo = Cdo()
 
@@ -265,6 +267,28 @@ class EoceneOIFS():
         
         subprocess.run(["/lus/h2resw01/hpcperm/ecme3497/github/ecearth-quests/epochal/OIFS/fix_grib.sh", output_climate], check=True)
 
+    def create_bare_soil (self, lsm_present, landsea):
+
+        """
+        Create the bare_soil_albedos.grb data for the Eocene OIFS.
+        Set the bare soil albedo to constant values.
+        """
+        input_climate = os.path.join(self.idir_climate, 'bare_soil_albedos.grb')
+        output_climate = os.path.join(self.odir_climate, 'bare_soil_albedos.grb')
+        variables = ['code117', 'code118', 'code119', 'code120']
+
+        modify_single_grib(
+           inputfile=input_climate,
+           outputfile=output_climate,
+           variables=variables,
+           spectral=False,
+           myfunction=albedo,
+           lsm_present=lsm_present,
+           landsea=landsea  
+           ) 
+        
+        #subprocess.run(["/lus/h2resw01/hpcperm/ecme3497/github/ecearth-quests/epochal/OIFS/fix_grib.sh", output_climate], check=True)
+
 
     def create_sh(self, orog):
         """
@@ -393,8 +417,6 @@ class EoceneOIFS():
         #    newfield= vegetation_
         #)
 
-
-        
 
     def create_iniua(self):
         """

@@ -181,13 +181,13 @@ class EoceneNEMO():
         so = np.full_like(thetao, so_value)
         
         # Assign back to dataset as DataArrays
-        ntime = woa.dims["time_counter"]
-        thetao = np.repeat(thetao[np.newaxis, ...], ntime, axis=0)
-        so = np.repeat(so[np.newaxis, ...], ntime, axis=0)
+        #ntime = woa.dims["time_counter"]
+        #thetao = np.repeat(thetao[np.newaxis, ...], ntime, axis=0)
+        #so = np.repeat(so[np.newaxis, ...], ntime, axis=0)
 
         woa = woa.assign(
-            thetao=(("time_counter", "z", "y", "x"), thetao),
-            so=(("time_counter", "z", "y", "x"), so),
+            thetao=(("z", "y", "x"), thetao),
+            so=(("z", "y", "x"), so),
         )
         
         

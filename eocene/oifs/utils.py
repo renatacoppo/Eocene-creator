@@ -170,6 +170,65 @@ def replace_field(inputfile, singlefile, outputfile, variable):
         shutil.copyfile(singlefile, outputfile)
     #os.remove(singlefile)
     
+def modify_value(field, var, newvalue):
+    """
+    Modify a field in the GRIB file setting it to a constant
+    """
+    for v in var:
+        if v in field.variables:
+            print(f"Modifying variable {v} in the field")
+            field[v].data = np.full(field[v].shape, newvalue)
+    return field
+
+def replace_value(field, var, newfield):
+    """
+    Replace the field in a dataset with a dataarray
+    """
+    if 'time' not in newfield.dims:
+        newfield = newfield.expand_dims('time', axis=0)
+
+    newfield = newfield.transpose('time', 'lat', 'lon')
+
+    for v in var:
+        if v in field.variables:
+            print(f"Replacing variable {v} in the field")
+            field[v].data = newfield.data
+    return field
+
+
+def extract_grid_info(string):
+    """Extract grid info from a string"""
+    string = string.upper()
+    pattern = r'T(CO|L)(\d+)L(\d+)'
+    match = re.match(pattern, string)
+    if match:
+        grid_type = match.group(1)
+        spectral = int(match.group(2))
+        num_levels = int(match.group(3))
+        return grid_type, spectral, num_levels
+    
+    return None
+    
+def spectral2gaussian(spectral, kind):
+    """Convert spectral resolution to gaussian"""
+    if kind.upper() == "CO":
+        return int(spectral) + 1
+    if kind == "L":
+        return int((int(spectral) + 1) / 2)
+
+    raise ValueError("Unknown grid type")
+
+
+def regrid_dataset(data, regrid_to_reference):
+    """
+    Regrid a DataArray to match the grid of another DataArray.
+    """
+    regridder = xe.Regridder(
+        data, 
+        regrid_to_reference, 
+        method='bilinear'
+    )
+    return regridder(data)
 
 def unpack_grib_file(inputfile, tmpfile):
     """
@@ -205,73 +264,4 @@ def repack_grib_file(grib1, grib2, outputfile, clean=True):
             if os.path.exists(file):
                 os.remove(file)
 
-def modify_value(field, var, newvalue):
-    """
-    Modify a field in the GRIB file setting it to a constant
-    """
-    for v in var:
-        if v in field.variables:
-            print(f"Modifying variable {v} in the field")
-            field[v].data = np.full(field[v].shape, newvalue)
-    return field
 
-def replace_value(field, var, newfield):
-    """
-    Replace the field in a dataset with a dataarray
-    """
-    if 'time' not in newfield.dims:
-        newfield = newfield.expand_dims('time', axis=0)
-
-    newfield = newfield.transpose('time', 'lat', 'lon')
-
-    for v in var:
-        if v in field.variables:
-            print(f"Replacing variable {v} in the field")
-            field[v].data = newfield.data
-    return field
-
-
-def ecmwf_grid(kind):
-    """Get the info on the grid to find the right ECMWF file"""
-    
-    ecmwf_name = {
-        'L': 'l_2',
-        'CO': '_4',
-        'Q': '_2'
-    }
-
-    return ecmwf_name[kind.upper()]
-
-def extract_grid_info(string):
-    """Extract grid info from a string"""
-    string = string.upper()
-    pattern = r'T(CO|L)(\d+)L(\d+)'
-    match = re.match(pattern, string)
-    if match:
-        grid_type = match.group(1)
-        spectral = int(match.group(2))
-        num_levels = int(match.group(3))
-        return grid_type, spectral, num_levels
-    
-    return None
-    
-def spectral2gaussian(spectral, kind):
-    """Convert spectral resolution to gaussian"""
-    if kind.upper() == "CO":
-        return int(spectral) + 1
-    if kind == "L":
-        return int((int(spectral) + 1) / 2)
-
-    raise ValueError("Unknown grid type")
-
-
-def regrid_dataset(data, regrid_to_reference):
-    """
-    Regrid a DataArray to match the grid of another DataArray.
-    """
-    regridder = xe.Regridder(
-        data, 
-        regrid_to_reference, 
-        method='bilinear'
-    )
-    return regridder(data)
