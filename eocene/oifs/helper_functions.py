@@ -8,7 +8,7 @@ import cartopy.crs as ccrs
 import tempfile
 import subprocess
 from utils import spectral2gaussian
-from eocene_creator import EoceneOIFS
+from eocene.oifs.eoceneOIFS import EoceneOIFS
 
 cdo = Cdo()
 

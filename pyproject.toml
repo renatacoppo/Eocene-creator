@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eocene"
+dynamic = ["version"]
+authors = [
+  { name="Renata Coppo", email="renatacoppo@cnr.it" },
+  { name="Paolo Davini", email="paolo.davini@cnr.it" }
+]
+description = "Tool to generate EC-Earth4 DeepMIP boundary conditions"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "xarray",
+    "xesmf",
+    "pandas",
+    "netcdf4",
+    "cdo",
+    "sparse",
+    "ipykernel",
+    "matplotlib",
+    "pyyaml",
+    "scipy",
+    "dask"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/renatacoppo/Eocene-creator"
+"Bug Tracker" = "https://github.com/renatacoppo/Eocene-creator/issues"
+"Repository" = "hhttps://github.com/renatacoppo/Eocene-creator"
+
+[tool.setuptools]
+packages = ["eocene"]
+
+[tool.setuptools.dynamic]
+version = {attr = "eocene.__version__"}
