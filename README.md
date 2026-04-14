@@ -80,10 +80,10 @@ dirs:
 
 Field meaning:
 
-- `input`: source EC-Earth data tree
+- `input`: source EC-Earth data tree, the one retrieved from official repo
 - `output`: destination tree where copied and generated files are written
 - `herold`: directory containing Herold paleo input datasets
-- `domain`: directory containing `domain_cfg.nc` and `maskutil.nc`
+- `domain`: directory containing `domain_cfg.nc` and `maskutil.nc` modified for Eocene bathymetry
 - `tmpdir`: reserved temporary directory path (not used yet)
 
 A real example is available in `eocene/config.tmpl`.
@@ -92,14 +92,13 @@ A real example is available in `eocene/config.tmpl`.
 
 The copy step does not clone the full input tree. It copies only the subsets currently used by the workflow:
 
-- `oifs`: `composition`, `ifsdata`, `vtables`, `rtables`, and `TL63L31`
-- `nemo`: `cfc`, `climatology`, `initial`, and `weights`
-- `oasis`: only the configured NEMO resolution subdirectory
-- `cmip6-data`: linked as a symbolic link instead of copied
-
-Everything else is skipped.
-
 ## Workflow notes
+
+### OASIS
+
+The OASIS workflow:
+
+- modifies the `rstos.nc` so that it can be used with a different land-sea mask
 
 ### OIFS
 
@@ -125,29 +124,3 @@ The runoff workflow:
 - reads the Herold runoff slope dataset
 - computes drainage basins and arrival points
 - writes a new `runoff_maps.nc`
-
-## Current limitations
-
-- `oasis` is not yet exposed as a `--run` target in the CLI
-- the `--copy` path contains a temporary hack that copies `rstos.nc` from `dirs.oasisdir`
-- some workflows require external binaries and large input datasets that are not validated by the CLI before execution
-
-## Troubleshooting
-
-If imports fail when calling the script directly, prefer running it from the repository root:
-
-```bash
-python eocene/cli-eocene.py -c eocene/config-paolo.yml --run nemo
-```
-
-If OIFS or NEMO fail early, verify that `cdo` is available in the active environment:
-
-```bash
-cdo -V
-```
-
-If `--copy` fails, check that:
-
-- the output directory is writable
-- the paths in the YAML file exist
-- `dirs.oasisdir` exists if you are relying on the current `rstos.nc` copy hack
