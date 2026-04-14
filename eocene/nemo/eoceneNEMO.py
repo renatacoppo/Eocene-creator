@@ -36,12 +36,13 @@ class EoceneNEMO():
         herold_file_remap = os.path.join(self.herold_folder, "Green_Huber_eocene_tidal_dissipation_r720x360.nc")
         zdfiwm_file = os.path.join(self.input_folder, "nemo/initial/zdfiwm_forcing_r720x360.nc")
         output_file = os.path.join(self.output_folder, "nemo/initial/zdfiwm_forcing_r720x360.nc")
+        
 
         if cleanup and os.path.exists(output_file):
             os.remove(output_file)
             print(f"Cleaning file: {output_file}")
 
-        self.cdo.remapcon(self.grid, input=herold_file_orig, output=herold_file_remap)
+        herold_file_remap = self.cdo.remapcon(self.grid, input=herold_file_orig)
 
         ds_m2 = xr.open_dataset(herold_file_remap)
         ds_pd = xr.open_dataset(zdfiwm_file)
@@ -67,6 +68,7 @@ class EoceneNEMO():
         ds_out = ds_out.fillna(0)
 
         # write output file
+        os.makedirs(os.path.join(self.output_folder, "nemo/initial"), exist_ok=True)
         ds_out.to_netcdf(output_file)
         print(f"Written NEMO 4.2 tidal file: {output_file}")
 
@@ -138,22 +140,20 @@ class EoceneNEMO():
 
         return None
 
-    def create_ocean_init(self, woa_file, domain_file, so_value=34.7, output_file=None):
+    def create_ocean_init(self, so_value=34.7, output_file=None):
         """
         Create ocean initial conditions (thetao and so) for NEMO
         based on WOA climatology and an idealized temperature profile.
 
         Parameters
         ----------
-        woa_file : str
-            Path to WOA netCDF file (will be overwritten with new fields).
-        domain_file : str
-            Path to NEMO domain_cfg file (for nav_lev depths).
         so_value : float
             Salinity to assign everywhere (default = 34.7).
         """
 
         # Open with dask for scalability
+        woa_file = os.path.join(self.input_folder, "nemo/initial/woa13-levitus-L31.nc")
+        domain_file = os.path.join(self.input_folder, "nemo/domain/PALEORCA2/domain_cfg.nc")
         woa = xr.open_dataset(woa_file, chunks={"z": 1})
         domain = xr.open_dataset(domain_file)
 

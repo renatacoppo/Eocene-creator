@@ -436,39 +436,39 @@ def create_basin_data(output_file, ds_target, drainage_basin_id, arrival_point_i
 # run with: python epochal_ece4_runoff.py -s /abs-path-to-dir/herold_etal_eocene_runoff_1x1.nc -r /abs-path-to-dir/runoff_maps.nc
 # output written in runoff_maps_new.nc in the script's folder
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Duplicate job configuration for experiments.")
-    parser.add_argument("-s", "--oroslope_file", type=str, required=True, help="Orographic slope file, like herold_etal_eocene_runoff_1x1.nc")
-    parser.add_argument("-r", "--runoff_file", type=str, required=True, help="EC-Earth runoff_maps.nc file to update")
+# if __name__ == "__main__":
+#     parser = argparse.ArgumentParser(description="Duplicate job configuration for experiments.")
+#     parser.add_argument("-s", "--oroslope_file", type=str, required=True, help="Orographic slope file, like herold_etal_eocene_runoff_1x1.nc")
+#     parser.add_argument("-r", "--runoff_file", type=str, required=True, help="EC-Earth runoff_maps.nc file to update")
 
-    args = parser.parse_args()
+#     args = parser.parse_args()
 
-    print('Reading oroslope file...')
-    oroslope = xr.load_dataset(args.oroslope_file)
-    oroslope = oroslope.rename({'xc': 'longitude', 'yc': 'latitude'})
-    oroslope = oroslope.assign_coords(longitude = oroslope.longitude[0], latitude = oroslope.latitude[:, 0])
-    flowdir = oroslope['RTM_FLOW_DIRECTION'].values
+#     print('Reading oroslope file...')
+#     oroslope = xr.load_dataset(args.oroslope_file)
+#     oroslope = oroslope.rename({'xc': 'longitude', 'yc': 'latitude'})
+#     oroslope = oroslope.assign_coords(longitude = oroslope.longitude[0], latitude = oroslope.latitude[:, 0])
+#     flowdir = oroslope['RTM_FLOW_DIRECTION'].values
 
-    print('Launching calc!')
-    rnf_map_merged_final, rivers_merged_final, rivers_end_point, not_assigned = iter_track(flowdir, lat = oroslope.latitude)
+#     print('Launching calc!')
+#     rnf_map_merged_final, rivers_merged_final, rivers_end_point, not_assigned = iter_track(flowdir, lat = oroslope.latitude)
 
-    if len(not_assigned) > 0:
-        print('WARNING!! some points have not been assigned:')
-        print(not_assigned)
+#     if len(not_assigned) > 0:
+#         print('WARNING!! some points have not been assigned:')
+#         print(not_assigned)
 
-    # Building arrival point id
-    arrival_id = np.zeros(rnf_map_merged_final.shape) - 2
-    for num in rivers_merged_final:
-        for po in rivers_merged_final[num]:
-            arrival_id[po[0], po[1]] = num
+#     # Building arrival point id
+#     arrival_id = np.zeros(rnf_map_merged_final.shape) - 2
+#     for num in rivers_merged_final:
+#         for po in rivers_merged_final[num]:
+#             arrival_id[po[0], po[1]] = num
 
-    print('Check!')
-    print(rnf_map_merged_final.min(), rnf_map_merged_final.max())
-    print(arrival_id.min(), arrival_id.max())
+#     print('Check!')
+#     print(rnf_map_merged_final.min(), rnf_map_merged_final.max())
+#     print(arrival_id.min(), arrival_id.max())
 
-    ## Setting calving equal to runoff
-    print("WARNING!! Setting calving_id equal to arrival_id! To be changed if ice sheets are present")
-    calving_id = arrival_id.copy()
+#     ## Setting calving equal to runoff
+#     print("WARNING!! Setting calving_id equal to arrival_id! To be changed if ice sheets are present")
+#     calving_id = arrival_id.copy()
 
-    rnf_pd = xr.load_dataset(args.runoff_file)
-    create_basin_data('runoff_map_new.nc', rnf_pd, rnf_map_merged_final, arrival_id, calving_id, oroslope.longitude, oroslope.latitude)
+#     rnf_pd = xr.load_dataset(args.runoff_file)
+#     create_basin_data('runoff_map_new.nc', rnf_pd, rnf_map_merged_final, arrival_id, calving_id, oroslope.longitude, oroslope.latitude)

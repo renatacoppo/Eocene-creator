@@ -30,7 +30,8 @@ dependencies = [
     "ipykernel",
     "matplotlib",
     "pyyaml",
-    "scipy"
+    "scipy",
+    "dask"
 ]
 
 [project.urls]

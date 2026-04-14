@@ -54,11 +54,11 @@ class EoceneOIFS():
         self.idir_climate = os.path.join(self.idir, 'oifs', resolution, "climate.v020")
         self.odir_climate = os.path.join(self.odir, 'oifs', resolution, "climate.v020")
 
-        self.idir_amip = os.path.join(self.idir, 'amip-forcing')
-        self.odir_amip = os.path.join(self.odir, 'amip-forcing')
+        #self.idir_amip = os.path.join(self.idir, 'amip-forcing')
+        #self.odir_amip = os.path.join(self.odir, 'amip-forcing')
 
         # create directories
-        for d in [self.odir_init, self.odir_climate, self.odir_amip]:
+        for d in [self.odir_init, self.odir_climate]: #self.odir_amip]:
             if not os.path.exists(d):
                 os.makedirs(d)
 
@@ -545,11 +545,11 @@ class EoceneOIFS():
             aer_ifs_paleo[varname2].data = new_var_rg_int.data.astype('float32')
 
         # Save Eocene aerosol climatology
-        output_path = os.path.join(self.odir, 'oifs', 'ifsdata')
+        output_path = os.path.join(self.odir, 'oifs', 'ifsdata', 'aerosol_cams_climatology_43R3a.nc')
         if os.path.exists(output_path):
             os.remove(output_path)
-        os.makedirs(output_path, exist_ok=True)
-        aer_ifs_paleo.to_netcdf(os.path.join(output_path, 'aerosol_cams_climatology_43R3a.nc'))
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        aer_ifs_paleo.to_netcdf(output_path)
         print(f"→ Eocene aerosol data saved at {output_path}")
         return output_path
 

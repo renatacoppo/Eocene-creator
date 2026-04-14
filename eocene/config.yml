@@ -3,4 +3,5 @@ dirs:
   input: /lus/h2resw01/hpcperm/ccpd/ECE4-DATA-V2
   output: /lus/h2resw01/hpcperm/ccpd/EOCENE-TEST
   herold: /lus/h2resw01/hpcperm/ecme3497/herold-et-al-2014/Supp
+  domain: /lus/h2resw01/hpcperm/ccpd/ECE4-DATA-EOCENE/nemo/domain/PALEORCA2
   tmpdir: /lus/h2resw01/hpcperm/ccpd/eocene_tmp
