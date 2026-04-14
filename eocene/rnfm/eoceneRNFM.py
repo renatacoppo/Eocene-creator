@@ -4,11 +4,9 @@
 # ### Script to compute paleo runoff maps for ece4 starting from orographic slope
 
 import xarray as xr
-#from climtools import climtools_lib as ctl
 from matplotlib import pyplot as plt
 import numpy as np
 import xesmf as xe
-import argparse
 import logging
 
 loggy = logging.getLogger(__name__)

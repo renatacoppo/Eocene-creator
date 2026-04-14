@@ -11,9 +11,6 @@ import os
 import logging
 import numpy as np
 import xarray as xr
-import shutil
-import tempfile
-import subprocess
 import pandas as pd
 from cdo import Cdo
 

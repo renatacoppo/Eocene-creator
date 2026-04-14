@@ -12,9 +12,12 @@ from eocene.oifs.eoceneOIFS import EoceneOIFS
 from eocene.nemo.eoceneNEMO import EoceneNEMO
 from eocene.rnfm.eoceneRNFM import iter_track, create_basin_data
 
+OIFS_RESO = "TL63L31"
+NEMO_RESO = "PALEORCA2"
+
 def run_copy(input_dir, output_dir):
     """Copy the input folder to the output folder to preserve original data."""
-    
+
     logger.info(f"Copying input data from {input_dir} to {output_dir}")
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -24,21 +27,27 @@ def run_copy(input_dir, output_dir):
 
     # loop through input directory and copy relevant subdirectories
     for item in os.listdir(input_dir):
-        logger.info(f"Processing {item}...")
-        if item in ["oifs", "nemo"]:
-            
+        
+        if item in ["oifs", "nemo", "oasis"]:
             for subitem in os.listdir(os.path.join(input_dir, item)):
-                if subitem in ["TL255L91", "TL159L91", "pisces", "domain"]:
+                
+                if item == "oasis" and subitem not in [NEMO_RESO]:
+                    continue
+                if item == "oifs" and subitem not in ["composition", "ifsdata", "vtables", "rtables", OIFS_RESO]:
+                    continue
+                if item == "nemo" and subitem not in ["cfc", "climatology", "initial", "weights"]:
                     continue
                 src = os.path.join(input_dir, item, subitem)
                 dst = os.path.join(output_dir, item, subitem)
                 logger.info(f"Copying {src} to {dst}")
                 shutil.copytree(src, dst, symlinks=True)
-        if item in ["cmip6-data"]:
+        elif item in ["cmip6-data"]:
             src = os.path.join(input_dir, item)
             dst = os.path.join(output_dir, item)
             logger.info(f"Copying {src} to {dst}")
             os.symlink(src, dst)  # use symlink for large CMIP6 data
+        else:
+            logger.info(f"Skipping {item}!")
 
 def run_oifs(config):
     """Run the OIFS modifications based on the provided configuration."""
