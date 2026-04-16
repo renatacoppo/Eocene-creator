@@ -98,13 +98,18 @@ def albedo(field: xr.Dataset, var=None, lsm_present=None, landsea=None, **kwargs
     print("Albedo reconstruction complete.")
 
     # APPLY EOCENE MASK RULES
-    albedo_vars = ["al", "aluvp", "aluvd", "alnip", "alnid"]
+    albedo_diffuse_vars = ["al", "aluvp", "aluvd", "alnip", "alnid"]
+    albedo_direct_vars = ["aluvpi", "aluvpv", "aluvpg", "alnipi", "alnipv", "alnipg"]
     lai_vars = ["lai_lv", "lai_hv"]
     bare_soil_vars = ["code117", "code118", "code119", "code120"]
 
-    for v in albedo_vars:
+    for v in albedo_diffuse_vars:
         if v in field:
             field[v].data = np.where(eocene_mask, field[v].data, 0.05)
+    
+    for v in albedo_direct_vars:
+        if v in field:
+            field[v].data = np.where(eocene_mask, field[v].data, 0)
 
     for v in lai_vars:
         if v in field:
