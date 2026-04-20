@@ -337,7 +337,7 @@ class EoceneOIFS():
         input_surface = os.path.join(self.idir_init, 'ICMGGECE4INIT')
         output_surface = os.path.join(self.odir_init, 'ICMGGECE4INIT')
 
-         # Start by copying the base surface file
+        # Start by copying the base surface file
         shutil.copy(input_surface, output_surface)
 
         # update the land sea mask
@@ -350,6 +350,7 @@ class EoceneOIFS():
             newfield=landsea
         )
 
+        # Modify vegetation variables
         modify_single_grib(
             inputfile=output_surface,
             outputfile=output_surface,
@@ -401,7 +402,7 @@ class EoceneOIFS():
             newvalue=0.  
         )
 
-        # # Zero out charnock
+        # Zero out charnock
         modify_single_grib(
              inputfile=output_surface,
              outputfile=output_surface,
@@ -411,16 +412,17 @@ class EoceneOIFS():
              newvalue=0.  
         )
 
-        # # Zero out lakes 
+        # Zero out lakes 
         modify_single_grib(
              inputfile=output_surface,
              outputfile=output_surface,
              variables=['cl', 'dl', 'licd'],
              spectral=False,
              myfunction=modify_value,
-             newvalue=0.001  
+             newvalue=0  
         )
 
+        # Zero out snow depth
         nullify_grib(
             inputfile=output_surface,
             outputfile=output_surface,
@@ -450,6 +452,7 @@ class EoceneOIFS():
         input_levels = os.path.join(self.idir_init, 'ICMGGECE4INIUA')
         output_levels = os.path.join(self.odir_init, 'ICMGGECE4INIUA')
 
+        # Modify humidity and cloud-related variables
         modify_single_grib(
             inputfile=input_levels,
             outputfile=output_levels,
