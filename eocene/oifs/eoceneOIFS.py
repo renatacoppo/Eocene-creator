@@ -323,7 +323,7 @@ class EoceneOIFS():
         #    outputfile=output_spectral,
         #)
 
-    def create_init(self, landsea, sd_orog, **kwargs):
+    def create_init(self, lsm_present, landsea, sd_orog, **kwargs):
         """
         Create the ICMGGECE4INIT data for the Eocene OIFS.
         Replace landsea mask
@@ -337,7 +337,7 @@ class EoceneOIFS():
         input_surface = os.path.join(self.idir_init, 'ICMGGECE4INIT')
         output_surface = os.path.join(self.odir_init, 'ICMGGECE4INIT')
 
-         # Start by copying the base surface file
+        # Start by copying the base surface file
         shutil.copy(input_surface, output_surface)
 
         # update the land sea mask
@@ -350,6 +350,7 @@ class EoceneOIFS():
             newfield=landsea
         )
 
+        # Modify vegetation variables
         modify_single_grib(
             inputfile=output_surface,
             outputfile=output_surface,
@@ -370,6 +371,7 @@ class EoceneOIFS():
             newfield=sd_orog
         )
         loggy.debug("sd_orog type: %s", type(sd_orog))
+
         # Insert slope (slor) computed from sd
         modify_single_grib(
             inputfile=output_surface,
@@ -394,31 +396,52 @@ class EoceneOIFS():
         modify_single_grib(
             inputfile=output_surface,
             outputfile=output_surface,
-            variables=['sdfor', 'anor', 'cl', 'chnk'],
+            variables=['sdfor', 'anor'],
             spectral=False,
             myfunction=modify_value,
             newvalue=0.  
         )
 
+        # Zero out charnock
+        modify_single_grib(
+             inputfile=output_surface,
+             outputfile=output_surface,
+             variables=['chnk'],
+             spectral=False,
+             myfunction=modify_value,
+             newvalue=0.  
+        )
+
+        # Zero out lakes 
+        modify_single_grib(
+             inputfile=output_surface,
+             outputfile=output_surface,
+             variables=['cl', 'dl', 'licd'],
+             spectral=False,
+             myfunction=modify_value,
+             newvalue=0  
+        )
+
+        # Zero out snow depth
         nullify_grib(
             inputfile=output_surface,
             outputfile=output_surface,
             variables=['sd']
         )
 
-        #Modify vegetation variables
+        # Modify albedo variables
+        variables = ['al', 'aluvp', 'aluvd', 'alnip', 'alnid', 'aluvpi', 'aluvpv', 'aluvpg', 'alnipi', 'alnipv', 'alnipg']
         
-
-
-        #modify_single_grib(
-        #    inputfile=output_surface,
-        #    outputfile=output_surface,
-        #    variables=['tvh','tvl','cvh','cvl'],
-        #    spectral=False,
-        #    myfunction=replace_value,
-        #    newfield= vegetation_
-        #)
-
+        modify_single_grib(
+          inputfile=output_surface,
+          outputfile=output_surface,
+          variables=variables,
+          spectral=False,
+          myfunction=albedo,
+          lsm_present=lsm_present,
+          landsea=landsea  
+          ) 
+        
 
     def create_iniua(self):
         """
@@ -429,10 +452,11 @@ class EoceneOIFS():
         input_levels = os.path.join(self.idir_init, 'ICMGGECE4INIUA')
         output_levels = os.path.join(self.odir_init, 'ICMGGECE4INIUA')
 
+        # Modify humidity and cloud-related variables
         modify_single_grib(
             inputfile=input_levels,
             outputfile=output_levels,
-            variables='q',
+            variables=['q', 'crwc', 'cswc', 'clwc', 'ciwc', 'cc'],
             spectral=False,
             myfunction=modify_value,
             newvalue=0.  
