@@ -213,7 +213,7 @@ def replace_value(field, var, newfield):
     for v in var:
         if v in field.variables:
             loggy.debug(f"Replacing variable {v} in the field")
-            field[v].data = newfield.data
+            field[v].data = newfield[v].data
     return field
 
 
@@ -287,3 +287,117 @@ def repack_grib_file(grib1, grib2, outputfile, clean=True):
                 os.remove(file)
 
 
+def modify_new_grib(inputfile, outputfile, variables, myfunction, **kwargs):
+
+    loggy.info(f"Modifying variables {variables} in {inputfile}")
+
+    varlist = ",".join(variables)
+    single_nc = cdo.selname(varlist, input=inputfile, options=NC4)
+
+    field = xr.open_dataset(single_nc, engine="netcdf4", decode_times=False)
+    field = myfunction(field, **kwargs)
+
+    with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmpfile:
+        mod_nc = tmpfile.name
+
+    field.to_netcdf(mod_nc)
+
+    tmp = xr.open_dataset(mod_nc)
+    loggy.debug(tmp)
+
+    with tempfile.NamedTemporaryFile(suffix=".grb", delete=False) as tmpfile:
+        single_grb = tmpfile.name
+
+    cdo.copy(input=mod_nc, output=single_grb, options=GRIB1)
+
+    new_replace_field(
+        inputfile=inputfile,
+        singlefile=single_grb,
+        outputfile=outputfile,
+        variable=variables  
+    )
+
+    for f in [single_nc, mod_nc]:
+        if os.path.exists(f):
+            os.remove(f)
+
+
+def new_modify_single_grib(inputfile, outputfile, variables, myfunction, spectral=False, **kwargs):
+    """
+    Modify a GRIB file using a function.
+    Unpack grib1 and grib2, convert them to gaussian regular, 
+    apply the function and the convert them back to grib1 and grib2.
+    """
+
+    # Unpack the GRIB file
+    
+    if os.path.exists(inputfile):
+        loggy.info(f"Modifying variables {variables} in {inputfile}")
+
+        varlist=','.join(variables)
+        singlefile = cdo.selname(varlist, input=inputfile, options="--eccodes")
+        grib_version = detect_grib_version(singlefile)
+        loggy.debug(f"Detected GRIB version: {grib_version}")
+
+        # Convert to netcdf: if spectral use sp2gpl, else use setgridtype
+        if spectral:
+            netcdf = cdo.sp2gpl(input=singlefile, options=NC4)
+        else:
+            netcdf = cdo.setgridtype("regular", input=singlefile, options=NC4)
+        loggy.info(f"Modifying GRIB file {inputfile} using function {myfunction.__name__}")
+
+        # open the netcdf and modify it
+        field = xr.open_dataset(netcdf,  engine="netcdf4", decode_times=False)
+        field = myfunction(field, var=variables, **kwargs)
+        
+        # Save to a temporary file and remove
+        with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
+            temp_path = tmpfile.name
+        field.to_netcdf(temp_path)
+        shutil.move(temp_path, netcdf)
+
+        loggy.info(f"Repacking modified GRIB for {variables}")
+        loggy.info(f"Converting back to GRIB file {singlefile}")
+
+        grib = GRIB1 if grib_version==1 else GRIB2
+
+        modified_grid = "modified.grib"
+
+        if spectral:
+            cdo.gp2spl(input=netcdf, output=modified_grid, options=grib)
+        else:
+            cdo.remapnn(inputfile, input=netcdf, output=modified_grid, options=grib)
+        cdo.copy(input=singlefile, output='singlefile.nc')
+
+        new_replace_field(inputfile, modified_grid, outputfile, variables)
+    else: 
+        loggy.warning(f'{inputfile} does not exist!')
+
+def new_replace_field(inputfile, singlefile, outputfile, variable):
+    """
+    Replace a field in a GRIB file using grib_copy.
+    """
+    
+    loggy.debug(f"Replacing variables {variable} in {inputfile}")
+    
+    # allow for replacament
+    if inputfile == outputfile:
+        shutil.move(inputfile, "tmp.grib")
+        inputfile = "tmp.grib"
+
+    if os.path.exists(outputfile):
+        os.remove(outputfile)
+    if os.path.exists("filtered.grib"):
+        os.remove("filtered.grib")
+    if isinstance(variable, str):
+        variable = [variable]
+    where_expr = ",".join([f"paramId!={int(v.replace('code',''))}" for v in variable])
+    subprocess.run([
+        "grib_copy", "-w", where_expr,  # condition: where shortName is NOT t
+        inputfile, "filtered.grib"], check=True)
+    if os.path.exists("filtered.grib"):
+        subprocess.run(["grib_copy", "filtered.grib", singlefile, outputfile], check=True)
+        #os.remove("filtered.grib")
+    else:
+        shutil.copyfile(singlefile, outputfile)
+    #os.remove(singlefile)

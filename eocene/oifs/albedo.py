@@ -1,4 +1,5 @@
 """
+
 Function to compute Eocene-specific field:
 - albedo transformations
 
@@ -55,6 +56,7 @@ def albedo(field: xr.Dataset, var=None, lsm_present=None, landsea=None, **kwargs
     # Interpolate Eocene mask to field grid
     loggy.debug("Interpolating Eocene mask to field grid")
     landsea_interp = landsea.interp(lat=field["lat"], lon=field["lon"], method="nearest")
+    landsea_interp = landsea_interp.reindex(lat=field["lat"])
 
     # Match time dimension if needed
     if "time" in field.dims:
@@ -118,6 +120,8 @@ def albedo(field: xr.Dataset, var=None, lsm_present=None, landsea=None, **kwargs
     albedo_direct_vars = ["aluvpi", "aluvpv", "aluvpg", "alnipi", "alnipv", "alnipg"]
     lai_vars = ["lai_lv", "lai_hv"]
     bare_soil_vars = ["code117", "code118", "code119", "code120"]
+    #bare_soil_vars = ["var117", "var118", "var119", "var120"]
+    #bare_soil_vars = {117, 118, 119, 120}
 
     for v in albedo_diffuse_vars:
         if v in field:
@@ -134,10 +138,35 @@ def albedo(field: xr.Dataset, var=None, lsm_present=None, landsea=None, **kwargs
             loggy.debug(f"Zeroing LAI over ocean for {v}")
             field[v].data = np.where(eocene_mask, field[v].data, 0)
 
-    for v in bare_soil_vars:
-        if v in field:
-            loggy.debug(f"Zeroing bare soil vars over ocean for {v}")
-            field[v].data = np.where(eocene_mask, field[v].data, 0)
+    # for v in bare_soil_vars:
+    #     if v in field:
+    #         loggy.debug(f"Zeroing bare soil vars over ocean for {v}")
+    #         field[v].data = np.where(eocene_mask, field[v].data, 0)
+
+    # for v in field.data_vars:
+    #     pid = field[v].attrs.get("GRIB_paramId")
+
+    #     if pid in bare_soil_vars:
+    #         loggy.debug(f"Zeroing bare soil var (paramId={pid}) over ocean")
+    #         field[v].data = np.where(eocene_mask, field[v].data, 0)
+
+    for v in field.data_vars:
+
+        if v in bare_soil_vars:
+            loggy.debug(f"Zeroing bare soil var {v} over ocean")
+
+            da = field[v]
+
+            # align mask explicitly to this variable
+            mask = (landsea_interp > 0.5)
+
+            if set(mask.dims) != set(da.dims):
+                mask = mask.broadcast_like(da)
+
+            mask = mask.transpose(*da.dims)
+
+            field[v] = xr.where(mask, da, 0)
+            
 
     loggy.info("Eocene land-sea mask applied successfully.")
     loggy.info("Combined modification complete, GRIB structure preserved.")

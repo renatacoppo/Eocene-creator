@@ -8,7 +8,7 @@ import tempfile
 import subprocess
 from cdo import Cdo
 
-from .utils import modify_single_grib, nullify_grib
+from .utils import modify_single_grib, nullify_grib, modify_new_grib, new_modify_single_grib
 from .utils import modify_value, replace_value, regrid_dataset 
 from .utils import extract_grid_info, spectral2gaussian
 from .albedo import albedo 
@@ -278,8 +278,10 @@ class EoceneOIFS():
         input_climate = os.path.join(self.idir_climate, 'bare_soil_albedos.grb')
         output_climate = os.path.join(self.odir_climate, 'bare_soil_albedos.grb')
         variables = ['code117', 'code118', 'code119', 'code120']
+        #variables = ["var117", "var118", "var119", "var120"]
+        #param_ids=[117,118,119,120]
 
-        modify_single_grib(
+        new_modify_single_grib(
            inputfile=input_climate,
            outputfile=output_climate,
            variables=variables,
