@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Resolve directory of this script so helper scripts in utils/ and domain-tools/ are found
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # folders for altai
 if [ "$HOSTNAME" = "altai" ]; then
@@ -49,7 +51,7 @@ if [ "$do_coordinates" = true ]; then
     for staggering in T F ; do
         rm -f $COORDSDIR/$TGTGRID/coords_bounds_$staggering.nc
         echo "Generating bounds for staggering $staggering"
-        python3 generate-orca-bounds.py --stagg $staggering --no-level \
+        python3 "$SCRIPT_DIR/utils/generate-orca-bounds.py" --stagg $staggering --no-level \
         $COORDSDIR/$TGTGRID/coords_halo.nc $COORDSDIR/$TGTGRID/coords_bounds_$staggering.nc
     done
 
@@ -185,12 +187,12 @@ fi
 # configure the namelist for domainCFG for the target grid, using the bathymetry obtained from the previous steps, and the coordinates and bounds generated in the first step.
 if [ "$do_configure_domain" = true ]; then
     echo "Configuring domain file for $TGTGRID grid and staggering $staggering_target for present-day bathymetry"
-    python3 config-namelist-domain.py --bathymetry $BATHYDIR/$TGTGRID/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc \
+    python3 "$SCRIPT_DIR/domain-tools/config-namelist-domain.py" --bathymetry $BATHYDIR/$TGTGRID/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc \
     --coordinates $COORDSDIR/$TGTGRID/coords_bounds_${staggering_target}.nc \
     --output $ECEDIR/DOMAINcfg/namelist_cfg_present 
 
     echo "Configuring domain file for $TGTGRID grid and staggering $staggering_target for Eocene bathymetry"
-    python3 config-namelist-domain.py --bathymetry $BATHYDIR/$TGTGRID/HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc \
+    python3 "$SCRIPT_DIR/domain-tools/config-namelist-domain.py" --bathymetry $BATHYDIR/$TGTGRID/HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc \
     --coordinates $COORDSDIR/$TGTGRID/coords_bounds_${staggering_target}.nc \
     --output $ECEDIR/DOMAINcfg/namelist_cfg_eocene 
 fi
@@ -214,7 +216,7 @@ if [ "$do_domain_cfg" = true ]; then
 
     echo "Generating maskutil file for $TGTGRID grid and staggering $staggering_target for present-day bathymetry"
     mkdir -p $OUTPUTDIR/$TGTGRID/present_day
-    python3 generate-mask-util.py --src_dir $ECEDIR/DOMAINcfg --tgt_dir $OUTPUTDIR/$TGTGRID
+    python3 "$SCRIPT_DIR/domain-tools/generate-mask-util.py" --src_dir $ECEDIR/DOMAINcfg --tgt_dir $OUTPUTDIR/$TGTGRID
 
     cp namelist_cfg_eocene namelist_cfg
     ./make_domain_cfg.exe
@@ -222,6 +224,6 @@ if [ "$do_domain_cfg" = true ]; then
 
     echo "Generating maskutil file for $TGTGRID grid and staggering $staggering_target for present-day bathymetry"
     mkdir -p $OUTPUTDIR/$TGTGRID/eocene
-    python3 generate-mask-util.py --src_dir $ECEDIR/DOMAINcfg --tgt_dir $OUTPUTDIR/$TGTGRID
+    python3 "$SCRIPT_DIR/domain-tools/generate-mask-util.py" --src_dir $ECEDIR/DOMAINcfg --tgt_dir $OUTPUTDIR/$TGTGRID
 
 fi

@@ -1,0 +1,65 @@
+# Active profile: select 'altai' (local) or 'atos' (HPC)
+profile: altai
+
+profiles:
+  altai:
+    basedir:   /Users/paolo/Desktop/PALEORCA
+    domaindir: /Users/paolo/Desktop/PALEORCA/ECE4/nemo/domain
+    herolddir: /Users/paolo/Desktop/PALEORCA/herold
+    outputdir: /Users/paolo/Desktop/PALEORCA/domain
+    ecedir:    ~   # not used locally
+
+  atos:
+    basedir:   /home/ccpd/hpcperm/PALEORCA
+    domaindir: /lus/h2resw01/hpcperm/ccpd/ECE4-DATA/nemo/domain
+    herolddir: /lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014
+    outputdir: /home/ccpd/hpcperm/PALEORCA/domain
+    ecedir:    /home/ccpd/hpcperm/ecearth4/revisions/main/sources/nemo-4.2/tools
+
+grids:
+  target:            PALEORCA2
+  source:            eORCA1
+  staggering_source: T
+  staggering_target: T
+
+parameters:
+  minimum_depth: 30   # meters; values 0 < d < min_depth are raised to min_depth
+
+# Enable/disable major workflow steps
+steps:
+  coordinates:      false
+  bathymetry:       false
+  configure_domain: true
+  domain_cfg:       false
+
+# One entry per bathymetry source.
+#
+# Required fields:
+#   name        : identifier, used in output filenames and namelist names
+#   enabled     : skip this entry if false
+#   processor   : BathymetryProcessor subclass name (or dotted module path)
+#   source_file : path to source NetCDF ({basedir}, {domaindir}, {herolddir} as placeholders)
+#
+# All algorithm choices (variable, mask_type, remap_method, etc.) live in the
+# processor class.  Only per-instance/per-machine fields go here.
+#
+# To add a new bathymetry: create processors/<name>.py, subclass BathymetryProcessor,
+# set class attributes, optionally override postprocess(), then add an entry below.
+bathymetries:
+
+  - name:        present_day
+    enabled:     true
+    processor:   PresentDayBathymetry
+    source_file: "{domaindir}/eORCA1/domain_cfg.nc"
+    orca2_file:  "{domaindir}/ORCA2/domain_cfg.nc"   # enables land-sea mask comparison plot
+
+  - name:        eocene
+    enabled:     true
+    processor:   EoceneBathymetry
+    source_file: "{herolddir}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc"
+
+  # Template for future paleographies — uncomment and fill in:
+  # - name:        cretaceous
+  #   enabled:     false
+  #   processor:   CretaceousBathymetry           # define in processors/cretaceous.py
+  #   source_file: "/path/to/cretaceous_topo.nc"
