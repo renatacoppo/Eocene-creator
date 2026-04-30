@@ -31,7 +31,8 @@ minimum_depth=30 # minimum depth in meters, i.e. all values between 0 and 30 wil
 do_coordinates=false
 do_present_day=false
 do_eocene=false
-do_fix_present_day=true
+do_fix_present_day=false
+do_configure_domain=true
 
 if [ "$do_coordinates" = true ]; then
     echo "Generating coordinates and bounds for grid $TGTGRID"
@@ -177,9 +178,16 @@ if [ "$do_fix_present_day" = true ]; then
     --outfile eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc --plot
 fi
 
-
+# configure the domain file for the target grid, using the bathymetry obtained from the previous steps, and the coordinates and bounds generated in the first step.
 if [ $do_configure_domain = true ]; then
-    echo "Configuring domain file for $TGTGRID grid and staggering $staggering_target"
-    python3 configure-namelist-domain.py
+    echo "Configuring domain file for $TGTGRID grid and staggering $staggering_target for present-day bathymetry"
+    python3 config-namelist-domain.py --bathymetry $BATHYDIR/$TGTGRID/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc \
+    --coordinates $COORDSDIR/$TGTGRID/coords_bounds_${staggering_target}.nc \
+    --output namelist_cfg_present 
+
+    echo "Configuring domain file for $TGTGRID grid and staggering $staggering_target for Eocene bathymetry"
+    python3 config-namelist-domain.py --bathymetry $BATHYDIR/$TGTGRID/HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc \
+    --coordinates $COORDSDIR/$TGTGRID/coords_bounds_${staggering_target}.nc \
+    --output namelist_cfg_eocene 
 fi
 
