@@ -142,7 +142,7 @@ def main():
         print("Loading bathymetry data...")
         xfield = xr.open_dataset(input_file)
 
-        xfield = set_minimum_bathymetry(xfield, min_land=15, min_depth=30)
+        #xfield = set_minimum_bathymetry(xfield, min_land=15, min_depth=30)
         
         # Apply regional closures (from the notebook workflow)
         print("Applying regional closures...")
