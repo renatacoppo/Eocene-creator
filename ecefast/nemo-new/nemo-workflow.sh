@@ -178,7 +178,8 @@ fi
 if [ "$do_fix_present_day" = true ]; then
     echo "Fixing present-day bathymetry on $TGTGRID using a custom script to set verify land points"
     python3 process-paleorca-bathymetry.py $BATHYDIR/$TGTGRID --infile eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T.nc \
-    --outfile eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc --plot
+    --outfile eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc --plot \
+    --orca2 $DOMAINDIR/ORCA2/domain_cfg.nc #--orca1 $DOMAINDIR/eORCA1/domain_cfg.nc
 fi
 
 # configure the namelist for domainCFG for the target grid, using the bathymetry obtained from the previous steps, and the coordinates and bounds generated in the first step.

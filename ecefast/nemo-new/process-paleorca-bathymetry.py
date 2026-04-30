@@ -110,6 +110,8 @@ def open_region(xfield, region):
         xfield = average_depth(xfield, 96, 7, region)
     elif region == "Spain":
         xfield = average_depth(xfield, 134, 128, region)
+    elif region == "Madagascar":
+        xfield = average_depth(xfield, 81, 154, region)
     else:
         raise ValueError(f"Region '{region}' not recognized for opening.")
     return xfield
@@ -142,7 +144,16 @@ def parse_arguments():
         action="store_true",
         help="Generate a plot of the processed bathymetry"
     )
-
+    parser.add_argument(
+        '--orca2',
+        type=str,
+        help="optional path to the original ORCA2 bathymetry file, used to set the minimum bathymetry and for plotting"
+    )
+    parser.add_argument(
+        '--orca1',
+        type=str,
+        help="optional path to the original eORCA1 bathymetry file, used for plotting"
+    )
     return parser.parse_args()
 
 
@@ -176,13 +187,16 @@ def main():
         
         # Apply regional closures (from the notebook workflow)
         print("Applying regional opening...")
-        oregions = ['Arctic','Baltic', 'Gibraltair', 'RedSea', 'Italy', 'Japan', 'Bering', 'Indonesia', 'Spain']
+        oregions = ['Arctic','Baltic', 'Gibraltair', 'RedSea',
+                    'Madagascar', 'Italy', 'Japan', 'Bering', 'Indonesia', 'Spain']
         for region in oregions:
             print(f"Opening region: {region}")
             xfield = open_region(xfield, region)
 
         #cregions = ['Gibraltair', 'Hormuz', 'Adriatic', 'Baltic', 'Kara', 'Australia', 'Greenland', 'Black', 'Indonesia']
-        cregions = ['Arctic', 'Caspian', 'Cuba', 'Britain', 'BlackSea', 'Victoria', 'GreatLakes', 'Thailand', 'Barents', 'Italy', 'Indonesia']
+        cregions = ['Arctic', 'Caspian', 'Cuba', 'Britain', 'BlackSea',
+                    'Victoria', 'GreatLakes', 'Thailand', 'Barents',
+                     'Italy', 'Indonesia']
         for region in cregions:
             print(f"Closing region: {region}")
             xfield = close_region(xfield, region)
@@ -193,10 +207,77 @@ def main():
         # Generate plot if requested
         if args.plot:
             print("Generating plot...")
-            plt.figure(figsize=(12, 8))
-            xfield['bathy_metry'].plot(vmax=1)
-            plt.title("Processed Bathymetry Data")
-            plot_file = os.path.join(args.input_dir, "bathymetry_plot.png")
+            
+            # Create land-sea mask from bathymetry
+            mask = xr.where(xfield['bathy_metry'] > 0, 1, 0)
+            
+            # Load optional source files
+            orca1_mask = None
+            orca2_mask = None
+            
+            if args.orca1:
+                print("Loading original eORCA1 bathymetry for comparison...")
+                orca1 = xr.open_dataset(args.orca1)
+                orca1_mask = xr.where(orca1['bathy_metry'] > 0, 1, 0)
+            
+            if args.orca2:
+                print("Loading original ORCA2 bathymetry for comparison...")
+                orca2 = xr.open_dataset(args.orca2)
+                orca2_mask = xr.where(orca2['bathy_metry'] > 0, 1, 0)
+            
+            # Determine number of subplots
+            num_plots = 1
+            if orca1_mask is not None:
+                num_plots += 1
+            if orca2_mask is not None:
+                num_plots += 1
+            
+            # Create comparison plot
+            fig, axes = plt.subplots(1, num_plots, figsize=(10 * num_plots, 6))
+            
+            # Handle single vs multiple subplots
+            if num_plots == 1:
+                axes = [axes]
+            
+            plot_idx = 0
+            
+            # Plot eORCA1 if available
+            if orca1_mask is not None:
+                orca1_mask.plot(ax=axes[plot_idx], cmap='YlGnBu', add_colorbar=True, 
+                               cbar_kwargs={'label': 'Land-Sea Mask', 'ticks': [0, 1]})
+                axes[plot_idx].set_title('eORCA1 Land-Sea Mask (source)', fontsize=14, fontweight='bold')
+                axes[plot_idx].set_xlabel('Longitude')
+                axes[plot_idx].set_ylabel('Latitude')
+                plot_idx += 1
+            
+            # Plot eORCA2 if available
+            if orca2_mask is not None:
+                orca2_mask.plot(ax=axes[plot_idx], cmap='YlGnBu', add_colorbar=True, 
+                               cbar_kwargs={'label': 'Land-Sea Mask', 'ticks': [0, 1]})
+                axes[plot_idx].set_title('ORCA2 Land-Sea Mask (reference)', fontsize=14, fontweight='bold')
+                axes[plot_idx].set_xlabel('Longitude')
+                axes[plot_idx].set_ylabel('Latitude')
+                plot_idx += 1
+            
+            # Plot PALEORCA2 (always present)
+            mask.plot(ax=axes[plot_idx], cmap='YlGnBu', add_colorbar=True, 
+                     cbar_kwargs={'label': 'Land-Sea Mask', 'ticks': [0, 1]})
+            axes[plot_idx].set_title('PALEORCA2 Land-Sea Mask (Processed)', fontsize=14, fontweight='bold')
+            axes[plot_idx].set_xlabel('Longitude')
+            axes[plot_idx].set_ylabel('Latitude')
+            
+            plt.tight_layout()
+            
+            # Determine output filename
+            if orca1_mask is not None and orca2_mask is not None:
+                plot_file = os.path.join(args.input_dir, "landsea_mask_comparison_orca1_orca2_paleorca2.png")
+            elif orca2_mask is not None:
+                plot_file = os.path.join(args.input_dir, "landsea_mask_comparison_orca2_paleorca2.png")
+            elif orca1_mask is not None:
+                plot_file = os.path.join(args.input_dir, "landsea_mask_comparison_orca1_paleorca2.png")
+            else:
+                plot_file = os.path.join(args.input_dir, "landsea_mask.png")
+            
             plt.savefig(plot_file, dpi=150, bbox_inches='tight')
             print(f"Plot saved to: {plot_file}")
             plt.close()
