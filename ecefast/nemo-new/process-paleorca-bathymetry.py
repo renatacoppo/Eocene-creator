@@ -26,39 +26,40 @@ def set_minimum_bathymetry(xfield, min_land=30, min_depth=30):
 def close_region(xfield, region):
     """
     Close specific regions by setting bathymetry to 0.
-    Order y, x. Slicing to be applied is the same as can be seen in ncview
+    Order y, x. Slicing to be applied is the same as can be seen in ncview + 1 in the lat dimension
     Keep in mind that python slicing has to add one number to the end.  
     """
     if region == 'Caspian':
         xfield['bathy_metry'][:,  131:140,  156:159] = 0
-    if region == 'BlackSea':
+    elif region == 'BlackSea':
         xfield['bathy_metry'][:,  133:138,  146:153] = 0
-    if region == 'Victoria':
+    elif region == 'Victoria':
         xfield['bathy_metry'][:,  98:101,  149] = 0
-    if region == "GreatLakes":
+    elif region == "GreatLakes":
         xfield['bathy_metry'][:,  132:141,  86:94] = 0
-    if region == "Arctic":
+    elif region == "Arctic":
         xfield['bathy_metry'][:,  165,  151:153] = 0
-        xfield['bathy_metry'][:,  162:174,  61:78] = 0
-    if region == "Britain":
+        xfield['bathy_metry'][:,  162:174,  64:78] = 0
+    elif region == "Britain":
         xfield['bathy_metry'][:,  139,  131] = 0
         xfield['bathy_metry'][:,  141:143,  128:131] = 0
-    if region == "Cuba":
+    elif region == "Cuba":
         xfield['bathy_metry'][:,  121,  92:96] = 0
-    if region == "Thailand":
+    elif region == "Thailand":
         xfield['bathy_metry'][:,  104:116, 2] = 0
         xfield['bathy_metry'][:,  104:112, 3] = 0
         xfield['bathy_metry'][:,  88:90, 5] = 0
-
-    if region == "Italy":
+    elif region == "Italy":
         xfield['bathy_metry'][:,  134:136,  139] = 0
-    if region == "Barents":
+    elif region == "Barents":
         xfield['bathy_metry'][:,  153:155, 145:147] = 0
-    if region == "Indonesia":
+    elif region == "Indonesia":
         xfield['bathy_metry'][:,  123,  12] = 0
         xfield['bathy_metry'][:,  94,  18] = 0
         xfield['bathy_metry'][:,  89,  26] = 0
         xfield['bathy_metry'][:,  86,  10:13] = 0
+    else:
+        raise ValueError(f"Region '{region}' not recognized for closing.")
     return xfield
 
 def average_depth(field, y_slice, x_slice, region_name):
@@ -73,29 +74,31 @@ def average_depth(field, y_slice, x_slice, region_name):
 def open_region(xfield, region):
     """
     Open specific regions by setting bathymetry to specific depths.
-    Order y, x. Slicing to be applied is the same as can be seen in ncview
+    Order y, x. Slicing to be applied is the same as can be seen in ncview + 1 in the lat dimension
     Keep in mind that python slicing has to add one number to the end.
     """
 
     if region == "Gibraltair":
         xfield = average_depth(xfield, 129, 132, region)
-    if region == "RedSea":
+    elif region == "RedSea":
         xfield = average_depth(xfield, 117, 154, region)
         xfield = average_depth(xfield, 117, 153, region)
-    if region == "Italy":
+    elif region == "Italy":
         xfield = average_depth(xfield, 133, 140, region)
         xfield = average_depth(xfield, 130, 139, region)
-    if region == "Bering":
+    elif region == "Bering":
         xfield = average_depth(xfield, 151, 47, region)
-    if region == "Baltic":
+    elif region == "Arctic":
+        xfield = average_depth(xfield, 166, 60, region)
+    elif region == "Baltic":
         xfield = average_depth(xfield, 143, 138, region)
         xfield = average_depth(xfield, 144, 139, region)
-    if region == "Arctic":
+    elif region == "Arctic":
         xfield = average_depth(xfield, 173, 143, region)
         xfield = average_depth(xfield, 173, 144, region)
-    if region == "Japan":
+    elif region == "Japan":
         xfield = average_depth(xfield, 129, 16, region)
-    if region == "Indonesia":
+    elif region == "Indonesia":
         xfield = average_depth(xfield, 115, 12, region)
         xfield = average_depth(xfield, 101, 11, region)
         xfield = average_depth(xfield, 102, 11, region)
@@ -105,19 +108,10 @@ def open_region(xfield, region):
         xfield = average_depth(xfield, 86, 15, region)
         xfield = average_depth(xfield, 81, 41, region)
         xfield = average_depth(xfield, 96, 7, region)
-
-    # if region == "Kara":
-    #     xfield['bathy_metry'][:,  165,  149] = 25.
-    #     xfield['bathy_metry'][:,  165,  152] = 25.
-    # if region == "Australia":
-    #     xfield['bathy_metry'][:,  83:84,  23] = 100.
-    # if region == "Greenland":
-    #     xfield['bathy_metry'][:,  168,  121] = 300.
-    # if region == "Black":
-    #     xfield['bathy_metry'][:,  133,  145] = 200.
-    # if region == "Indonesia":
-    #     xfield['bathy_metry'][:,  102,  11] = 200.
-    
+    elif region == "Spain":
+        xfield = average_depth(xfield, 134, 128, region)
+    else:
+        raise ValueError(f"Region '{region}' not recognized for opening.")
     return xfield
 
 
@@ -148,7 +142,7 @@ def parse_arguments():
         action="store_true",
         help="Generate a plot of the processed bathymetry"
     )
-    
+
     return parser.parse_args()
 
 
@@ -182,7 +176,7 @@ def main():
         
         # Apply regional closures (from the notebook workflow)
         print("Applying regional opening...")
-        oregions = ['Arctic','Baltic', 'Gibraltair', 'RedSea', 'Italy', 'Japan', 'Bering', 'Indonesia']
+        oregions = ['Arctic','Baltic', 'Gibraltair', 'RedSea', 'Italy', 'Japan', 'Bering', 'Indonesia', 'Spain']
         for region in oregions:
             print(f"Opening region: {region}")
             xfield = open_region(xfield, region)

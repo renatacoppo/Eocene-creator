@@ -17,6 +17,8 @@ else
     HEROLDDIR=/lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014
     #ETOPODIR=/lus/h2resw01/hpcperm/ccpd/EPOCHAL #not used
     BATHYDIR=$BASEDIR/bathymetry
+    OUTPUTDIR=$BASEDIR/domain
+    ECEDIR=/home/ccpd/hpcperm/ecearth4/revisions/main/sources/nemo-4.2/tools
 fi
 
 
@@ -31,8 +33,9 @@ minimum_depth=30 # minimum depth in meters, i.e. all values between 0 and 30 wil
 do_coordinates=false
 do_present_day=false
 do_eocene=false
-do_fix_present_day=false
-do_configure_domain=true
+do_fix_present_day=true
+do_configure_domain=false
+do_domain_cfg=false
 
 if [ "$do_coordinates" = true ]; then
     echo "Generating coordinates and bounds for grid $TGTGRID"
@@ -178,16 +181,46 @@ if [ "$do_fix_present_day" = true ]; then
     --outfile eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc --plot
 fi
 
-# configure the domain file for the target grid, using the bathymetry obtained from the previous steps, and the coordinates and bounds generated in the first step.
-if [ $do_configure_domain = true ]; then
+# configure the namelist for domainCFG for the target grid, using the bathymetry obtained from the previous steps, and the coordinates and bounds generated in the first step.
+if [ "$do_configure_domain" = true ]; then
     echo "Configuring domain file for $TGTGRID grid and staggering $staggering_target for present-day bathymetry"
     python3 config-namelist-domain.py --bathymetry $BATHYDIR/$TGTGRID/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc \
     --coordinates $COORDSDIR/$TGTGRID/coords_bounds_${staggering_target}.nc \
-    --output namelist_cfg_present 
+    --output $ECEDIR/DOMAINcfg/namelist_cfg_present 
 
     echo "Configuring domain file for $TGTGRID grid and staggering $staggering_target for Eocene bathymetry"
     python3 config-namelist-domain.py --bathymetry $BATHYDIR/$TGTGRID/HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc \
     --coordinates $COORDSDIR/$TGTGRID/coords_bounds_${staggering_target}.nc \
-    --output namelist_cfg_eocene 
+    --output $ECEDIR/DOMAINcfg/namelist_cfg_eocene 
 fi
 
+# run the domain cfg NEMO tool 
+if [ "$do_domain_cfg" = true ]; then
+
+    module reset
+    module load prgenv/intel intel/2021.4.0 intel-mkl/19.0.5 hpcx-openmpi/2.9.0
+    module load hdf5-parallel/1.12.2 netcdf4-parallel/4.9.1 ecmwf-toolbox/2023.04.1.0
+
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$NETCDF4_PARALLEL_DIR/lib:$ECCODES_DIR/lib:$HDF5_DIR/lib:$HPCPERM/ecearth4/revisions/main/sources/oasis3-mct-5.2/arch_ecearth/lib
+
+    cd $ECEDIR
+    ./maketools -m ecearth -n DOMAINcfg clean
+    cd $ECEDIR/DOMAINcfg
+
+    cp namelist_cfg_present namelist_cfg
+    ./make_domain_cfg.exe
+    rm namelist_cfg
+
+    echo "Generating maskutil file for $TGTGRID grid and staggering $staggering_target for present-day bathymetry"
+    mkdir -p $OUTPUTDIR/$TGTGRID/present_day
+    python3 generate-mask-util.py --src_dir $ECEDIR/DOMAINcfg --tgt_dir $OUTPUTDIR/$TGTGRID
+
+    cp namelist_cfg_eocene namelist_cfg
+    ./make_domain_cfg.exe
+    rm namelist_cfg
+
+    echo "Generating maskutil file for $TGTGRID grid and staggering $staggering_target for present-day bathymetry"
+    mkdir -p $OUTPUTDIR/$TGTGRID/eocene
+    python3 generate-mask-util.py --src_dir $ECEDIR/DOMAINcfg --tgt_dir $OUTPUTDIR/$TGTGRID
+
+fi

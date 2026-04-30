@@ -3,9 +3,6 @@
 """
 A tool to produce the mask_util from mesh_mask
 Also modifies the domain_cfg file by renaming the vertical dimension
-
-Authors
-Paolo Davini (CNR-ISAC, Jul 2025)
 """
 
 import argparse
@@ -13,11 +10,11 @@ import os
 import xarray as xr
 
 
-mesh_file = 'mesh_mask.nc'
-domain_file = 'domain_cfg.nc'
+MESH_FILE = 'mesh_mask.nc'
+DOMAIN_FILE = 'domain_cfg.nc'
 
-default_src_dir = '/lus/h2resw01/hpcperm/ccvm/ecearth4/revisions/main/sources/nemo-4.2/tools/DOMAINcfg'
-default_tgt_dir = '/home/ccpd/hpcperm/ECE4-DATA/nemo/domain/PALEORCA2/v6'
+#DEFAULT_SRC_DIR = '/lus/h2resw01/hpcperm/ccvm/ecearth4/revisions/main/sources/nemo-4.2/tools/DOMAINcfg'
+#DEFAULT_TGT_DIR = '/home/ccpd/hpcperm/ECE4-DATA/nemo/domain/PALEORCA2/v6'
 
 def domain_cfg(src_dir, tgt_dir):
     """
@@ -26,16 +23,14 @@ def domain_cfg(src_dir, tgt_dir):
     Args:
     src_dir (str): Path to the source directory containing the domain_cfg file. 
     tgt_dir (str): Path to the target directory where the modified domain_cfg file will be saved.
-    
     """
 
     # load the xarray files
-    domain = xr.open_dataset(f'{src_dir}/{domain_file}')
+    domain = xr.open_dataset(f'{src_dir}/{DOMAIN_FILE}')
 
     # rename and reset the vertical dimension
     domain = domain.rename_dims({'nav_lev': 'z'})
     domain = domain.reset_index('nav_lev').reset_coords('nav_lev')
-
 
     # set the fill values
     encoding_var = {var: {'_FillValue': None} for var in domain.data_vars}
@@ -57,7 +52,7 @@ def maskutil(src_dir, tgt_dir):
     Returns:
     None
     """
-    mesh = xr.open_dataset(f'{src_dir}/mesh_mask.nc')
+    mesh = xr.open_dataset(f'{src_dir}/{MESH_FILE}')
     masks = mesh[['tmaskutil','umaskutil','vmaskutil']]
     masks = masks.rename_dims({'time_counter': 't'}).drop_vars('time_counter')
     masks.attrs = {'Conventions': "CF-1.1"}
@@ -68,11 +63,9 @@ def maskutil(src_dir, tgt_dir):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='A tool to modify domain_cfg ORCA2 file')
 
-
-
-    parser.add_argument('--src_dir', type=str, default=default_src_dir, 
+    parser.add_argument('--src_dir', type=str,
                         help='Path to src domain directory (domainCFG path)')
-    parser.add_argument('--tgt_dir', type=str, default=default_tgt_dir, 
+    parser.add_argument('--tgt_dir', type=str,
                         help='Path to target directory')
 
     args = parser.parse_args()
