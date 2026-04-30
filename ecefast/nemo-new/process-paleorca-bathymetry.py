@@ -4,6 +4,9 @@ Process NEMO PALEORCA2 bathymetry data by opening and closing specific regions.
 
 This script takes an input directory containing bathymetry NetCDF files,
 applies regional modifications, and saves the processed output.
+
+IMPORTANT: if you change the way to interpolate, you will likely need to change the way to open and close regions,
+as the indices of the grid points will change.
 """
 
 import argparse
@@ -16,71 +19,104 @@ import matplotlib.pyplot as plt
 def set_minimum_bathymetry(xfield, min_land=30, min_depth=30):
     """Set all bathymetry values less than min_depth to min_depth."""
     xfield['bathy_metry'] = xfield['bathy_metry'].where(xfield['bathy_metry'] > min_land, 0)
-    xfield['bathy_metry'] = xfield['bathy_metry'].where(~((xfield['bathy_metry'] <= min_depth) & (xfield['bathy_metry'] > 0)), min_depth)
+    xfield['bathy_metry'] = xfield['bathy_metry'].where(
+        ~((xfield['bathy_metry'] <= min_depth) & (xfield['bathy_metry'] > 0)), min_depth)
     return xfield
 
 def close_region(xfield, region):
-    """Close specific regions by setting bathymetry to 0."""
+    """
+    Close specific regions by setting bathymetry to 0.
+    Order y, x. Slicing to be applied is the same as can be seen in ncview
+    Keep in mind that python slicing has to add one number to the end.  
+    """
     if region == 'Caspian':
-        xfield['bathy_metry'][:, 129:140,  154:159] = 0
+        xfield['bathy_metry'][:,  131:140,  156:159] = 0
+    if region == 'BlackSea':
+        xfield['bathy_metry'][:,  133:138,  146:153] = 0
     if region == 'Victoria':
-        xfield['bathy_metry'][:,  95:102,  148] = 0
+        xfield['bathy_metry'][:,  98:101,  149] = 0
     if region == "GreatLakes":
         xfield['bathy_metry'][:,  132:141,  86:94] = 0
     if region == "Arctic":
-        xfield['bathy_metry'][:,  173,  117] = 0
-        xfield['bathy_metry'][:,  173,  63:65] = 0
-        xfield['bathy_metry'][:,  172,  103:106] = 0
-        #xfield['bathy_metry'][:,  173,  110:116] = 0
+        xfield['bathy_metry'][:,  165,  151:153] = 0
+        xfield['bathy_metry'][:,  162:174,  61:78] = 0
     if region == "Britain":
-        xfield['bathy_metry'][:,  140:142,  130] = 0
-    if region == "Panama":
-        xfield['bathy_metry'][:,  119:120,  84] = 0
-        xfield['bathy_metry'][:,  115,  89:93] = 0
-        xfield['bathy_metry'][:,  114,  93] = 0
+        xfield['bathy_metry'][:,  139,  131] = 0
+        xfield['bathy_metry'][:,  141:143,  128:131] = 0
+    if region == "Cuba":
+        xfield['bathy_metry'][:,  121,  92:96] = 0
     if region == "Thailand":
-        # xfield['bathy_metry'][:,  105:108, 1] = 0
-        # xfield['bathy_metry'][:,  103, 2] = 0
-        # xfield['bathy_metry'][:,  114:116, 1] = 0
-        # xfield['bathy_metry'][:,  110:114, 2] = 0
-        # xfield['bathy_metry'][:,  107:110, 3] = 0
-        xfield['bathy_metry'][:,  112:113, 2] = 0
+        xfield['bathy_metry'][:,  104:116, 2] = 0
+        xfield['bathy_metry'][:,  104:112, 3] = 0
+        xfield['bathy_metry'][:,  88:90, 5] = 0
+
     if region == "Italy":
-        xfield['bathy_metry'][:,  133:134,  138] = 0
-        xfield['bathy_metry'][:,  132,  139] = 0
-    if region == "Kamchatka":
-        xfield['bathy_metry'][:,  146:149,  35] = 0
-        xfield['bathy_metry'][:,  148,  36] = 0
+        xfield['bathy_metry'][:,  134:136,  139] = 0
     if region == "Barents":
-        xfield['bathy_metry'][:,  153:154, 144:147] = 0
-    if region == "RedSea":
-        xfield['bathy_metry'][:,  123,  149] = 0.
+        xfield['bathy_metry'][:,  153:155, 145:147] = 0
+    if region == "Indonesia":
+        xfield['bathy_metry'][:,  123,  12] = 0
+        xfield['bathy_metry'][:,  94,  18] = 0
+        xfield['bathy_metry'][:,  89,  26] = 0
+        xfield['bathy_metry'][:,  86,  10:13] = 0
     return xfield
 
+def average_depth(field, y_slice, x_slice, region_name):
+    """Calculate the average depth in a given slice."""
+    data = field['bathy_metry'][:, (y_slice-1):(y_slice+2), (x_slice-1):(x_slice+2)].values
+    #print(f"Data for {region_name} at ({y_slice}, {x_slice}): {data}")
+    value = data[data != 0].mean()
+    print(f"Average depth for {region_name} at ({y_slice}, {x_slice}): {value}")
+    field['bathy_metry'][:, y_slice, x_slice] = value
+    return field
 
 def open_region(xfield, region):
-    """Open specific regions by setting bathymetry to specific depths."""
+    """
+    Open specific regions by setting bathymetry to specific depths.
+    Order y, x. Slicing to be applied is the same as can be seen in ncview
+    Keep in mind that python slicing has to add one number to the end.
+    """
+
     if region == "Gibraltair":
-        xfield['bathy_metry'][:,  130,  131] = 284.
+        xfield = average_depth(xfield, 129, 132, region)
     if region == "RedSea":
-        xfield['bathy_metry'][:,  116,  153:155] = 137.
-    if region == "Hormuz":
-        xfield['bathy_metry'][:,  122,  159] = 100.
-    if region == "Adriatic":
-        xfield['bathy_metry'][:,  132,  140] = 300.
+        xfield = average_depth(xfield, 117, 154, region)
+        xfield = average_depth(xfield, 117, 153, region)
+    if region == "Italy":
+        xfield = average_depth(xfield, 133, 140, region)
+        xfield = average_depth(xfield, 130, 139, region)
+    if region == "Bering":
+        xfield = average_depth(xfield, 151, 47, region)
     if region == "Baltic":
-        xfield['bathy_metry'][:,  149,  140] = 50.
-    if region == "Kara":
-        xfield['bathy_metry'][:,  165,  149] = 25.
-        xfield['bathy_metry'][:,  165,  152] = 25.
-    if region == "Australia":
-        xfield['bathy_metry'][:,  83:84,  23] = 100.
-    if region == "Greenland":
-        xfield['bathy_metry'][:,  168,  121] = 300.
-    if region == "Black":
-        xfield['bathy_metry'][:,  133,  145] = 200.
+        xfield = average_depth(xfield, 143, 138, region)
+        xfield = average_depth(xfield, 144, 139, region)
+    if region == "Arctic":
+        xfield = average_depth(xfield, 173, 143, region)
+        xfield = average_depth(xfield, 173, 144, region)
+    if region == "Japan":
+        xfield = average_depth(xfield, 129, 16, region)
     if region == "Indonesia":
-        xfield['bathy_metry'][:,  102,  11] = 200.
+        xfield = average_depth(xfield, 115, 12, region)
+        xfield = average_depth(xfield, 101, 11, region)
+        xfield = average_depth(xfield, 102, 11, region)
+        xfield = average_depth(xfield, 105, 15, region)
+        xfield = average_depth(xfield, 106, 15, region)
+        xfield = average_depth(xfield, 94, 16, region)
+        xfield = average_depth(xfield, 86, 15, region)
+        xfield = average_depth(xfield, 81, 41, region)
+        xfield = average_depth(xfield, 96, 7, region)
+
+    # if region == "Kara":
+    #     xfield['bathy_metry'][:,  165,  149] = 25.
+    #     xfield['bathy_metry'][:,  165,  152] = 25.
+    # if region == "Australia":
+    #     xfield['bathy_metry'][:,  83:84,  23] = 100.
+    # if region == "Greenland":
+    #     xfield['bathy_metry'][:,  168,  121] = 300.
+    # if region == "Black":
+    #     xfield['bathy_metry'][:,  133,  145] = 200.
+    # if region == "Indonesia":
+    #     xfield['bathy_metry'][:,  102,  11] = 200.
     
     return xfield
 
@@ -145,15 +181,14 @@ def main():
         #xfield = set_minimum_bathymetry(xfield, min_land=15, min_depth=30)
         
         # Apply regional closures (from the notebook workflow)
-        print("Applying regional closures...")
-        #oregions = ['Caspian', 'Victoria', 'GreatLakes', 'RedSea', 'Thailand']
-        oregions = []
+        print("Applying regional opening...")
+        oregions = ['Arctic','Baltic', 'Gibraltair', 'RedSea', 'Italy', 'Japan', 'Bering', 'Indonesia']
         for region in oregions:
-            print(f"Closing region: {region}")
-            xfield = close_region(xfield, region)
+            print(f"Opening region: {region}")
+            xfield = open_region(xfield, region)
 
         #cregions = ['Gibraltair', 'Hormuz', 'Adriatic', 'Baltic', 'Kara', 'Australia', 'Greenland', 'Black', 'Indonesia']
-        cregions = []
+        cregions = ['Arctic', 'Caspian', 'Cuba', 'Britain', 'BlackSea', 'Victoria', 'GreatLakes', 'Thailand', 'Barents', 'Italy', 'Indonesia']
         for region in cregions:
             print(f"Closing region: {region}")
             xfield = close_region(xfield, region)

@@ -1,13 +1,24 @@
 #!/bin/bash
-module load cdo
 
-# folders
-BASEDIR=/home/ccpd/hpcperm/PALEORCA
-COORDSDIR=$BASEDIR/coordinates
-DOMAINDIR=/lus/h2resw01/hpcperm/ccpd/ECE4-DATA/nemo/domain
-HEROLDDIR=/lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014
-#ETOPODIR=/lus/h2resw01/hpcperm/ccpd/EPOCHAL #not used
-BATHYDIR=$BASEDIR/bathymetry
+
+# folders for altai
+if [ "$HOSTNAME" = "altai" ]; then
+    BASEDIR=/Users/paolo/Desktop/PALEORCA
+    COORDSDIR=$BASEDIR/coordinates
+    DOMAINDIR=/Users/paolo/Desktop/PALEORCA/ECE4/nemo/domain
+    HEROLDDIR=/Users/paolo/Desktop/PALEORCA/herold
+    #ETOPODIR=/lus/h2resw01/hpcperm/ccpd/EPOCHAL #not used
+    BATHYDIR=$BASEDIR/bathymetry
+else
+    # folders: DEFAULT: on Atos
+    BASEDIR=/home/ccpd/hpcperm/PALEORCA
+    COORDSDIR=$BASEDIR/coordinates
+    DOMAINDIR=/lus/h2resw01/hpcperm/ccpd/ECE4-DATA/nemo/domain
+    HEROLDDIR=/lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014
+    #ETOPODIR=/lus/h2resw01/hpcperm/ccpd/EPOCHAL #not used
+    BATHYDIR=$BASEDIR/bathymetry
+fi
+
 
 # options
 TGTGRID=PALEORCA2
@@ -18,9 +29,9 @@ minimum_depth=30 # minimum depth in meters, i.e. all values between 0 and 30 wil
 
 # flags
 do_coordinates=false
-do_present_day=true
-do_eocene=true
-do_fix_present_day=false
+do_present_day=false
+do_eocene=false
+do_fix_present_day=true
 
 if [ "$do_coordinates" = true ]; then
     echo "Generating coordinates and bounds for grid $TGTGRID"
@@ -39,7 +50,7 @@ if [ "$do_coordinates" = true ]; then
     done
 
     # run the script to create the bounds from meshmask for eORCA1 and ORCA2 (no need halo since NEMO 4.2)
-    for grid in eORCA1 ORCA2 ; do
+    for grid in eORCA1 ; do
     for staggering in T F ; do
         rm -f $COORDSDIR/$grid/coords_bounds_$staggering.nc
         echo "Generating bounds for grid $grid and staggering $staggering"
@@ -113,15 +124,16 @@ if [ "$do_eocene" = true ]; then
 
     # generate herold bathymetry on the target grid, using different remapping methods
     mkdir -p $BATHYDIR/Herold
-    cdo chname,topo,bathy_metry -selname,topo,lon,lat ${HEROLDDIR}/herold_etal_eocene_topo_1x1.nc $BATHYDIR/Herold/bathy_metry_fromHerold.nc
+    #cdo chname,topo,bathy_metry -selname,topo,lon,lat ${HEROLDDIR}/herold_etal_eocene_topo_1x1.nc $BATHYDIR/Herold/bathy_metry_fromHerold.nc
+    cdo chname,paleotopo,bathy_metry -selname,paleotopo ${HEROLDDIR}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc $BATHYDIR/Herold/bathy_metry_fromHerold.nc
     
-    for staggering_tgt in $staggering_target ; do
+    for staggering in $staggering_target ; do
         # we generate a landsea mask with conservative remapping, continuosly made by 0 and 1 and the set what 
         # less than 0.5 to (land) and more than 0.5 to (sea)
-        landseamask=$BATHYDIR/$TGTGRID/HEROLD_land_sea_mask_remapcon_to_${TGTGRID}_${staggering_tgt}.nc
+        landseamask=$BATHYDIR/$TGTGRID/HEROLD_land_sea_mask_remapcon_to_${TGTGRID}_${staggering}.nc
         rm -f $landseamask
         echo "Generating land-sea mask for HEROLD grid to $TGTGRID grid with remapcon method"
-        cdo setrtoc,0,0.5,0 -setrtoc,0.5,1,1 -remapcon,$COORDSDIR/$TGTGRID/coords_bounds_${staggering_src}.nc \
+        cdo setrtoc,0,0.5,0 -setrtoc,0.5,1,1 -remapcon,$COORDSDIR/$TGTGRID/coords_bounds_${staggering}.nc \
         -setrtoc,-10000,-0.0001,1  -setrtoc,0,10000,0  $BATHYDIR/Herold/bathy_metry_fromHerold.nc \
         $landseamask
 
@@ -163,5 +175,11 @@ if [ "$do_fix_present_day" = true ]; then
     echo "Fixing present-day bathymetry on $TGTGRID using a custom script to set verify land points"
     python3 process-paleorca-bathymetry.py $BATHYDIR/$TGTGRID --infile eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T.nc \
     --outfile eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc --plot
+fi
+
+
+if [ $do_configure_domain = true ]; then
+    echo "Configuring domain file for $TGTGRID grid and staggering $staggering_target"
+    python3 configure-namelist-domain.py
 fi
 
