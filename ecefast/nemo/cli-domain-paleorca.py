@@ -13,12 +13,12 @@ Usage:
 import argparse
 import logging
 import os
-import subprocess
 
 import yaml
 from cdo import Cdo
 
-from processors.base import BathymetryProcessor
+from commands.executor import SubprocessExecutor
+from common.logger import setup_logging
 from processors.present_day import PresentDayBathymetry
 from processors.eocene import EoceneBathymetry
 
@@ -27,19 +27,6 @@ from processors.eocene import EoceneBathymetry
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 logger = logging.getLogger("nemo.workflow")
-
-
-def _setup_logging(level_str):
-    level = getattr(logging, level_str.upper(), logging.INFO)
-    root = logging.getLogger("nemo")
-    root.setLevel(level)
-    root.propagate = False
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(
-        "%(asctime)s | %(name)s | %(levelname)8s -> %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    ))
-    root.addHandler(handler)
 
 
 # Registry: maps the processor name used in YAML to the class.
@@ -57,15 +44,19 @@ class NEMOWorkflow:
         profile = config['profiles'][profile_name]
 
         basedir = profile['basedir']
+        coordsdir = os.path.join(basedir, 'coordinates')
         self.paths = {
             'basedir':   basedir,
-            'coordsdir': os.path.join(basedir, 'coordinates'),
+            'coordsdir': coordsdir,
             'bathydir':  os.path.join(basedir, 'bathymetry'),
-            'outputdir': profile.get('outputdir', os.path.join(basedir, 'domain')),
-            'domaindir': profile.get('domaindir', ''),
-            'herolddir': profile.get('herolddir', ''),
+            'outputdir': os.path.join(basedir, 'domain'),
             'ecedir':    profile.get('ecedir', ''),
+            # Explicit entry points: pre-existing files consumed by this workflow
+            'coords_ori': profile['coords_ori'],
+            'mesh_mask':  profile['mesh_mask'],
         }
+        # Optional per-profile aliases (e.g. {domaindir}, {herolddir}) used in source_file
+        self.aliases = profile.get('aliases', {})
 
         self.grids  = config['grids']
         self.params = config['parameters']
@@ -84,6 +75,7 @@ class NEMOWorkflow:
 
         self.log_level = log_level
         self.cdo = Cdo()
+        self.executor = SubprocessExecutor(_SCRIPT_DIR)
         self._validate_paths()
 
     # ------------------------------------------------------------------
@@ -92,16 +84,17 @@ class NEMOWorkflow:
 
     def _resolve_paths(self, cfg):
         """Substitute {coordsdir}, {domaindir} etc. in bathymetry config strings/lists."""
+        lookup = {**self.paths, **self.aliases}
         def resolve(v):
             if isinstance(v, str):
-                return v.format_map(self.paths)
+                return v.format_map(lookup)
             if isinstance(v, list):
                 return [resolve(item) for item in v]
             return v
         return {k: resolve(v) for k, v in cfg.items()}
 
     def _validate_paths(self):
-        for key, path in self.paths.items():
+        for key, path in {**self.paths, **self.aliases}.items():
             if path and ' ' in path:
                 raise ValueError(
                     f"Path for '{key}' contains spaces: '{path}'. "
@@ -130,34 +123,34 @@ class NEMOWorkflow:
 
     def generate_coordinates(self):
         """Remove halo from target grid, then generate T/F bounds for target and source."""
-        tgt       = self.grids['target']
-        src       = self.grids['source']
-        coordsdir = self.paths['coordsdir']
+        tgt        = self.grids['target']
+        src        = self.grids['source']
+        coordsdir  = self.paths['coordsdir']
+        coords_ori = self.paths['coords_ori']
+        mesh_mask  = self.paths['mesh_mask']
 
         # Target grid: remove halo (NEMO 3.6 → 4.2 transition)
-        coords_ori  = os.path.join(coordsdir, tgt, 'coords_ori.nc')
         coords_halo = os.path.join(coordsdir, tgt, 'coords_halo.nc')
         logger.info("Removing halo from %s", coords_ori)
+        os.makedirs(os.path.dirname(coords_halo), exist_ok=True)
         self.cdo.sethalo('-1,-1', input=coords_ori, output=coords_halo, options='-O')
 
         for stagg in ['T', 'F']:
             outfile = os.path.join(coordsdir, tgt, f'coords_bounds_{stagg}.nc')
             logger.debug("Generating bounds for %s staggering %s", tgt, stagg)
-            subprocess.run(
-                ['python3', os.path.join(_SCRIPT_DIR, 'utils', 'generate-orca-bounds.py'),
-                 '--stagg', stagg, '--no-level', coords_halo, outfile],
-                check=True
+            self.executor.run_python_script(
+                'utils/generate-orca-bounds.py',
+                ['--stagg', stagg, '--no-level', coords_halo, outfile]
             )
 
         # Source grid: NEMO 4.2 mesh_mask (no halo removal needed)
-        mesh_mask = os.path.join(coordsdir, src, 'mesh_mask.nc')
         for stagg in ['T', 'F']:
+            os.makedirs(os.path.join(coordsdir, src), exist_ok=True)
             outfile = os.path.join(coordsdir, src, f'coords_bounds_{stagg}.nc')
             logger.debug("Generating bounds for %s staggering %s", src, stagg)
-            subprocess.run(
-                ['python3', os.path.join(_SCRIPT_DIR, 'utils', 'generate-orca-bounds.py'),
-                 '--stagg', stagg, '--no-level', mesh_mask, outfile],
-                check=True
+            self.executor.run_python_script(
+                'utils/generate-orca-bounds.py',
+                ['--stagg', stagg, '--no-level', mesh_mask, outfile]
             )
 
     # ------------------------------------------------------------------
@@ -195,13 +188,12 @@ class NEMOWorkflow:
                 )
             namelist_out = os.path.join(namelist_dir, f'namelist_cfg_{name}')
             logger.info("Generating namelist for %s: %s", name, namelist_out)
-            subprocess.run(
-                ['python3', os.path.join(_SCRIPT_DIR, 'domain-tools', 'config-namelist-domain.py'),
-                 '--bathymetry',  output_file,
+            self.executor.run_python_script(
+                'domain-tools/config-namelist-domain.py',
+                ['--bathymetry',  output_file,
                  '--coordinates', coords,
                  '--output',      namelist_out,
-                 '--log-level',   self.log_level],
-                check=True
+                 '--log-level',   self.log_level]
             )
 
     # ------------------------------------------------------------------
@@ -210,17 +202,37 @@ class NEMOWorkflow:
 
     def run_domain_cfg(self):
         """Delegate HPC module loading + compilation + execution to run_domain_cfg.sh."""
+        ecedir = self.paths['ecedir']
+        names  = [cfg['name'] for cfg in self.bathymetries]
+        clean  = '1' if self.steps.get('clean_domain_cfg', False) else '0'
+
+        logger.info("Running domain configuration (HPC step, clean=%s)...", clean)
+        self.executor.run_bash_script(
+            'domain-tools/run_domain_cfg.sh',
+            [ecedir, clean] + names
+        )
+
+    # ------------------------------------------------------------------
+    # Step 5: Post-process domain_cfg + extract maskutil
+    # ------------------------------------------------------------------
+
+    def generate_mask_util(self):
+        """Run generate-mask-util.py for each bathymetry (post-processes domain_cfg.nc
+        and extracts maskutil.nc into the per-name output directory)."""
         ecedir    = self.paths['ecedir']
         outputdir = self.paths['outputdir']
         tgt       = self.grids['target']
-        names     = [cfg['name'] for cfg in self.bathymetries]
+        src_dir   = os.path.join(ecedir, 'DOMAINcfg')
 
-        logger.info("Running domain configuration (HPC step)...")
-        subprocess.run(
-            ['bash', os.path.join(_SCRIPT_DIR, 'domain-tools', 'run_domain_cfg.sh'),
-             ecedir, outputdir, tgt] + names,
-            check=True
-        )
+        for cfg in self.bathymetries:
+            name    = cfg['name']
+            tgt_dir = os.path.join(outputdir, tgt, name)
+            logger.info("Generating mask util for %s -> %s", name, tgt_dir)
+            self.executor.run_python_script(
+                'domain-tools/generate-mask-util.py',
+                ['--src_dir', src_dir,
+                 '--tgt_dir', tgt_dir]
+            )
 
     # ------------------------------------------------------------------
     # Orchestrator
@@ -244,6 +256,10 @@ class NEMOWorkflow:
             logger.info("=== Step: Run Domain Configuration Tool ===")
             self.run_domain_cfg()
 
+        if self.steps.get('generate_mask'):
+            logger.info("=== Step: Generate Mask Util ===")
+            self.generate_mask_util()
+
         logger.info("Workflow complete.")
 
 
@@ -260,7 +276,7 @@ def main():
     )
     args = parser.parse_args()
 
-    _setup_logging(args.log_level)
+    setup_logging(args.log_level)
 
     with open(args.config, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)

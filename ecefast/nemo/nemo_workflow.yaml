@@ -1,36 +1,50 @@
 # Active profile: select 'altai' (local) or 'atos' (HPC)
-profile: altai
+profile: atos
 
 profiles:
   altai:
     basedir:   /Users/paolo/Desktop/PALEORCA
-    domaindir: /Users/paolo/Desktop/PALEORCA/ECE4/nemo/domain
-    herolddir: /Users/paolo/Desktop/PALEORCA/herold
-    outputdir: /Users/paolo/Desktop/PALEORCA/domain
     ecedir:    ~   # not used locally
 
+    # Explicit entry points: pre-existing files consumed (not produced) by this workflow
+    coords_ori: /Users/paolo/Desktop/PALEORCA/coordinates/PALEORCA2/coords_ori.nc
+    mesh_mask:  /Users/paolo/Desktop/PALEORCA/coordinates/eORCA1/mesh_mask.nc
+
+    # Optional path aliases — available as {domaindir}, {herolddir} etc. in source_file entries
+    aliases:
+      domaindir: /Users/paolo/Desktop/PALEORCA/ECE4/nemo/domain
+      herolddir: /Users/paolo/Desktop/PALEORCA/herold
+
   atos:
-    basedir:   /home/ccpd/hpcperm/PALEORCA
-    domaindir: /lus/h2resw01/hpcperm/ccpd/ECE4-DATA/nemo/domain
-    herolddir: /lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014
-    outputdir: /home/ccpd/hpcperm/PALEORCA/domain
+    basedir:   /home/ccpd/hpcperm/PALEORCA2-workflow
     ecedir:    /home/ccpd/hpcperm/ecearth4/revisions/main/sources/nemo-4.2/tools
+
+    # Explicit entry points: pre-existing files consumed (not produced) by this workflow
+    coords_ori: /home/ccpd/hpcperm/PALEORCA/coordinates/PALEORCA2/coords_ori.nc
+    mesh_mask:  /home/ccpd/hpcperm/PALEORCA/coordinates/eORCA1/mesh_mask.nc
+
+    # Optional path aliases — available as {domaindir}, {herolddir} etc. in source_file entries
+    aliases:
+      domaindir: /lus/h2resw01/hpcperm/ccpd/ECE4-DATA/nemo/domain
+      herolddir: /lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014
 
 grids:
   target:            PALEORCA2
   source:            eORCA1
-  staggering_source: T
-  staggering_target: T
+  staggering_source: T   # staggering of source-grid coordinate bounds (used in setgrid)
+  staggering_target: T   # staggering of target-grid coordinate bounds (used in remapping)
 
 parameters:
   minimum_depth: 30   # meters; values 0 < d < min_depth are raised to min_depth
 
 # Enable/disable major workflow steps
 steps:
-  coordinates:      false
-  bathymetry:       false
+  coordinates:      true
+  bathymetry:       true
   configure_domain: true
-  domain_cfg:       false
+  domain_cfg:       true
+  clean_domain_cfg: false  # force a clean recompilation of make_domain_cfg.exe
+  generate_mask:    true   # post-process domain_cfg.nc and extract maskutil.nc
 
 # One entry per bathymetry source.
 #

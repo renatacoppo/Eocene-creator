@@ -16,6 +16,7 @@ import xarray as xr
 import matplotlib.pyplot as plt
 
 from .base import BathymetryProcessor
+from config import get_corrections_for_grid
 
 logger = logging.getLogger("nemo.processors.present_day")
 
@@ -42,9 +43,10 @@ class PresentDayBathymetry(BathymetryProcessor):
 
     def __init__(self, cfg, paths, grids, params, cdo):
         super().__init__(cfg, paths, grids, params, cdo)
-        # Derive setgrid from source-grid coordinates (not user-supplied in YAML)
-        src = grids['source']
-        self.setgrid = os.path.join(paths['coordsdir'], src, 'coords_bounds_T.nc')
+        # Derive setgrid from source-grid coordinates, honouring staggering_source from YAML
+        src   = grids['source']
+        stagg = grids.get('staggering_source', 'T')
+        self.setgrid = os.path.join(paths['coordsdir'], src, f'coords_bounds_{stagg}.nc')
 
     # ------------------------------------------------------------------
     # Postprocessing: strait corrections + optional plot
@@ -58,14 +60,19 @@ class PresentDayBathymetry(BathymetryProcessor):
         xfield.load()
         xfield.close()
 
-        for region in ['Arctic', 'Baltic', 'Gibraltair', 'RedSea',
-                       'Madagascar', 'Italy', 'Japan', 'Bering', 'Indonesia', 'Spain']:
-            xfield = open_region(xfield, region)
+        # Load strait corrections from config based on target grid and remap method
+        open_regions, close_regions = get_corrections_for_grid(
+            self.grids['target'],
+            self.remap_method
+        )
 
-        for region in ['Arctic', 'Caspian', 'Cuba', 'Britain', 'BlackSea',
-                       'Victoria', 'GreatLakes', 'Thailand', 'Barents',
-                       'Italy', 'Indonesia']:
-            xfield = close_region(xfield, region)
+        # Apply open regions (set to local average depth)
+        for region in open_regions.keys():
+            xfield = open_region(xfield, region, open_regions)
+
+        # Apply close regions (set to land/0)
+        for region in close_regions.keys():
+            xfield = close_region(xfield, region, close_regions)
 
         if self.cfg.get('orca2_file') or self.cfg.get('orca1_file'):
             self._plot(xfield, output_dir)
@@ -129,9 +136,8 @@ class PresentDayBathymetry(BathymetryProcessor):
 # ======================================================================
 # Strait correction functions
 # ======================================================================
-# Grid indices are for PALEORCA2 with remapnn from eORCA1.
-# Order is (y, x) — matches ncview display + 1 in the lat dimension.
-# Python slicing: add 1 to the end of each range.
+# Note: Region indices are loaded from config/bathymetry_corrections.yaml
+# and are specific to the target_grid + remap_method combination.
 # ======================================================================
 
 def set_minimum_bathymetry(xfield, min_land=30, min_depth=30):
@@ -152,49 +158,39 @@ def average_depth(field, y_slice, x_slice, region_name):
     return field
 
 
-_CLOSE_REGIONS = {
-    'Caspian':    [(slice(131, 140), slice(156, 159))],
-    'BlackSea':   [(slice(133, 138), slice(146, 153))],
-    'Victoria':   [(slice(98,  101), 149)],
-    'GreatLakes': [(slice(132, 141), slice(86,  94))],
-    'Arctic':     [(165, slice(151, 153)), (slice(162, 174), slice(64, 78))],
-    'Britain':    [(139, 131), (slice(141, 143), slice(128, 131))],
-    'Cuba':       [(121, slice(92, 96))],
-    'Thailand':   [(slice(104, 116), 2), (slice(104, 112), 3), (slice(88, 90), 5)],
-    'Italy':      [(slice(134, 136), 139)],
-    'Barents':    [(slice(153, 155), slice(145, 147))],
-    'Indonesia':  [(123, 12), (94, 18), (89, 26), (86, slice(10, 13))],
-}
-
-
-def close_region(xfield, region):
-    """Close a region by setting bathymetry to 0 (land)."""
-    if region not in _CLOSE_REGIONS:
-        raise ValueError(f"Region '{region}' not recognised for closing.")
-    for y_idx, x_idx in _CLOSE_REGIONS[region]:
+def close_region(xfield, region, close_regions):
+    """Close a region by setting bathymetry to 0 (land).
+    
+    Args:
+        xfield: xarray Dataset
+        region: Region name (str)
+        close_regions: Dict of region_name -> list of (y_idx, x_idx) tuples
+    
+    Returns:
+        Modified xarray Dataset
+    """
+    if region not in close_regions:
+        raise ValueError(f"Region '{region}' not in close_regions dictionary.")
+    
+    for y_idx, x_idx in close_regions[region]:
         xfield['bathy_metry'][:, y_idx, x_idx] = 0
     return xfield
 
 
-_OPEN_REGIONS = {
-    'Gibraltair': [(129, 132)],
-    'RedSea':     [(117, 154), (117, 153)],
-    'Italy':      [(133, 140), (130, 139)],
-    'Bering':     [(151, 47)],
-    'Arctic':     [(166, 60), (173, 143), (173, 144)],
-    'Baltic':     [(143, 138), (144, 139)],
-    'Japan':      [(129, 16)],
-    'Indonesia':  [(115, 12), (101, 11), (102, 11), (105, 15), (106, 15),
-                   (94, 16), (86, 15), (81, 41), (96, 7)],
-    'Spain':      [(134, 128)],
-    'Madagascar': [(81, 154)],
-}
-
-
-def open_region(xfield, region):
-    """Open a region by setting cells to the local average depth."""
-    if region not in _OPEN_REGIONS:
-        raise ValueError(f"Region '{region}' not recognised for opening.")
-    for y, x in _OPEN_REGIONS[region]:
+def open_region(xfield, region, open_regions):
+    """Open a region by setting cells to the local average depth.
+    
+    Args:
+        xfield: xarray Dataset
+        region: Region name (str)
+        open_regions: Dict of region_name -> list of [y, x] cells
+    
+    Returns:
+        Modified xarray Dataset
+    """
+    if region not in open_regions:
+        raise ValueError(f"Region '{region}' not in open_regions dictionary.")
+    
+    for y, x in open_regions[region]:
         xfield = average_depth(xfield, y, x, region)
     return xfield
