@@ -17,7 +17,7 @@ import os
 import yaml
 from cdo import Cdo
 
-from commands.executor import SubprocessExecutor
+from common.executor import SubprocessExecutor
 from common.logger import setup_logging
 from processors.present_day import PresentDayBathymetry
 from processors.eocene import EoceneBathymetry
@@ -35,6 +35,8 @@ PROCESSOR_REGISTRY = {
     'PresentDayBathymetry': PresentDayBathymetry,
     'EoceneBathymetry':     EoceneBathymetry,
 }
+
+STAGGERING_OPTIONS = ['T', 'F']
 
 
 class NEMOWorkflow:
@@ -135,7 +137,7 @@ class NEMOWorkflow:
         os.makedirs(os.path.dirname(coords_halo), exist_ok=True)
         self.cdo.sethalo('-1,-1', input=coords_ori, output=coords_halo, options='-O')
 
-        for stagg in ['T', 'F']:
+        for stagg in STAGGERING_OPTIONS:
             outfile = os.path.join(coordsdir, tgt, f'coords_bounds_{stagg}.nc')
             logger.debug("Generating bounds for %s staggering %s", tgt, stagg)
             self.executor.run_python_script(
@@ -144,7 +146,7 @@ class NEMOWorkflow:
             )
 
         # Source grid: NEMO 4.2 mesh_mask (no halo removal needed)
-        for stagg in ['T', 'F']:
+        for stagg in STAGGERING_OPTIONS:
             os.makedirs(os.path.join(coordsdir, src), exist_ok=True)
             outfile = os.path.join(coordsdir, src, f'coords_bounds_{stagg}.nc')
             logger.debug("Generating bounds for %s staggering %s", src, stagg)
@@ -169,16 +171,16 @@ class NEMOWorkflow:
 
     def configure_domain_namelists(self):
         """Generate NEMO DOMAINcfg namelist for each enabled bathymetry."""
-        ecedir    = self.paths['ecedir']
+        ecedir = self.paths['ecedir']
         outputdir = self.paths['outputdir']
-        coords    = self._target_bounds()
+        coords = self._target_bounds()
 
         # Write namelists into ecedir/DOMAINcfg if available (HPC), else outputdir
         namelist_dir = os.path.join(ecedir, 'DOMAINcfg') if ecedir else outputdir
         os.makedirs(namelist_dir, exist_ok=True)
 
         for cfg in self.bathymetries:
-            name        = cfg['name']
+            name = cfg['name']
             # Use pre-computed path if available, otherwise derive it via the processor
             output_file = cfg.get('output_file') or self._make_processor(cfg).expected_output()
             if not os.path.isfile(output_file):

@@ -12,8 +12,8 @@ profiles:
 
     # Optional path aliases — available as {domaindir}, {herolddir} etc. in source_file entries
     aliases:
-      domaindir: /Users/paolo/Desktop/PALEORCA/ECE4/nemo/domain
-      herolddir: /Users/paolo/Desktop/PALEORCA/herold
+      domain_dir: /Users/paolo/Desktop/PALEORCA/ECE4/nemo/domain
+      herold_dir: /Users/paolo/Desktop/PALEORCA/herold
 
   atos:
     basedir:   /home/ccpd/hpcperm/PALEORCA2-workflow
@@ -25,12 +25,12 @@ profiles:
 
     # Optional path aliases — available as {domaindir}, {herolddir} etc. in source_file entries
     aliases:
-      domaindir: /lus/h2resw01/hpcperm/ccpd/ECE4-DATA/nemo/domain
-      herolddir: /lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014
+      domain_dir: /lus/h2resw01/hpcperm/ccpd/ECE4-DATA/nemo/domain
+      herold_dir: /lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014
 
 grids:
   target:            PALEORCA2
-  source:            eORCA1
+  source:            eORCA1 # only used for presentday bathymetry, but good to keep consistent with mesh_mask source
   staggering_source: T   # staggering of source-grid coordinate bounds (used in setgrid)
   staggering_target: T   # staggering of target-grid coordinate bounds (used in remapping)
 
@@ -64,13 +64,13 @@ bathymetries:
   - name:        present_day
     enabled:     true
     processor:   PresentDayBathymetry
-    source_file: "{domaindir}/eORCA1/domain_cfg.nc"
-    orca2_file:  "{domaindir}/ORCA2/domain_cfg.nc"   # enables land-sea mask comparison plot
+    source_file: "{domain_dir}/eORCA1/domain_cfg.nc"
+    orca2_file:  "{domain_dir}/ORCA2/domain_cfg.nc"   # enables land-sea mask comparison plot
 
   - name:        eocene
     enabled:     true
     processor:   EoceneBathymetry
-    source_file: "{herolddir}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc"
+    source_file: "{herold_dir}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc"
 
   # Template for future paleographies — uncomment and fill in:
   # - name:        cretaceous
