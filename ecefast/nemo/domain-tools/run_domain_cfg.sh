@@ -1,5 +1,5 @@
 #!/bin/bash
-# run_domain_cfg.sh <ecedir> <clean> <name1> [name2 ...]
+# run_domain_cfg.sh <domaincfg_dir> <name1> [name2 ...]
 #
 # HPC-only block: module loading, compilation, and execution of the NEMO
 # DOMAINcfg tool. Called from cli-domain-paleorca.py via subprocess.
@@ -10,9 +10,8 @@ set -euo pipefail
 # Resolve directory of this script so helper scripts are found regardless of cwd
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-ECEDIR=$1
-CLEAN=$2   # '1' = force clean recompilation, '0' = skip if binary exists
-shift 2
+DOMAINCFG_DIR=$1
+shift 1
 NAMES=("$@")
 
 # --- Load HPC modules from config ---
@@ -46,13 +45,14 @@ $HDF5_DIR/lib:\
 $HPCPERM/ecearth4/revisions/main/sources/oasis3-mct-5.2/arch_ecearth/lib
 
 # --- Compile DOMAINcfg tool ---
-cd "$ECEDIR"
-if [[ "$CLEAN" == "1" || ! -f "DOMAINcfg/make_domain_cfg.exe" ]]; then
-    ./maketools -m ecearth -n DOMAINcfg clean
-else
+cd "$DOMAINCFG_DIR"
+if [[ ! -f "DOMAINcfg/make_domain_cfg.exe" ]]; then
+    echo "Compiling DOMAINcfg tool..."
     ./maketools -m ecearth -n DOMAINcfg
+else
+    echo "DOMAINcfg tool already compiled, skipping build."
 fi
-cd "$ECEDIR/DOMAINcfg"
+cd "$DOMAINCFG_DIR/DOMAINcfg"
 
 # --- Run domain configuration for each bathymetry ---
 for name in "${NAMES[@]}"; do
@@ -80,6 +80,11 @@ for name in "${NAMES[@]}"; do
             exit "${exe_rc}"
         fi
     fi
+
+    # Rename files immediately to prevent overwrite by next bathymetry
+    echo "Renaming output files: domain_cfg_${name}.nc and mesh_mask_${name}.nc"
+    mv domain_cfg.nc "domain_cfg_${name}.nc"
+    mv mesh_mask.nc "mesh_mask_${name}.nc"
 
     echo "Domain configuration complete for: $name"
 done

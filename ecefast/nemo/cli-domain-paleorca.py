@@ -19,6 +19,7 @@ from cdo import Cdo
 
 from common.executor import SubprocessExecutor
 from common.logger import setup_logging
+from common.util import process_domain_cfg, extract_maskutil, check_files_exist
 from processors.present_day import PresentDayBathymetry
 from processors.eocene import EoceneBathymetry
 
@@ -45,14 +46,14 @@ class NEMOWorkflow:
         profile_name = config.get('profile', 'default')
         profile = config['profiles'][profile_name]
 
-        basedir = profile['basedir']
-        coordsdir = os.path.join(basedir, 'coordinates')
+        output_dir = profile['output_dir']
+        coordsdir = os.path.join(output_dir, 'coordinates')
         self.paths = {
-            'basedir':   basedir,
-            'coordsdir': coordsdir,
-            'bathydir':  os.path.join(basedir, 'bathymetry'),
-            'outputdir': os.path.join(basedir, 'domain'),
-            'ecedir':    profile.get('ecedir', ''),
+            'output_dir':     output_dir,
+            'coordsdir':      coordsdir,
+            'bathydir':       os.path.join(output_dir, 'bathymetry'),
+            'outputdir':      os.path.join(output_dir, 'domain'),
+            'domaincfg_dir':  profile.get('domaincfg_dir', ''),
             # Explicit entry points: pre-existing files consumed by this workflow
             'coords_ori': profile['coords_ori'],
             'mesh_mask':  profile['mesh_mask'],
@@ -107,6 +108,10 @@ class NEMOWorkflow:
         s   = staggering or self.grids['staggering_target']
         tgt = self.grids['target']
         return os.path.join(self.paths['coordsdir'], tgt, f'coords_bounds_{s}.nc')
+
+    def _target_halo(self,):
+        tgt = self.grids['target']
+        return os.path.join(self.paths['coordsdir'], tgt, f'coords_halo.nc')
 
     def _make_processor(self, cfg):
         """Instantiate the processor declared in cfg['processor']."""
@@ -171,12 +176,12 @@ class NEMOWorkflow:
 
     def configure_domain_namelists(self):
         """Generate NEMO DOMAINcfg namelist for each enabled bathymetry."""
-        ecedir = self.paths['ecedir']
+        domaincfg_dir = self.paths['domaincfg_dir']
         outputdir = self.paths['outputdir']
-        coords = self._target_bounds()
+        coords = self._target_halo()
 
-        # Write namelists into ecedir/DOMAINcfg if available (HPC), else outputdir
-        namelist_dir = os.path.join(ecedir, 'DOMAINcfg') if ecedir else outputdir
+        # Write namelists into domaincfg_dir/DOMAINcfg if available (HPC), else outputdir
+        namelist_dir = os.path.join(domaincfg_dir, 'DOMAINcfg') if domaincfg_dir else outputdir
         os.makedirs(namelist_dir, exist_ok=True)
 
         for cfg in self.bathymetries:
@@ -204,14 +209,13 @@ class NEMOWorkflow:
 
     def run_domain_cfg(self):
         """Delegate HPC module loading + compilation + execution to run_domain_cfg.sh."""
-        ecedir = self.paths['ecedir']
+        domaincfg_dir = self.paths['domaincfg_dir']
         names  = [cfg['name'] for cfg in self.bathymetries]
-        clean  = '1' if self.steps.get('clean_domain_cfg', False) else '0'
 
-        logger.info("Running domain configuration (HPC step, clean=%s)...", clean)
+        logger.info("Running domain configuration (HPC step)...")
         self.executor.run_bash_script(
             'domain-tools/run_domain_cfg.sh',
-            [ecedir, clean] + names
+            [domaincfg_dir] + names
         )
 
     # ------------------------------------------------------------------
@@ -219,21 +223,57 @@ class NEMOWorkflow:
     # ------------------------------------------------------------------
 
     def generate_mask_util(self):
-        """Run generate-mask-util.py for each bathymetry (post-processes domain_cfg.nc
-        and extracts maskutil.nc into the per-name output directory)."""
-        ecedir    = self.paths['ecedir']
-        outputdir = self.paths['outputdir']
-        tgt       = self.grids['target']
-        src_dir   = os.path.join(ecedir, 'DOMAINcfg')
+        """Post-process domain_cfg.nc and extract maskutil.nc for each bathymetry."""
+        domaincfg_dir = self.paths['domaincfg_dir']
+        outputdir     = self.paths['outputdir']
+        tgt           = self.grids['target']
+        src_dir       = os.path.join(domaincfg_dir, 'DOMAINcfg')
 
         for cfg in self.bathymetries:
             name    = cfg['name']
             tgt_dir = os.path.join(outputdir, tgt, name)
-            logger.info("Generating mask util for %s -> %s", name, tgt_dir)
+            logger.info("Processing domain_cfg and mask util for %s -> %s", name, tgt_dir)
+            
+            # Process domain_cfg: rename vertical dimension
+            process_domain_cfg(src_dir, tgt_dir, name)
+            
+            # Extract maskutil from mesh_mask
+            extract_maskutil(src_dir, tgt_dir, name)
+
+
+
+    # ------------------------------------------------------------------
+    # Step 6: Generate subbasin masks (present-day only)
+    # ------------------------------------------------------------------
+
+    def generate_subbasins(self):
+        """Generate ocean subbasin masks for present-day bathymetry only.
+        
+        Calls generate-subbasins.py script for each bathymetry.
+        Only applicable to PresentDayBathymetry processor.
+        """
+        domaincfg_dir = self.paths['domaincfg_dir']
+        outputdir = self.paths['outputdir']
+        tgt = self.grids['target']
+        src_dir = os.path.join(domaincfg_dir, 'DOMAINcfg')
+
+        for cfg in self.bathymetries:
+            name = cfg['name']
+            processor_name = cfg['processor']
+            
+            # Only generate subbasins for present-day bathymetry
+            if processor_name != 'PresentDayBathymetry':
+                logger.info("Skipping subbasins for %s (only applicable to present-day)", name)
+                continue
+            
+            tgt_dir = os.path.join(outputdir, tgt, name)
+            logger.info("Generating subbasin masks for %s -> %s", name, tgt_dir)
+            
             self.executor.run_python_script(
-                'domain-tools/generate-mask-util.py',
+                'domain-tools/generate-subbasins.py',
                 ['--src_dir', src_dir,
-                 '--tgt_dir', tgt_dir]
+                 '--tgt_dir', tgt_dir,
+                 '--name', name]
             )
 
     # ------------------------------------------------------------------
@@ -260,7 +300,27 @@ class NEMOWorkflow:
 
         if self.steps.get('generate_mask'):
             logger.info("=== Step: Generate Mask Util ===")
+            # Check that domain_cfg files exist
+            src_dir = os.path.join(self.paths['domaincfg_dir'], 'DOMAINcfg')
+            check_files_exist(
+                src_dir,
+                self.bathymetries,
+                ['domain_cfg_{name}.nc', 'mesh_mask_{name}.nc'],
+                'generate_mask'
+            )
             self.generate_mask_util()
+
+        if self.steps.get('generate_subbasins'):
+            logger.info("=== Step: Generate Subbasin Masks ===")
+            # Check that mesh_mask files exist
+            src_dir = os.path.join(self.paths['domaincfg_dir'], 'DOMAINcfg')
+            check_files_exist(
+                src_dir,
+                self.bathymetries,
+                ['mesh_mask_{name}.nc'],
+                'generate_subbasins'
+            )
+            self.generate_subbasins()
 
         logger.info("Workflow complete.")
 

@@ -3,8 +3,8 @@ profile: atos
 
 profiles:
   altai:
-    basedir:   /Users/paolo/Desktop/PALEORCA
-    ecedir:    ~   # not used locally
+    output_dir:     /Users/paolo/Desktop/PALEORCA
+    domaincfg_dir:  ~   # not used locally
 
     # Explicit entry points: pre-existing files consumed (not produced) by this workflow
     coords_ori: /Users/paolo/Desktop/PALEORCA/coordinates/PALEORCA2/coords_ori.nc
@@ -16,8 +16,8 @@ profiles:
       herold_dir: /Users/paolo/Desktop/PALEORCA/herold
 
   atos:
-    basedir:   /home/ccpd/hpcperm/PALEORCA2-workflow
-    ecedir:    /home/ccpd/hpcperm/ecearth4/revisions/main/sources/nemo-4.2/tools
+    output_dir:     /home/ccpd/hpcperm/PALEORCA2-definitive
+    domaincfg_dir:  /home/ccpd/hpcperm/ecearth4/revisions/main/sources/nemo-4.2/tools
 
     # Explicit entry points: pre-existing files consumed (not produced) by this workflow
     coords_ori: /home/ccpd/hpcperm/PALEORCA/coordinates/PALEORCA2/coords_ori.nc
@@ -43,8 +43,8 @@ steps:
   bathymetry:       true
   configure_domain: true
   domain_cfg:       true
-  clean_domain_cfg: false  # force a clean recompilation of make_domain_cfg.exe
   generate_mask:    true   # post-process domain_cfg.nc and extract maskutil.nc
+  generate_subbasins: true  # generate ocean subbasin masks (present-day only)
 
 # One entry per bathymetry source.
 #
@@ -52,7 +52,7 @@ steps:
 #   name        : identifier, used in output filenames and namelist names
 #   enabled     : skip this entry if false
 #   processor   : BathymetryProcessor subclass name (or dotted module path)
-#   source_file : path to source NetCDF ({basedir}, {domaindir}, {herolddir} as placeholders)
+#   source_file : path to source NetCDF ({output_dir}, {domaindir}, {herolddir} as placeholders)
 #
 # All algorithm choices (variable, mask_type, remap_method, etc.) live in the
 # processor class.  Only per-instance/per-machine fields go here.

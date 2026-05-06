@@ -5,22 +5,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # folders for altai
 if [ "$HOSTNAME" = "altai" ]; then
-    BASEDIR=/Users/paolo/Desktop/PALEORCA
-    COORDSDIR=$BASEDIR/coordinates
+    OUTPUT_DIR=/Users/paolo/Desktop/PALEORCA
+    COORDSDIR=$OUTPUT_DIR/coordinates
     DOMAINDIR=/Users/paolo/Desktop/PALEORCA/ECE4/nemo/domain
     HEROLDDIR=/Users/paolo/Desktop/PALEORCA/herold
     #ETOPODIR=/lus/h2resw01/hpcperm/ccpd/EPOCHAL #not used
-    BATHYDIR=$BASEDIR/bathymetry
+    BATHYDIR=$OUTPUT_DIR/bathymetry
 else
     # folders: DEFAULT: on Atos
-    BASEDIR=/home/ccpd/hpcperm/PALEORCA
-    COORDSDIR=$BASEDIR/coordinates
+    OUTPUT_DIR=/home/ccpd/hpcperm/PALEORCA
+    COORDSDIR=$OUTPUT_DIR/coordinates
     DOMAINDIR=/lus/h2resw01/hpcperm/ccpd/ECE4-DATA/nemo/domain
     HEROLDDIR=/lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014
     #ETOPODIR=/lus/h2resw01/hpcperm/ccpd/EPOCHAL #not used
-    BATHYDIR=$BASEDIR/bathymetry
-    OUTPUTDIR=$BASEDIR/domain
-    ECEDIR=/home/ccpd/hpcperm/ecearth4/revisions/main/sources/nemo-4.2/tools
+    BATHYDIR=$OUTPUT_DIR/bathymetry
+    OUTPUTDIR=$OUTPUT_DIR/domain
+    DOMAINCFG_DIR=/home/ccpd/hpcperm/ecearth4/revisions/main/sources/nemo-4.2/tools
 fi
 
 
@@ -189,12 +189,12 @@ if [ "$do_configure_domain" = true ]; then
     echo "Configuring domain file for $TGTGRID grid and staggering $staggering_target for present-day bathymetry"
     python3 "$SCRIPT_DIR/domain-tools/config-namelist-domain.py" --bathymetry $BATHYDIR/$TGTGRID/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc \
     --coordinates $COORDSDIR/$TGTGRID/coords_bounds_${staggering_target}.nc \
-    --output $ECEDIR/DOMAINcfg/namelist_cfg_present 
+    --output $DOMAINCFG_DIR/DOMAINcfg/namelist_cfg_present 
 
     echo "Configuring domain file for $TGTGRID grid and staggering $staggering_target for Eocene bathymetry"
     python3 "$SCRIPT_DIR/domain-tools/config-namelist-domain.py" --bathymetry $BATHYDIR/$TGTGRID/HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc \
     --coordinates $COORDSDIR/$TGTGRID/coords_bounds_${staggering_target}.nc \
-    --output $ECEDIR/DOMAINcfg/namelist_cfg_eocene 
+    --output $DOMAINCFG_DIR/DOMAINcfg/namelist_cfg_eocene 
 fi
 
 # run the domain cfg NEMO tool 
@@ -206,9 +206,9 @@ if [ "$do_domain_cfg" = true ]; then
 
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$NETCDF4_PARALLEL_DIR/lib:$ECCODES_DIR/lib:$HDF5_DIR/lib:$HPCPERM/ecearth4/revisions/main/sources/oasis3-mct-5.2/arch_ecearth/lib
 
-    cd $ECEDIR
+    cd $DOMAINCFG_DIR
     ./maketools -m ecearth -n DOMAINcfg clean
-    cd $ECEDIR/DOMAINcfg
+    cd $DOMAINCFG_DIR/DOMAINcfg
 
     cp namelist_cfg_present namelist_cfg
     ./make_domain_cfg.exe
@@ -216,7 +216,7 @@ if [ "$do_domain_cfg" = true ]; then
 
     echo "Generating maskutil file for $TGTGRID grid and staggering $staggering_target for present-day bathymetry"
     mkdir -p $OUTPUTDIR/$TGTGRID/present_day
-    python3 "$SCRIPT_DIR/domain-tools/generate-mask-util.py" --src_dir $ECEDIR/DOMAINcfg --tgt_dir $OUTPUTDIR/$TGTGRID
+    python3 "$SCRIPT_DIR/domain-tools/generate-mask-util.py" --src_dir $DOMAINCFG_DIR/DOMAINcfg --tgt_dir $OUTPUTDIR/$TGTGRID
 
     cp namelist_cfg_eocene namelist_cfg
     ./make_domain_cfg.exe
@@ -224,6 +224,6 @@ if [ "$do_domain_cfg" = true ]; then
 
     echo "Generating maskutil file for $TGTGRID grid and staggering $staggering_target for present-day bathymetry"
     mkdir -p $OUTPUTDIR/$TGTGRID/eocene
-    python3 "$SCRIPT_DIR/domain-tools/generate-mask-util.py" --src_dir $ECEDIR/DOMAINcfg --tgt_dir $OUTPUTDIR/$TGTGRID
+    python3 "$SCRIPT_DIR/domain-tools/generate-mask-util.py" --src_dir $DOMAINCFG_DIR/DOMAINcfg --tgt_dir $OUTPUTDIR/$TGTGRID
 
 fi
