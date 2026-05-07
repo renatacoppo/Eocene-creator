@@ -1,0 +1,34 @@
+# HPC Module Configuration
+#
+# Defines module names and versions for different HPC environments.
+# Used by run_domain_cfg.sh to load the correct environment.
+
+default:
+  modules:
+    - prgenv/intel
+    - intel/2021.4.0
+    - intel-mkl/19.0.5
+    - hpcx-openmpi/2.9.0
+    - hdf5-parallel/1.12.2
+    - netcdf4-parallel/4.9.1
+    - ecmwf-toolbox/2023.04.1.0
+
+atos:
+  description: "ECMWF Atos HPC (default configuration)"
+  modules:
+    - prgenv/intel
+    - intel/2021.4.0
+    - intel-mkl/19.0.5
+    - hpcx-openmpi/2.9.0
+    - hdf5-parallel/1.12.2
+    - netcdf4-parallel/4.9.1
+    - ecmwf-toolbox/2023.04.1.0
+
+# Add more HPC environment profiles as needed
+# e.g.:
+# leonardo:
+#   description: "CINECA Leonardo"
+#   modules:
+#     - intel/2021.4
+#     - hdf5/1.12.2
+#     - ...

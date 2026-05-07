@@ -1,0 +1,79 @@
+# Active profile: select 'altai' (local) or 'atos' (HPC)
+profile: atos
+
+profiles:
+  altai:
+    output_dir:     /Users/paolo/Desktop/PALEORCA
+    domaincfg_dir:  ~   # not used locally
+
+    # Explicit entry points: pre-existing files consumed (not produced) by this workflow
+    coords_ori: /Users/paolo/Desktop/PALEORCA/coordinates/PALEORCA2/coords_ori.nc
+    mesh_mask:  /Users/paolo/Desktop/PALEORCA/coordinates/eORCA1/mesh_mask.nc
+
+    # Optional path aliases — available as {domaindir}, {herolddir} etc. in source_file entries
+    aliases:
+      domain_dir: /Users/paolo/Desktop/PALEORCA/ECE4/nemo/domain
+      herold_dir: /Users/paolo/Desktop/PALEORCA/herold
+
+  atos:
+    output_dir:     /home/ccpd/hpcperm/PALEORCA2-definitive
+    domaincfg_dir:  /home/ccpd/hpcperm/ecearth4/revisions/main/sources/nemo-4.2/tools
+
+    # Explicit entry points: pre-existing files consumed (not produced) by this workflow
+    coords_ori: /home/ccpd/hpcperm/PALEORCA/coordinates/PALEORCA2/coords_ori.nc
+    mesh_mask:  /home/ccpd/hpcperm/PALEORCA/coordinates/eORCA1/mesh_mask.nc
+
+    # Optional path aliases — available as {domaindir}, {herolddir} etc. in source_file entries
+    aliases:
+      domain_dir: /lus/h2resw01/hpcperm/ccpd/ECE4-DATA/nemo/domain
+      herold_dir: /lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014
+
+grids:
+  target:            PALEORCA2
+  source:            eORCA1 # only used for presentday bathymetry, but good to keep consistent with mesh_mask source
+  staggering_source: T   # staggering of source-grid coordinate bounds (used in setgrid)
+  staggering_target: T   # staggering of target-grid coordinate bounds (used in remapping)
+
+parameters:
+  minimum_depth: 30   # meters; values 0 < d < min_depth are raised to min_depth
+
+# Enable/disable major workflow steps
+steps:
+  coordinates:      true
+  bathymetry:       true
+  configure_domain: true
+  domain_cfg:       true
+  generate_mask:    true   # post-process domain_cfg.nc and extract maskutil.nc
+  generate_subbasins: true  # generate ocean subbasin masks (present-day only)
+
+# One entry per bathymetry source.
+#
+# Required fields:
+#   name        : identifier, used in output filenames and namelist names
+#   enabled     : skip this entry if false
+#   processor   : BathymetryProcessor subclass name (or dotted module path)
+#   source_file : path to source NetCDF ({output_dir}, {domaindir}, {herolddir} as placeholders)
+#
+# All algorithm choices (variable, mask_type, remap_method, etc.) live in the
+# processor class.  Only per-instance/per-machine fields go here.
+#
+# To add a new bathymetry: create processors/<name>.py, subclass BathymetryProcessor,
+# set class attributes, optionally override postprocess(), then add an entry below.
+bathymetries:
+
+  - name:        present_day
+    enabled:     true
+    processor:   PresentDayBathymetry
+    source_file: "{domain_dir}/eORCA1/domain_cfg.nc"
+    orca2_file:  "{domain_dir}/ORCA2/domain_cfg.nc"   # enables land-sea mask comparison plot
+
+  - name:        eocene
+    enabled:     true
+    processor:   EoceneBathymetry
+    source_file: "{herold_dir}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc"
+
+  # Template for future paleographies — uncomment and fill in:
+  # - name:        cretaceous
+  #   enabled:     false
+  #   processor:   CretaceousBathymetry           # define in processors/cretaceous.py
+  #   source_file: "/path/to/cretaceous_topo.nc"
