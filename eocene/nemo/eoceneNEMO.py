@@ -33,6 +33,8 @@ class EoceneNEMO():
 
         herold_file_orig = os.path.join(self.herold_folder, "Green_Huber_eocene_tidal_dissipation_1x1.nc")
         herold_file_remap = os.path.join(self.herold_folder, "Green_Huber_eocene_tidal_dissipation_r720x360.nc")
+        herold_bath_orig = os.path.join(self.herold_folder, "herold_etal_eocene_topo_1x1.nc")
+        herold_bath_remap = os.path.join(self.herold_folder, "herold_etal_eocene_topo_1x1_r720x360.nc")
         zdfiwm_file = os.path.join(self.input_folder, "nemo/initial/zdfiwm_forcing_r720x360.nc")
         output_file = os.path.join(self.output_folder, "nemo/initial/zdfiwm_forcing_r720x360.nc")
         
@@ -42,17 +44,31 @@ class EoceneNEMO():
             loggy.info("Cleaning file: %s", output_file)
 
         herold_file_remap = self.cdo.remapcon(self.grid, input=herold_file_orig)
+        herold_bath_remap = self.cdo.remapcon(self.grid, input=herold_bath_orig)
 
         ds_m2 = xr.open_dataset(herold_file_remap)
+        ds_bt = xr.open_dataset (herold_bath_remap)
         ds_pd = xr.open_dataset(zdfiwm_file)
 
         m2 = ds_m2[m2_varname]
+
+        # Interpolate topo onto the ds_pd grid
+        topo_interp = ds_bt["topo"].interp(
+            lat=ds_pd.latitude,
+            lon=ds_pd.longitude,
+            method="linear"
+        )
+
+        ocean_topo = topo_interp.where(topo_interp < 0.0)
 
         # make a copy of present-day file
         ds_out = ds_pd.copy(deep=True)
 
         # inject M2 into power_cri (1/3 only)
         ds_out['power_cri'][:] = (1.0 / 3.0) * m2.values
+
+        # modify bathymetry
+        ds_out['bathymetry'][:] = ocean_topo
 
         # zero in other energy reservoirs
         ds_out['power_nsq'][:] = 0.0

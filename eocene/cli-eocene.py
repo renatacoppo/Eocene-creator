@@ -7,11 +7,11 @@ import os
 import xarray as xr
 import numpy as np
 
-from eocene.common import load_yaml, setup_logger
-from eocene.oifs.eoceneOIFS import EoceneOIFS
-from eocene.nemo.eoceneNEMO import EoceneNEMO
-from eocene.oasis.eoceneOASIS import EoceneOASIS
-from eocene.rnfm.eoceneRNFM import iter_track, create_basin_data
+from common import load_yaml, setup_logger
+from oifs.eoceneOIFS import EoceneOIFS
+from nemo.eoceneNEMO import EoceneNEMO
+from oasis.eoceneOASIS import EoceneOASIS
+from rnfm.eoceneRNFM import iter_track, create_basin_data
 
 OIFS_RESO = "TL63L31"
 NEMO_RESO = "PALEORCA2"
@@ -76,7 +76,7 @@ def run_oifs(config):
     eocene_oifs.create_climate(lsm_present=lsm_present, landsea=lsm_eocene)
     eocene_oifs.create_bare_soil(lsm_present=lsm_present, landsea=lsm_eocene)
     eocene_oifs.create_sh(orog=orog['orography'])
-    eocene_oifs.create_init(lsm_eocene["landsea_mask"], sd_orog["sd_orography"])
+    eocene_oifs.create_init(lsm_present= lsm_present, landsea=lsm_eocene["landsea_mask"], sd_orog=sd_orog["sd_orography"])
     eocene_oifs.create_iniua()
     eocene_oifs.aerosols()
 
