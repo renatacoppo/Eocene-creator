@@ -12,6 +12,7 @@ from .utils import modify_single_grib, nullify_grib, modify_new_grib, new_modify
 from .utils import modify_value, replace_value, regrid_dataset 
 from .utils import extract_grid_info, spectral2gaussian
 from .albedo import albedo 
+from .lsmgrd import lsmgrd
 from .subgrid_orog import compute_slope 
 from .vegetation import vegetation_zhang
 
@@ -352,6 +353,15 @@ class EoceneOIFS():
             newfield=landsea
         )
 
+        modify_single_grib(
+          inputfile=output_surface,
+          outputfile=output_surface,
+          variables=['lsmgrd'],
+          spectral=False,
+          myfunction=lsmgrd,
+          landsea=landsea  
+          ) 
+
         # Modify vegetation variables
         modify_single_grib(
             inputfile=output_surface,
@@ -424,11 +434,22 @@ class EoceneOIFS():
              newvalue=0  
         )
 
-        # Zero out snow depth
+        # # Zero out land sea mask gradient 
+        # modify_single_grib(
+        #      inputfile=output_surface,
+        #      outputfile=output_surface,
+        #      variables=['lsmgrd'],
+        #      spectral=False,
+        #      myfunction=modify_value,
+        #      newvalue=0  
+        # )
+
+
+        # # Zero out snow depth
         nullify_grib(
-            inputfile=output_surface,
-            outputfile=output_surface,
-            variables=['sd']
+             inputfile=output_surface,
+             outputfile=output_surface,
+             variables=['sd']
         )
 
         # Modify albedo variables

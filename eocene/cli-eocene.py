@@ -7,11 +7,11 @@ import os
 import xarray as xr
 import numpy as np
 
-from eocene.common import load_yaml, setup_logger
-from eocene.oifs.eoceneOIFS import EoceneOIFS
-from eocene.nemo.eoceneNEMO import EoceneNEMO
-from eocene.oasis.eoceneOASIS import EoceneOASIS
-from eocene.rnfm.eoceneRNFM import iter_track, create_basin_data
+from common import load_yaml, setup_logger
+from oifs.eoceneOIFS import EoceneOIFS
+from nemo.eoceneNEMO import EoceneNEMO
+from oasis.eoceneOASIS import EoceneOASIS
+from rnfm.eoceneRNFM import iter_track, create_basin_data
 
 OIFS_RESO = "TL63L31"
 NEMO_RESO = "PALEORCA2"

@@ -213,7 +213,7 @@ def replace_value(field, var, newfield):
     for v in var:
         if v in field.variables:
             loggy.debug(f"Replacing variable {v} in the field")
-            field[v].data = newfield[v].data
+            field[v].data = newfield.data
     return field
 
 
