@@ -188,9 +188,15 @@ class EoceneNEMO():
         # Temperature profile formula
         thetao = np.where(
             Z <= 1000,
-            ((1000 - Z) / 1000) * 24 * np.cos(LAT) + 10,
+            ((1000 - Z) / 1000) * 25 * np.cos(LAT) + 10,
             10,
         )
+
+        #thetao = np.where(
+        #    Z <= 5000,
+        #    ((5000 - Z) / 5000) * 25 * np.cos(LAT) + 15,
+        #    15,
+        #)
 
         # Salinity constant
         so = np.full_like(thetao, so_value)
@@ -211,7 +217,7 @@ class EoceneNEMO():
 
             rel_path = os.path.relpath(woa_file, self.input_folder)
             base, ext = os.path.splitext(rel_path)
-            output_file = os.path.join(self.output_folder, f"{base}_deepmip-34{ext}")
+            output_file = os.path.join(self.output_folder, f"{base}_deepmip-35{ext}")
 
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
@@ -224,3 +230,26 @@ class EoceneNEMO():
         loggy.info("Ocean initial conditions written to %s", output_file)
 
         return woa
+    
+    def create_runoff (self):
+        
+        runoff = os.path.join(self.input_folder, "nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc")
+        runoff_output = os.path.join(self.output_folder, "nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc")
+
+        ds_rnf = xr.open_dataset(runoff)
+
+        ds_out = ds_rnf.copy(deep=True)
+        ds_out['socoefr'][:] = 0.0
+        ds_out['sorunoff'][:] = 0.0
+
+        # convert NaN into zeroes
+        ds_out = ds_out.fillna(0)
+
+        # write output file
+        os.makedirs(os.path.join(self.output_folder, "nemo/climatology"), exist_ok=True)
+        ds_out.to_netcdf(runoff_output)
+        loggy.info("Written NEMO 4.2 runoff file: %s", runoff_output)
+
+        ds_rnf.close()
+
+        return None
