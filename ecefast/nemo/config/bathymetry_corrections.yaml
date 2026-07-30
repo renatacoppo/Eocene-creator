@@ -1,0 +1,60 @@
+# Strait Corrections Configuration
+# 
+# Organized by target_grid + remap_method combination.
+# Each entry specifies which regions to open (set to local average depth)
+# and which regions to close (set to land/0).
+#
+# IMPORTANT: Grid indices are specific to the grid+remap combination.
+# If you change either the target grid or remapping method, you MUST
+# verify/recompute these indices or add new entries for the new combination.
+
+PALEORCA2_remapnn:
+  # Target grid: PALEORCA2, source: eORCA1, remap: nearest-neighbor
+  # Open regions: set cells to local average depth (3x3 neighborhood)
+  # Close regions: set cells to 0 (land)
+  open_regions:
+    - region: Gibraltair
+      cells: [[129, 132]]
+    - region: RedSea
+      cells: [[117, 154], [117, 153]]
+    - region: Italy
+      cells: [[133, 140], [130, 139]]
+    - region: Bering
+      cells: [[151, 47]]
+    - region: Arctic
+      cells: [[166, 60], [173, 143], [173, 144]]
+    - region: Baltic
+      cells: [[143, 138], [144, 139]]
+    - region: Japan
+      cells: [[129, 16]]
+    - region: Indonesia
+      cells: [[115, 12], [101, 11], [102, 11], [105, 15], [106, 15],
+               [94, 16], [86, 15], [81, 41], [96, 7]]
+    - region: Spain
+      cells: [[134, 128]]
+    - region: Madagascar
+      cells: [[81, 154]]
+  
+  close_regions:
+    - region: Caspian
+      cells: [[131, 140, 156, 159]]  # [y_start, y_end, x_start, x_end] for slices
+    - region: BlackSea
+      cells: [[133, 138, 146, 153]]
+    - region: Victoria
+      cells: [[98, 101, 149, 149]]  # single point becomes slice [98:101, 149:149]
+    - region: GreatLakes
+      cells: [[132, 141, 86, 94]]
+    - region: Arctic
+      cells: [[165, 165, 151, 153], [162, 174, 64, 78]]
+    - region: Britain
+      cells: [[139, 139, 131, 131], [141, 143, 128, 131]]
+    - region: Cuba
+      cells: [[121, 121, 92, 96]]
+    - region: Thailand
+      cells: [[104, 116, 2, 2], [104, 112, 3, 3], [88, 90, 5, 5]]
+    - region: Italy
+      cells: [[134, 136, 139, 139]]
+    - region: Barents
+      cells: [[153, 155, 145, 147]]
+    - region: Indonesia
+      cells: [[123, 123, 12, 12], [94, 94, 18, 18], [89, 89, 26, 26], [86, 86, 10, 13]]
