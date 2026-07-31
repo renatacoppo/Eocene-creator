@@ -142,7 +142,7 @@ class EoceneOIFS():
         else:
             return filename
 
-    def prepare_landsea_mask_present(self, gaussian=48):
+    def prepare_landsea_mask_present(self):
         """
         Prepare the present-day land-sea mask from the ICMGGECE4INIT GRIB file.
         Converts to regular Gaussian grid and extracts 'lsm' as an xarray.DataArray.
