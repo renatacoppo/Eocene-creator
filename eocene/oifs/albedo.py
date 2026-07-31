@@ -8,22 +8,14 @@ Renata Coppo (CNR-ISAC, Mar 2026)
 
 """
 
-import re
-import os
-import tempfile
-import shutil
 import numpy as np
 import logging
 import xarray as xr
-import subprocess
-import xesmf as xe
-import shutil
-import tempfile
 from cdo import Cdo
 cdo = Cdo()
 loggy = logging.getLogger(__name__)
 
-def albedo(field: xr.Dataset, var=None, lsm_present=None, landsea=None, **kwargs):
+def albedo(field: xr.Dataset, lsm_present=None, landsea=None):
     """
     Apply both:
     Land-sea mask-based albedo reconstruction using `lsm_present`

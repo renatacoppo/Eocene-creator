@@ -8,8 +8,8 @@ import tempfile
 import subprocess
 from cdo import Cdo
 
-from .utils import modify_single_grib, nullify_grib, modify_new_grib, new_modify_single_grib
-from .utils import modify_value, replace_value, regrid_dataset 
+from .utils import modify_single_grib, nullify_grib, new_modify_single_grib
+from .utils import modify_value, replace_value, regrid_dataset, truncate_grib_file
 from .utils import extract_grid_info, spectral2gaussian
 from .albedo import albedo 
 from .lsmgrd import lsmgrd
@@ -319,14 +319,14 @@ class EoceneOIFS():
             newfield=orog*9.81 #converted to geopotential
         )
 
-        # truncate spectral variables to first harmonic (mean value)
-        #truncate_grib_file(
-        #    inputfile=output_spectral,
-        #    variables=['t','d','vo','lnsp'],
-        #    outputfile=output_spectral,
-        #)
+        #truncate spectral variables to first harmonic (mean value)
+        truncate_grib_file(
+            inputfile=output_spectral,
+            variables=['t','d','vo','lnsp'],
+            outputfile=output_spectral,
+        )
 
-    def create_init(self, lsm_present, landsea, sd_orog, **kwargs):
+    def create_init(self, lsm_present, landsea, sd_orog):
         """
         Create the ICMGGECE4INIT data for the Eocene OIFS.
         Replace landsea mask
@@ -339,6 +339,11 @@ class EoceneOIFS():
 
         input_surface = os.path.join(self.idir_init, 'ICMGGECE4INIT')
         output_surface = os.path.join(self.odir_init, 'ICMGGECE4INIT')
+
+        # variables to set to zero
+        VARS_TO_ZERO=['sdfor', 'anor', 'chnk', 'cl', 'dl', 'licd', 'sd'] 
+        # variables to modify with albedo function
+        VARS_ALBEDO =  'al', 'aluvp', 'aluvd', 'alnip', 'alnid', 'aluvpi', 'aluvpv', 'aluvpg', 'alnipi', 'alnipv', 'alnipg']
 
         # Start by copying the base surface file
         shutil.copy(input_surface, output_surface)
@@ -404,61 +409,18 @@ class EoceneOIFS():
             newvalue=1.  
         )
 
-        # Zero out other subgrid orographic fields
-        modify_single_grib(
-            inputfile=output_surface,
-            outputfile=output_surface,
-            variables=['sdfor', 'anor'],
-            spectral=False,
-            myfunction=modify_value,
-            newvalue=0.  
-        )
-
-        # Zero out charnock
-        modify_single_grib(
-             inputfile=output_surface,
-             outputfile=output_surface,
-             variables=['chnk'],
-             spectral=False,
-             myfunction=modify_value,
-             newvalue=0.  
-        )
-
-        # Zero out lakes 
-        modify_single_grib(
-             inputfile=output_surface,
-             outputfile=output_surface,
-             variables=['cl', 'dl', 'licd'],
-             spectral=False,
-             myfunction=modify_value,
-             newvalue=0  
-        )
-
-        # # Zero out land sea mask gradient 
-        # modify_single_grib(
-        #      inputfile=output_surface,
-        #      outputfile=output_surface,
-        #      variables=['lsmgrd'],
-        #      spectral=False,
-        #      myfunction=modify_value,
-        #      newvalue=0  
-        # )
-
-
         # # Zero out snow depth
         nullify_grib(
              inputfile=output_surface,
              outputfile=output_surface,
-             variables=['sd']
+             variables=VARS_TO_ZERO
         )
 
         # Modify albedo variables
-        variables = ['al', 'aluvp', 'aluvd', 'alnip', 'alnid', 'aluvpi', 'aluvpv', 'aluvpg', 'alnipi', 'alnipv', 'alnipg']
-        
         modify_single_grib(
           inputfile=output_surface,
           outputfile=output_surface,
-          variables=variables,
+          variables=VARS_ALBEDO,
           spectral=False,
           myfunction=albedo,
           lsm_present=lsm_present,
