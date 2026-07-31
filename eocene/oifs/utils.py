@@ -63,7 +63,7 @@ def nullify_grib(
         cdo.copy(input=zeroed_file, output=debug_path)
         loggy.debug(f"Debug copy of zeroed field written to {debug_path}")
 
-    replace_field(inputfile, zeroed_file, outputfile, variables, filter_method=filter_method)
+    replace_field(inputfile, zeroed_file, outputfile, variables, filter_method=filter_method, debug=debug)
 
 
 def modify_grib(inputfile, outputfile, myfunction, spectral=False, **kwargs):
@@ -195,7 +195,7 @@ def modify_single_grib(
         cdo.copy(input=singlefile, output=debug_path)
         loggy.debug(f"Debug copy of modified field written to {debug_path}")
 
-    replace_field(inputfile, singlefile, outputfile, variables, filter_method=filter_method)
+    replace_field(inputfile, singlefile, outputfile, variables, filter_method=filter_method, debug=debug)
 
 def truncate_grib_file(inputfile, outputfile, variables, orig=63, trunc=1):
     """

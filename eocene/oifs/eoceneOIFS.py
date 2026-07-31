@@ -263,6 +263,7 @@ class EoceneOIFS():
            outputfile=output_climate,
            variables=variables,
            spectral=False,
+           debug=False,
            myfunction=albedo,
            lsm_present=lsm_present,
            landsea=landsea  
@@ -290,6 +291,7 @@ class EoceneOIFS():
            variables=variables,
            filter_method="paramId",
            spectral=False,
+           debug=False,
            myfunction=albedo,
            lsm_present=lsm_present,
            landsea=landsea  
@@ -316,6 +318,7 @@ class EoceneOIFS():
             outputfile=output_spectral,
             variables='z',
             spectral=True,
+            debug=False,
             myfunction=replace_value,
             newfield=orog*9.81 #converted to geopotential
         )
@@ -390,6 +393,7 @@ class EoceneOIFS():
                 outputfile=output_surface,
                 variables=step['variables'],
                 spectral=False,
+                debug=False,
                 myfunction=step['myfunction'],
                 **step['kwargs']
             )
@@ -418,6 +422,7 @@ class EoceneOIFS():
             outputfile=output_levels,
             variables=['q', 'crwc', 'cswc', 'clwc', 'ciwc', 'cc'],
             spectral=False,
+            debug=False,
             myfunction=modify_value,
             newvalue=0.  
         )
