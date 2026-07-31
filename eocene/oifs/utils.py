@@ -360,16 +360,61 @@ def spectral2gaussian(spectral, kind):
     raise ValueError("Unknown grid type")
 
 
-def regrid_dataset(data, regrid_to_reference):
+def regrid_dataset(data, regrid_to_reference, method="remapbil"):
     """
-    Regrid a DataArray to match the grid of another DataArray.
+    Regrid a DataArray or Dataset to the grid of a reference object using CDO.
+
+    Parameters
+    ----------
+    data : xr.DataArray or xr.Dataset
+        Data to regrid.
+    regrid_to_reference : xr.DataArray or xr.Dataset
+        Object whose horizontal grid will be used.
+    method : str, optional
+        CDO remapping operator (default: 'remapbil').
+
+    Returns
+    -------
+    xr.DataArray or xr.Dataset
+        Regridded object of the same type as the input.
     """
-    regridder = xe.Regridder(
-        data, 
-        regrid_to_reference, 
-        method='bilinear'
-    )
-    return regridder(data)
+
+    is_dataarray = isinstance(data, xr.DataArray)
+
+    if is_dataarray:
+        varname = data.name or "var"
+        ds_in = data.to_dataset(name=varname)
+    else:
+        ds_in = data
+
+    if isinstance(regrid_to_reference, xr.DataArray):
+        ds_ref = regrid_to_reference.to_dataset(
+            name=regrid_to_reference.name or "grid"
+        )
+    else:
+        ds_ref = regrid_to_reference
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+
+        infile = os.path.join(tmpdir, "input.nc")
+        gridfile = os.path.join(tmpdir, "grid.nc")
+        outfile = os.path.join(tmpdir, "output.nc")
+
+        ds_in.to_netcdf(infile)
+        ds_ref.to_netcdf(gridfile)
+
+        getattr(cdo, method)(
+            gridfile,
+            input=infile,
+            output=outfile
+        )
+
+        ds_out = xr.open_dataset(outfile).load()
+
+    if is_dataarray:
+        return ds_out[varname]
+    else:
+        return ds_out
 
 def unpack_grib_file(inputfile, tmpfile):
     """
