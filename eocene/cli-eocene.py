@@ -7,11 +7,11 @@ import os
 import xarray as xr
 import numpy as np
 
-from common import load_yaml, setup_logger
-from oifs.eoceneOIFS import EoceneOIFS
-from nemo.eoceneNEMO import EoceneNEMO
-from oasis.eoceneOASIS import EoceneOASIS
-from rnfm.eoceneRNFM import iter_track, create_basin_data
+from eocene.common import load_yaml, setup_logger
+from eocene.oifs.eoceneOIFS import EoceneOIFS
+from eocene.nemo.eoceneNEMO import EoceneNEMO
+from eocene.oasis.eoceneOASIS import EoceneOASIS
+from eocene.rnfm.eoceneRNFM import iter_track, create_basin_data
 
 OIFS_RESO = "TL63L31"
 NEMO_RESO = "PALEORCA2"
@@ -168,13 +168,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logger = setup_logger(level=args.loglevel)
+    logger.info(f"Logger initialized with level: {args.loglevel}")
     config = load_yaml(args.config)
 
     if args.copy:
         run_copy(config["dirs"]["input"], config["dirs"]["output"])
-        # HACK for rstos file which is the only one working so far, to be removed
-        # shutil.copy(os.path.join(config["dirs"]["oasisdir"], "rstos.nc"), os.path.join(config["dirs"]["output"], "oasis", NEMO_RESO, "rstos.nc"))
-        
+          
     logger.info(f"Loaded configuration: {config}")
     if args.run in ["oasis", "all"]:
         run_oasis(config)

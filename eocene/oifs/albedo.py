@@ -52,7 +52,7 @@ def albedo(field: xr.Dataset, lsm_present=None, landsea=None, var=None) -> xr.Da
 
     # Match time dimension if needed
     if "time" in field.dims:
-        ntime = field.dims["time"]
+        ntime = field.sizes["time"]
         loggy.debug(f"Field has time dimension: {ntime} steps")
         if "time" not in landsea_interp.dims or landsea_interp.sizes.get("time", 1) != ntime:
             loggy.debug("Broadcasting landsea mask across time dimension")

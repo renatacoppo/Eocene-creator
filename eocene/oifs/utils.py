@@ -34,8 +34,9 @@ def nullify_grib(inputfile, outputfile, variables, filter_method="shortName"):
 
         singlefile = cdo.selname(varlist, input=inputfile, options="--eccodes")
         tempfile = cdo.mulc(0, input=singlefile, options="--eccodes")
-        cdo.copy(input=tempfile, output="nulify.nc")
+        cdo.copy(input=tempfile, output="nullify.nc")
         replace_field(inputfile, tempfile, outputfile, variables, filter_method=filter_method)
+        os.remove("nullify.nc")
     else: 
         loggy.warning(f'{inputfile} does not exist!')
 
@@ -133,6 +134,7 @@ def modify_single_grib(inputfile, outputfile, variables, myfunction, spectral=Fa
         cdo.copy(input=singlefile, output='singlefile.nc')
 
         replace_field(inputfile, singlefile, outputfile, variables, filter_method=filter_method)
+        os.remove("singlefile.nc")
     else: 
         loggy.warning(f'{inputfile} does not exist!')
 
@@ -197,6 +199,8 @@ def replace_field(inputfile, singlefile, outputfile, variable, filter_method="sh
     else:
         shutil.copyfile(singlefile, outputfile)
     os.remove(singlefile)
+    if os.path.exists("tmp.grib"):
+        os.remove("tmp.grib")
     
 def modify_value(field, var, newvalue):
     """

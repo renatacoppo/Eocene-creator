@@ -17,6 +17,7 @@ from .vegetation import vegetation_zhang
 
 cdo = Cdo()
 loggy = logging.getLogger(__name__)
+print(loggy.name) 
 
 class EoceneOIFS():
 
