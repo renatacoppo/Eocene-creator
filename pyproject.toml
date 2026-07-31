@@ -35,6 +35,9 @@ dependencies = [
     "cartopy"
 ]
 
+[project.scripts]
+eocene = "eocene.cli_eocene:main"
+
 [project.urls]
 "Homepage" = "https://github.com/renatacoppo/Eocene-creator"
 "Bug Tracker" = "https://github.com/renatacoppo/Eocene-creator/issues"

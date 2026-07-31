@@ -158,7 +158,7 @@ def run_oasis(config):
     # Create OASIS modifications
     eocene_oasis.create_rstos()
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Duplicate job configuration for experiments.")
     parser.add_argument("-c", "--config", required=True, help="Path to the original job configuration file.")
     parser.add_argument("-l", "--loglevel", default="INFO", help="logger level (e.g., DEBUG, INFO, WARNING).")
@@ -183,6 +183,9 @@ if __name__ == "__main__":
         run_nemo(config)
     if args.run in ["rnfm", "all"]:
         run_runoff(config)
+
+if __name__ == "__main__":
+    main()
 
 
 
