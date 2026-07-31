@@ -380,6 +380,11 @@ class EoceneOIFS():
                 'variables': ['al', 'aluvp', 'aluvd', 'alnip', 'alnid', 'aluvpi', 'aluvpv', 'aluvpg', 'alnipi', 'alnipv', 'alnipg'], 
                 'myfunction': albedo,
                 'kwargs': {'lsm_present': lsm_present, 'landsea': landsea}},
+            'zero_variables': {
+                'variables': VARS_TO_ZERO,
+                'myfunction': modify_value,
+                'kwargs': {'newvalue': 0.}
+            }
         }
 
         for name, step in steps.items():
@@ -398,12 +403,12 @@ class EoceneOIFS():
             )
 
         # Zero out snow depth / related fields (different function signature)
-        loggy.debug("Step 'zero_fields': variables=%s", VARS_TO_ZERO)
-        nullify_grib(
-            inputfile=output_surface,
-            outputfile=output_surface,
-            variables=VARS_TO_ZERO
-        )
+        # loggy.debug("Step 'zero_fields': variables=%s", VARS_TO_ZERO)
+        # nullify_grib(
+        #     inputfile=output_surface,
+        #     outputfile=output_surface,
+        #     variables=VARS_TO_ZERO
+        # )
         
 
     def create_iniua(self):
