@@ -1,14 +1,11 @@
-import os
 import xarray as xr
 import numpy as np
 from cdo import Cdo
-import xesmf as xe
+
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import tempfile
-import subprocess
 from eocene.oifs.utils import spectral2gaussian
-from eocene.oifs.eoceneOIFS import EoceneOIFS
 
 cdo = Cdo()
 
