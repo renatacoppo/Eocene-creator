@@ -407,7 +407,7 @@ class EoceneOIFS():
         nullify_grib(
             inputfile=output_surface,
             outputfile=output_surface,
-            variables='sd'
+            variables=['sd']
         )
         
 
