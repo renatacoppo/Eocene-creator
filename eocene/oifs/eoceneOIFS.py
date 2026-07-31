@@ -344,7 +344,7 @@ class EoceneOIFS():
         input_surface = os.path.join(self.idir_init, 'ICMGGECE4INIT')
         output_surface = os.path.join(self.odir_init, 'ICMGGECE4INIT')
 
-        VARS_TO_ZERO = ['sdfor', 'anor', 'chnk', 'cl', 'dl', 'licd', 'sd']
+        VARS_TO_ZERO = ['sdfor', 'anor', 'chnk', 'cl', 'dl', 'licd']
 
         # Start by copying the base surface file
         shutil.copy(input_surface, output_surface)
@@ -380,6 +380,10 @@ class EoceneOIFS():
                 'variables': ['al', 'aluvp', 'aluvd', 'alnip', 'alnid', 'aluvpi', 'aluvpv', 'aluvpg', 'alnipi', 'alnipv', 'alnipg'], 
                 'myfunction': albedo,
                 'kwargs': {'lsm_present': lsm_present, 'landsea': landsea}},
+            'snow_depth': {
+                'variables': ['sd'],
+                'myfunction': modify_value,
+                'kwargs': {'newvalue': 0.}},
             'zero_variables': {
                 'variables': VARS_TO_ZERO,
                 'myfunction': modify_value,
