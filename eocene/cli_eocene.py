@@ -16,7 +16,7 @@ from eocene.rnfm.eoceneRNFM import iter_track, create_basin_data
 OIFS_RESO = "TL63L31"
 NEMO_RESO = "PALEORCA2"
 
-def run_copy(input_dir, output_dir):
+def run_copy(input_dir, output_dir, logger):
     """Copy the input folder to the output folder to preserve original data."""
 
     logger.info(f"Copying input data from {input_dir} to {output_dir}")
@@ -50,7 +50,7 @@ def run_copy(input_dir, output_dir):
         else:
             logger.info(f"Skipping {item}!")
 
-def run_oifs(config):
+def run_oifs(config, logger):
     """Run the OIFS modifications based on the provided configuration."""
 
     logger.info("Starting OIFS modifications")
@@ -80,7 +80,7 @@ def run_oifs(config):
     eocene_oifs.create_iniua()
     eocene_oifs.aerosols()
 
-def run_nemo(config):
+def run_nemo(config, logger):
     """Run the NEMO modifications based on the provided configuration."""
     
     logger.info("Starting NEMO modifications")
@@ -108,7 +108,7 @@ def run_nemo(config):
     eocene_nemo.create_ocean_init()
     eocene_nemo.create_runoff()
 
-def run_runoff(config):
+def run_runoff(config, logger):
 
     logger.info('Reading oroslope file...')
     oroslopefile = os.path.join(config["dirs"]["herold"], "herold_etal_eocene_runoff_1x1.nc")
@@ -144,8 +144,7 @@ def run_runoff(config):
     os.makedirs(os.path.dirname(final_file), exist_ok=True)
     create_basin_data(final_file, rnf_pd, rnf_map_merged_final, arrival_id, calving_id, oroslope.longitude, oroslope.latitude)
 
-def run_oasis(config):
-    
+def run_oasis(config, logger):
     logger.info("Starting OASIS modifications")
 
     # eocene class init
@@ -169,20 +168,22 @@ def main():
 
     logger = setup_logger(level=args.loglevel)
     logger.info(f"Logger initialized with level: {args.loglevel}")
+    if not os.path.exists(args.config):
+        raise FileNotFoundError(f"Configuration file {args.config} does not exist.")
     config = load_yaml(args.config)
 
     if args.copy:
-        run_copy(config["dirs"]["input"], config["dirs"]["output"])
+        run_copy(config["dirs"]["input"], config["dirs"]["output"], logger)
           
     logger.info(f"Loaded configuration: {config}")
     if args.run in ["oasis", "all"]:
-        run_oasis(config)
+        run_oasis(config, logger)
     if args.run in ["oifs", "all"]:
-        run_oifs(config)
+        run_oifs(config, logger)
     if args.run in ["nemo", "all"]:
-        run_nemo(config)
+        run_nemo(config, logger)
     if args.run in ["rnfm", "all"]:
-        run_runoff(config)
+        run_runoff(config, logger)
 
 if __name__ == "__main__":
     main()
