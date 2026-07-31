@@ -270,7 +270,7 @@ class EoceneOIFS():
         
         subprocess.run(["/lus/h2resw01/hpcperm/ecme3497/github/ecearth-quests/epochal/OIFS/fix_grib.sh", output_climate], check=True)
 
-    def create_bare_soil (self, lsm_present, landsea):
+    def create_bare_soil(self, lsm_present, landsea):
 
         """
         Create the bare_soil_albedos.grb data for the Eocene OIFS.
