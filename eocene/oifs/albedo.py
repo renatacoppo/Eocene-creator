@@ -8,22 +8,14 @@ Renata Coppo (CNR-ISAC, Mar 2026)
 
 """
 
-import re
-import os
-import tempfile
-import shutil
 import numpy as np
 import logging
 import xarray as xr
-import subprocess
-import xesmf as xe
-import shutil
-import tempfile
 from cdo import Cdo
 cdo = Cdo()
 loggy = logging.getLogger(__name__)
 
-def albedo(field: xr.Dataset, var=None, lsm_present=None, landsea=None, **kwargs):
+def albedo(field: xr.Dataset, lsm_present=None, landsea=None, var=None) -> xr.Dataset:
     """
     Apply both:
     Land-sea mask-based albedo reconstruction using `lsm_present`
@@ -60,7 +52,7 @@ def albedo(field: xr.Dataset, var=None, lsm_present=None, landsea=None, **kwargs
 
     # Match time dimension if needed
     if "time" in field.dims:
-        ntime = field.dims["time"]
+        ntime = field.sizes["time"]
         loggy.debug(f"Field has time dimension: {ntime} steps")
         if "time" not in landsea_interp.dims or landsea_interp.sizes.get("time", 1) != ntime:
             loggy.debug("Broadcasting landsea mask across time dimension")
@@ -120,8 +112,11 @@ def albedo(field: xr.Dataset, var=None, lsm_present=None, landsea=None, **kwargs
     albedo_direct_vars = ["aluvpi", "aluvpv", "aluvpg", "alnipi", "alnipv", "alnipg"]
     lai_vars = ["lai_lv", "lai_hv"]
     bare_soil_vars = ["code117", "code118", "code119", "code120"]
-    #bare_soil_vars = ["var117", "var118", "var119", "var120"]
-    #bare_soil_vars = {117, 118, 119, 120}
+    ALL_RECOGNIZED_VARS = set(albedo_diffuse_vars) | set(albedo_direct_vars) | set(lai_vars) | set(bare_soil_vars)
+
+    invalid = set(var) - ALL_RECOGNIZED_VARS
+    if invalid:
+        loggy.warning(f"Variables {invalid} not recognized for Eocene mask application. Skipping.")
 
     for v in albedo_diffuse_vars:
         if v in field:
@@ -138,20 +133,7 @@ def albedo(field: xr.Dataset, var=None, lsm_present=None, landsea=None, **kwargs
             loggy.debug(f"Zeroing LAI over ocean for {v}")
             field[v].data = np.where(eocene_mask, field[v].data, 0)
 
-    # for v in bare_soil_vars:
-    #     if v in field:
-    #         loggy.debug(f"Zeroing bare soil vars over ocean for {v}")
-    #         field[v].data = np.where(eocene_mask, field[v].data, 0)
-
-    # for v in field.data_vars:
-    #     pid = field[v].attrs.get("GRIB_paramId")
-
-    #     if pid in bare_soil_vars:
-    #         loggy.debug(f"Zeroing bare soil var (paramId={pid}) over ocean")
-    #         field[v].data = np.where(eocene_mask, field[v].data, 0)
-
     for v in field.data_vars:
-
         if v in bare_soil_vars:
             loggy.debug(f"Zeroing bare soil var {v} over ocean")
 

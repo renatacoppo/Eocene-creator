@@ -5,11 +5,10 @@ import xarray as xr
 import numpy as np
 import shutil
 import tempfile
-import subprocess
 from cdo import Cdo
 
-from .utils import modify_single_grib, nullify_grib, modify_new_grib, new_modify_single_grib
-from .utils import modify_value, replace_value, regrid_dataset 
+from .utils import modify_single_grib, nullify_grib
+from .utils import modify_value, replace_value, regrid_dataset, truncate_grib_file, flatten_grib_steps
 from .utils import extract_grid_info, spectral2gaussian
 from .albedo import albedo 
 from .lsmgrd import lsmgrd
@@ -143,7 +142,7 @@ class EoceneOIFS():
         else:
             return filename
 
-    def prepare_landsea_mask_present(self, gaussian=48):
+    def prepare_landsea_mask_present(self):
         """
         Prepare the present-day land-sea mask from the ICMGGECE4INIT GRIB file.
         Converts to regular Gaussian grid and extracts 'lsm' as an xarray.DataArray.
@@ -263,14 +262,16 @@ class EoceneOIFS():
            outputfile=output_climate,
            variables=variables,
            spectral=False,
+           debug=False,
            myfunction=albedo,
            lsm_present=lsm_present,
            landsea=landsea  
            ) 
-        
-        subprocess.run(["/lus/h2resw01/hpcperm/ecme3497/github/ecearth-quests/epochal/OIFS/fix_grib.sh", output_climate], check=True)
 
-    def create_bare_soil (self, lsm_present, landsea):
+        # rearrange the time axis to be compliant with OIFS
+        flatten_grib_steps(inputfile=output_climate)
+
+    def create_bare_soil(self, lsm_present, landsea):
 
         """
         Create the bare_soil_albedos.grb data for the Eocene OIFS.
@@ -282,17 +283,18 @@ class EoceneOIFS():
         #variables = ["var117", "var118", "var119", "var120"]
         #param_ids=[117,118,119,120]
 
-        new_modify_single_grib(
+        # filtering has to be done with param ids
+        modify_single_grib(
            inputfile=input_climate,
            outputfile=output_climate,
            variables=variables,
+           filter_method="paramId",
            spectral=False,
+           debug=False,
            myfunction=albedo,
            lsm_present=lsm_present,
            landsea=landsea  
-           ) 
-        
-        #subprocess.run(["/lus/h2resw01/hpcperm/ecme3497/github/ecearth-quests/epochal/OIFS/fix_grib.sh", output_climate], check=True)
+           )
 
 
     def create_sh(self, orog):
@@ -315,24 +317,26 @@ class EoceneOIFS():
             outputfile=output_spectral,
             variables='z',
             spectral=True,
+            debug=False,
             myfunction=replace_value,
             newfield=orog*9.81 #converted to geopotential
         )
 
-        # truncate spectral variables to first harmonic (mean value)
-        #truncate_grib_file(
-        #    inputfile=output_spectral,
-        #    variables=['t','d','vo','lnsp'],
-        #    outputfile=output_spectral,
-        #)
+        #truncate spectral variables to first harmonic (mean value)
+        truncate_grib_file(
+            inputfile=output_spectral,
+            variables=['t','d','vo','lnsp'],
+            outputfile=output_spectral,
+        )
 
-    def create_init(self, lsm_present, landsea, sd_orog, **kwargs):
+    def create_init(self, lsm_present, landsea, sd_orog):
         """
         Create the ICMGGECE4INIT data for the Eocene OIFS.
-        Replace landsea mask
-        Modify subgrid orography and vegetation fields, set soil type to 1.
+        Replace landsea mask, modify subgrid orography and vegetation fields,
+        set soil type to 1.
 
         Args:
+            lsm_present: land-sea mask used for albedo computation.
             landsea (xarray.DataArray): Land-sea mask data to be used for the ICMGE data.
             sd_orog (xarray.DataArray): Standard deviation of subgrid-scale orography.
         """
@@ -340,130 +344,71 @@ class EoceneOIFS():
         input_surface = os.path.join(self.idir_init, 'ICMGGECE4INIT')
         output_surface = os.path.join(self.odir_init, 'ICMGGECE4INIT')
 
+        VARS_TO_ZERO = ['sdfor', 'anor', 'chnk', 'cl', 'dl', 'licd']
+
         # Start by copying the base surface file
         shutil.copy(input_surface, output_surface)
 
-        # update the land sea mask
-        modify_single_grib(
-            inputfile=input_surface,
-            outputfile=output_surface,
-            variables=['lsm'],
-            spectral=False,
-            myfunction=replace_value,
-            newfield=landsea
-        )
+        # Each step after the first reads/writes output_surface in place.
+        # 'input' overrides the default source file only for the first step.
+        steps = {
+            'land_sea_mask': {
+                'variables': ['lsm'],
+                'myfunction': replace_value,
+                'kwargs': {'newfield': landsea}, 'input': input_surface},
+            'land_sea_mask_gradient': {
+                'variables': ['lsmgrd'],
+                'myfunction': lsmgrd,
+                'kwargs': {'landsea': landsea}},
+            'vegetation': {
+                'variables': ['tvh', 'tvl', 'cvh', 'cvl'], 
+                'myfunction': vegetation_zhang,
+                'kwargs': {'herold_path': self.herold, 'gaussian': self.gaussian}},
+            'subgrid_orography': {
+                'variables': ['sdor'], 
+                'myfunction': replace_value,
+                'kwargs': {'newfield': sd_orog}},
+            'slope': {
+                'variables': ['slor'], 
+                'myfunction': compute_slope,
+                'kwargs': {'sd_eoc': sd_orog}},
+            'anisotropy_soiltype': {
+                'variables': ['isor', 'slt'],
+                'myfunction': modify_value,
+                'kwargs': {'newvalue': 1.}},
+            'albedo': {
+                'variables': ['al', 'aluvp', 'aluvd', 'alnip', 'alnid', 'aluvpi', 'aluvpv', 'aluvpg', 'alnipi', 'alnipv', 'alnipg'], 
+                'myfunction': albedo,
+                'kwargs': {'lsm_present': lsm_present, 'landsea': landsea}},
+            'zero_variables': {
+                'variables': VARS_TO_ZERO,
+                'myfunction': modify_value,
+                'kwargs': {'newvalue': 0.}
+            }
+        }
 
-        modify_single_grib(
-          inputfile=output_surface,
-          outputfile=output_surface,
-          variables=['lsmgrd'],
-          spectral=False,
-          myfunction=lsmgrd,
-          landsea=landsea  
-          ) 
+        for name, step in steps.items():
+            loggy.debug(
+                "Step '%s': variables=%s myfunction=%s kwargs=%s",
+                name, step['variables'], step['myfunction'].__name__, step['kwargs']
+            )
+            modify_single_grib(
+                inputfile=step.get('input', output_surface),
+                outputfile=output_surface,
+                variables=step['variables'],
+                spectral=False,
+                debug=False,
+                myfunction=step['myfunction'],
+                **step['kwargs']
+            )
 
-        # Modify vegetation variables
-        modify_single_grib(
-            inputfile=output_surface,
-            outputfile=output_surface,
-            variables=['tvh','tvl','cvh','cvl'],
-            spectral=False,
-            myfunction=vegetation_zhang,
-            herold_path=self.herold,
-            gaussian=self.gaussian
-        )
-
-        # Insert sd_orography (sdor)
-        modify_single_grib(
-            inputfile=output_surface,
-            outputfile=output_surface,
-            variables=['sdor'],
-            spectral=False,
-            myfunction=replace_value,
-            newfield=sd_orog
-        )
-        loggy.debug("sd_orog type: %s", type(sd_orog))
-
-        # Insert slope (slor) computed from sd
-        modify_single_grib(
-            inputfile=output_surface,
-            outputfile=output_surface,
-            variables=['slor'],
-            spectral=False,
-            myfunction=compute_slope,
-            sd_eoc=sd_orog
-        )
-
-        # Set anisotropy and soil type to 1
-        modify_single_grib(
-            inputfile=output_surface,
-            outputfile=output_surface,
-            variables=['isor', 'slt'],
-            spectral=False,
-            myfunction=modify_value,
-            newvalue=1.  
-        )
-
-        # Zero out other subgrid orographic fields
-        modify_single_grib(
-            inputfile=output_surface,
-            outputfile=output_surface,
-            variables=['sdfor', 'anor'],
-            spectral=False,
-            myfunction=modify_value,
-            newvalue=0.  
-        )
-
-        # Zero out charnock
-        modify_single_grib(
-             inputfile=output_surface,
-             outputfile=output_surface,
-             variables=['chnk'],
-             spectral=False,
-             myfunction=modify_value,
-             newvalue=0.  
-        )
-
-        # Zero out lakes 
-        modify_single_grib(
-             inputfile=output_surface,
-             outputfile=output_surface,
-             variables=['cl', 'dl', 'licd'],
-             spectral=False,
-             myfunction=modify_value,
-             newvalue=0  
-        )
-
-        # # Zero out land sea mask gradient 
-        # modify_single_grib(
-        #      inputfile=output_surface,
-        #      outputfile=output_surface,
-        #      variables=['lsmgrd'],
-        #      spectral=False,
-        #      myfunction=modify_value,
-        #      newvalue=0  
-        # )
-
-
-        # # Zero out snow depth
+        # Zero out snow depth / related fields (different function signature)
+        loggy.debug("Modifying': variables=%s", 'sd')
         nullify_grib(
-             inputfile=output_surface,
-             outputfile=output_surface,
-             variables=['sd']
+            inputfile=output_surface,
+            outputfile=output_surface,
+            variables=['sd']
         )
-
-        # Modify albedo variables
-        variables = ['al', 'aluvp', 'aluvd', 'alnip', 'alnid', 'aluvpi', 'aluvpv', 'aluvpg', 'alnipi', 'alnipv', 'alnipg']
-        
-        modify_single_grib(
-          inputfile=output_surface,
-          outputfile=output_surface,
-          variables=variables,
-          spectral=False,
-          myfunction=albedo,
-          lsm_present=lsm_present,
-          landsea=landsea  
-          ) 
         
 
     def create_iniua(self):
@@ -481,6 +426,7 @@ class EoceneOIFS():
             outputfile=output_levels,
             variables=['q', 'crwc', 'cswc', 'clwc', 'ciwc', 'cc'],
             spectral=False,
+            debug=False,
             myfunction=modify_value,
             newvalue=0.  
         )
