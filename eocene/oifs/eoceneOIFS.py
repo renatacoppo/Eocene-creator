@@ -530,14 +530,36 @@ class EoceneOIFS():
             'Sea_Salt_bin3': "SSLT03"
         }
 
-        # Convert to column mass and regrid
-        for varname2 in var_dict:
-            varname1 = var_dict[varname2]
-            loggy.info("Processing %s -> %s", varname1, varname2)
-            new_var = aer_paleo_newbin[varname1] * ds_interp.density
-            new_var_rg = regrid_dataset(new_var, regrid_to_reference=aer_ifs_paleo[varname2])
-            new_var_rg_int = -new_var_rg.integrate(coord='altitude')
-            aer_ifs_paleo[varname2].data = new_var_rg_int.data.astype('float32')
+        # Convert mixing ratio (kg/kg) -> mass concentration (kg/m3)
+        loggy.info("Converting aerosol mixing ratios")
+
+        aer_mass = xr.Dataset()
+
+        for ifs_name, herold_name in var_dict.items():
+            aer_mass[ifs_name] = (
+                aer_paleo_newbin[herold_name] * ds_interp.density
+            )
+
+        # Regrid all variables simultaneously
+        loggy.info("Regridding aerosol fields")
+
+        aer_mass_rg = regrid_dataset(
+            aer_mass,
+            regrid_to_reference=aer_ifs_paleo,
+        )
+
+        aer_mass_rg = aer_mass_rg.assign_coords(
+            altitude=("lev", ds_interp.altitude.values)
+        )
+
+        # Vertical integration
+        loggy.info("Computing column-integrated aerosol mass")
+
+        for var in var_dict.keys():
+
+            colmass = -aer_mass_rg[var].integrate(coord="altitude")
+
+            aer_ifs_paleo[var].data = colmass.astype("float32").data
 
         # Save Eocene aerosol climatology
         output_path = os.path.join(self.odir, 'oifs', 'ifsdata', 'aerosol_cams_climatology_43R3a.nc')
@@ -547,6 +569,7 @@ class EoceneOIFS():
         aer_ifs_paleo.to_netcdf(output_path)
         loggy.info("Eocene aerosol data saved at %s", output_path)
         return output_path
+    
 
 
 
