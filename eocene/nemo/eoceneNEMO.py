@@ -188,13 +188,13 @@ class EoceneNEMO():
         # Temperature profile formula
         thetao = np.where(
             Z <= 1000,
-            ((1000 - Z) / 1000) * 25 * np.cos(LAT) + 10,
+            ((1000 - Z) / 1000) * 20 * np.cos(LAT) + 10,
             10,
         )
 
         #thetao = np.where(
         #    Z <= 5000,
-        #    ((5000 - Z) / 5000) * 25 * np.cos(LAT) + 15,
+        #    ((5000 - Z) / 5000) * 20 * np.cos(LAT) + 15,
         #    15,
         #)
 
@@ -217,7 +217,7 @@ class EoceneNEMO():
 
             rel_path = os.path.relpath(woa_file, self.input_folder)
             base, ext = os.path.splitext(rel_path)
-            output_file = os.path.join(self.output_folder, f"{base}_deepmip-35{ext}")
+            output_file = os.path.join(self.output_folder, f"{base}_deepmip-30{ext}")
 
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
 

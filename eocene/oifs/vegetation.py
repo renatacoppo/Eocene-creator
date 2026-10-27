@@ -62,19 +62,27 @@ def vegetation_zhang(field, var=None, herold_path=None, gaussian=None, **kwargs)
 
 
         # === Biome to vegetation ID mappings ===
+        # Herold et al. (2014) biomes (BIOME4 megabiomes):
+        # 1 tropical forest, 2 warm-temperate forest, 3 temperate forest, 4 boreal forest,
+        # 5 savanna/dry woodland, 6 grassland/dry shrubland, 7 desert, 8 dry tundra, 9 tundra
         biome_to_tvh = {
-            1: 1, # Tropical forest → Evergreen broadleaf trees
-            2: 2, # Warm-temperate forest → Evergreen needleleaf trees
-            6: 3, # Temperate forest → Deciduous broadleaf
-            7: 4, # Boreal forest → Deciduous needleleaf
+            1: 6, # Tropical forest → Evergreen broadleaf trees
+            2: 3, # Warm-temperate forest → Evergreen needleleaf trees
+            3: 5, # Temperate forest → Deciduous broadleaf
+            4: 4, # Boreal forest → Deciduous needleleaf
         }
 
         biome_to_tvl = {
-            3: 5, # Savanna → Tall grass
-            4: 6, # Grassland → Short grass
-            5: 7, # Desert → Semidesert
-            8: 8, # Tundra → Tundra
-            9: 8, # Dry Tundra → Tundra
+            5: 7, # Savanna → Tall grass
+            6: 2, # Grassland → Short grass
+            7: 11, # Desert → Semidesert
+            8: 9, # Dry Tundra → Tundra
+            9: 9, # Dry Tundra → Tundra
+        }
+
+        # Fractional cover per biome (default 1.0 if not listed)
+        biome_to_cover = {
+            7: 0.3, # Desert → mostly bare soil
         }
 
         for biome_id in range(1, 10): # assuming biome IDs go from 1 to 9
@@ -97,12 +105,12 @@ def vegetation_zhang(field, var=None, herold_path=None, gaussian=None, **kwargs)
             if biome_id in biome_to_tvh:
                 loggy.debug(f"Mapping biome {biome_id} → tvh={biome_to_tvh[biome_id]}")
                 tvh = xr.where(mask, biome_to_tvh[biome_id], tvh)
-                cvh = xr.where(mask, 1.0, cvh)
+                cvh = xr.where(mask, biome_to_cover.get(biome_id, 1.0), cvh)
 
             elif biome_id in biome_to_tvl:
                 loggy.debug(f"Mapping biome {biome_id} → tvl={biome_to_tvl[biome_id]}")
                 tvl = xr.where(mask, biome_to_tvl[biome_id], tvl)
-                cvl= xr.where(mask, 1.0, cvl)
+                cvl= xr.where(mask, biome_to_cover.get(biome_id,1.0), cvl)
             else:
                 loggy.warning(f"Warning: biome {biome_id} not in mapping.")
 
