@@ -372,10 +372,14 @@ class EoceneOIFS():
                 'variables': ['slor'], 
                 'myfunction': compute_slope,
                 'kwargs': {'sd_eoc': sd_orog}},
-            'anisotropy_soiltype': {
-                'variables': ['isor', 'slt'],
+            'anisotropy': {
+                'variables': ['isor'],
                 'myfunction': modify_value,
                 'kwargs': {'newvalue': 1.}},
+            'soiltype': {
+                'variables': ['slt'],
+                'myfunction': modify_value,
+                'kwargs': {'newvalue': 2.}},
             'albedo': {
                 'variables': ['al', 'aluvp', 'aluvd', 'alnip', 'alnid', 'aluvpi', 'aluvpv', 'aluvpg', 'alnipi', 'alnipv', 'alnipg'], 
                 'myfunction': albedo,
@@ -442,7 +446,7 @@ class EoceneOIFS():
         aer_paleo = xr.open_dataset(paleoaerfile)
 
         # Load IFS reference aerosol climatology
-        aerfile_ifs_pd = os.path.join(self.idir, 'oifs', 'ifsdata/aerosol_cams_climatology_43R3a.nc')
+        aerfile_ifs_pd = os.path.join(self.idir, 'oifs', 'ifsdata/IFS_aerosol_climatology_PI.nc')
         aer_ifs_pd = xr.open_dataset(aerfile_ifs_pd)
         aer_ifs_paleo = aer_ifs_pd.copy()
 
@@ -517,7 +521,7 @@ class EoceneOIFS():
 
         # Map Herold -> IFS variable names
         var_dict = {
-            'Sulfates': "SO4",
+            #'Sulfates': "SO4",
             'Black_Carbon_hydrophilic': "CB1",
             'Black_Carbon_hydrophobic': "CB2",
             'Mineral_Dust_bin1': "DST01",
@@ -562,7 +566,7 @@ class EoceneOIFS():
             aer_ifs_paleo[var].data = colmass.astype("float32").data
 
         # Save Eocene aerosol climatology
-        output_path = os.path.join(self.odir, 'oifs', 'ifsdata', 'aerosol_cams_climatology_43R3a.nc')
+        output_path = os.path.join(self.odir, 'oifs', 'ifsdata', 'IFS_aerosol_climatology_PI.nc')
         if os.path.exists(output_path):
             os.remove(output_path)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
