@@ -20,11 +20,15 @@ def run_copy(input_dir, output_dir, logger):
     """Copy the input folder to the output folder to preserve original data."""
 
     logger.info(f"Copying input data from {input_dir} to {output_dir}")
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    # refuse to delete the input directory or one of its parents
+    input_real = os.path.realpath(input_dir)
+    output_real = os.path.realpath(output_dir)
+    if input_real == output_real or input_real.startswith(output_real + os.sep):
+        raise ValueError(f"Output directory {output_dir} is or contains the input directory {input_dir}. Refusing to overwrite it.")
     if os.path.exists(output_dir):
         logger.info(f"Output directory {output_dir} already exists. It will be overwritten.")
         shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
 
     # loop through input directory and copy relevant subdirectories
     for item in os.listdir(input_dir):
