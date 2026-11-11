@@ -12,10 +12,38 @@ import logging
 import numpy as np
 import xarray as xr
 import pandas as pd
+from scipy.spatial import cKDTree
 from cdo import Cdo
 
 cdo = Cdo()
 loggy = logging.getLogger(__name__)
+
+def _lonlat_to_xyz(lon, lat):
+    """Convert lon/lat in degrees to unit-sphere cartesian coordinates."""
+    lon, lat = np.deg2rad(lon), np.deg2rad(lat)
+    return np.column_stack([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
+
+def present_day_ocean_mask(domain_file, lon, lat, nz):
+    """
+    3D present-day ocean mask (z, y, x) on a target lon/lat grid,
+    from the bottom_level of a present-day NEMO domain (nearest neighbour).
+    Level k (0-based) is ocean where bottom_level >= k+1.
+    """
+    domain = xr.open_dataset(domain_file).squeeze("time_counter", drop=True)
+    bottom = domain["bottom_level"].values.ravel()
+    tree = cKDTree(_lonlat_to_xyz(domain["glamt"].values.ravel(), domain["gphit"].values.ravel()))
+    _, idx = tree.query(_lonlat_to_xyz(lon.ravel(), lat.ravel()))
+    bottom_tgt = bottom[idx].reshape(lon.shape)
+    domain.close()
+    levels = np.arange(1, nz + 1)[:, np.newaxis, np.newaxis]
+    return xr.DataArray(bottom_tgt[np.newaxis, :, :] >= levels, dims=("z", "y", "x"))
+
+def woa_zonal_mean(thetao, ocean_mask):
+    """Zonal mean over present-day ocean, broadcast in longitude, gaps filled."""
+    zm = thetao.where(ocean_mask).mean("x", skipna=True)   # (time_counter, z, y)
+    zm = zm.interpolate_na("z", method="nearest", fill_value="extrapolate")  # levels below the deepest ocean at that latitude
+    zm = zm.interpolate_na("y", method="nearest", fill_value="extrapolate")  # all-land latitudes (Antarctica)
+    return zm.broadcast_like(thetao)
 
 class EoceneNEMO():
 
@@ -155,21 +183,27 @@ class EoceneNEMO():
 
         return None
 
-    def create_ocean_init(self, so_value=34.7, output_file=None):
+    def create_ocean_init(self, profile="deepmip_cold", so_value=34.7, output_file=None):
         """
         Create ocean initial conditions (thetao and so) for NEMO
         based on WOA climatology and an idealized temperature profile.
 
         Parameters
         ----------
+        profile : str
+            "deepmip_cold": idealized cold DeepMIP-like profile (output suffix deepmip-30).
+            "woa_pi": zonal mean of present-day WOA over the present-day ocean,
+                      broadcast in longitude (output suffix woa-pi).
         so_value : float
             Salinity to assign everywhere (default = 34.7).
         """
 
-        # Open with dask for scalability
+        if profile not in ("deepmip_cold", "woa_pi"):
+            raise ValueError(f"Unknown profile: {profile}. Options are: deepmip_cold, woa_pi")
+
         woa_file = os.path.join(self.input_folder, "nemo/initial/woa13-levitus-L31.nc")
         domain_file = os.path.join(self.input_folder, "nemo/domain/PALEORCA2/domain_cfg.nc")
-        woa = xr.open_dataset(woa_file, chunks={"z": 1})
+        woa = xr.open_dataset(woa_file)
         domain = xr.open_dataset(domain_file)
 
         # Assign depths from domain_cfg
@@ -185,39 +219,44 @@ class EoceneNEMO():
         Z, LAT, LON = np.meshgrid(depths, lat_rad[:,0], lon[0,:], indexing="ij")
 
 
-        # Temperature profile formula
-        thetao = np.where(
-            Z <= 1000,
-            ((1000 - Z) / 1000) * 20 * np.cos(LAT) + 10,
-            10,
-        )
+        if profile == "deepmip_cold":
+            # Temperature profile formula
+            thetao = np.where(
+                Z <= 1000,
+                ((1000 - Z) / 1000) * 20 * np.cos(LAT) + 10,
+                10,
+            )
 
-        #thetao = np.where(
-        #    Z <= 5000,
-        #    ((5000 - Z) / 5000) * 20 * np.cos(LAT) + 15,
-        #    15,
-        #)
+            #thetao = np.where(
+            #    Z <= 5000,
+            #    ((5000 - Z) / 5000) * 20 * np.cos(LAT) + 15,
+            #    15,
+            #)
+
+            thetao = np.broadcast_to(thetao, woa["thetao"].shape)   # keep the 12 months
+            suffix = "deepmip-30"
+
+        elif profile == "woa_pi":
+            # Present-day ocean mask from the ORCA2 domain (WOA is filled over land)
+            orca2_file = os.path.join(self.input_folder, "nemo/domain/ORCA2/domain_cfg.nc")
+            pd_ocean_mask = present_day_ocean_mask(orca2_file, lon, lat, len(depths))
+            thetao = woa_zonal_mean(woa["thetao"], pd_ocean_mask).values
+            suffix = "woa-pi"
 
         # Salinity constant
         so = np.full_like(thetao, so_value)
-        
-        # Assign back to dataset as DataArrays
-        #ntime = woa.dims["time_counter"]
-        #thetao = np.repeat(thetao[np.newaxis, ...], ntime, axis=0)
-        #so = np.repeat(so[np.newaxis, ...], ntime, axis=0)
 
         woa = woa.assign(
-            thetao=(("z", "y", "x"), thetao),
-            so=(("z", "y", "x"), so),
+            thetao=(("time_counter", "z", "y", "x"), thetao, woa["thetao"].attrs),
+            so=(("time_counter", "z", "y", "x"), so, woa["so"].attrs),
         )
-        
-        
+
         # === Decide output path ===
         if output_file is None:
 
             rel_path = os.path.relpath(woa_file, self.input_folder)
             base, ext = os.path.splitext(rel_path)
-            output_file = os.path.join(self.output_folder, f"{base}_deepmip-30{ext}")
+            output_file = os.path.join(self.output_folder, f"{base}_{suffix}{ext}")
 
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
 

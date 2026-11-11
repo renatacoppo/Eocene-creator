@@ -135,7 +135,7 @@ class EoceneOIFS():
             if os.path.exists(os.path.join(self.herold, f"{flag}_remap.nc")):
                 os.remove(os.path.join(self.herold, f"{flag}_remap.nc"))
             cdo.remapcon(
-                f"N{self.gaussian}",
+                f"F{self.gaussian}",
                 input=filename,
                 output=os.path.join(self.herold, f"{flag}_remap.nc"))
             return os.path.join(self.herold, f"{flag}_remap.nc")
@@ -158,7 +158,7 @@ class EoceneOIFS():
     
         # Convert GRIB to regular Gaussian NetCDF
         cdo.remapnn(
-            f"N{self.gaussian}",
+            f"F{self.gaussian}",
             input=f"-setgridtype,regular {icmgg_file}",
             output=icmgg_remap,
             options="-f nc4"

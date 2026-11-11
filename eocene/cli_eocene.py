@@ -82,7 +82,7 @@ def run_oifs(config, logger):
     eocene_oifs.create_sh(orog=orog['orography'])
     eocene_oifs.create_init(lsm_present= lsm_present, landsea=lsm_eocene["landsea_mask"], sd_orog=sd_orog["sd_orography"])
     eocene_oifs.create_iniua()
-    eocene_oifs.aerosols()
+    #eocene_oifs.aerosols()
 
 def run_nemo(config, logger):
     """Run the NEMO modifications based on the provided configuration."""
@@ -109,7 +109,7 @@ def run_nemo(config, logger):
     # Create NEMO modifications
     eocene_nemo.create_tidal_mixing()
     eocene_nemo.create_geothermal_flux()
-    eocene_nemo.create_ocean_init()
+    eocene_nemo.create_ocean_init(profile="woa_pi")
     eocene_nemo.create_runoff()
 
 def run_runoff(config, logger):
