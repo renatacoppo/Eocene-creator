@@ -7,3 +7,4 @@ eocene/*.yml
 *.grb
 *.grib
 *.nc
+.ipynb_checkpoints/
