@@ -45,7 +45,7 @@ def vegetation_zhang(field, var=None, herold_path=None, gaussian=None, **kwargs)
         loggy.debug(f"Loading Herold file: {herold_file}")
 
         herold_remap = cdo.remapnn(
-            f"N{gaussian}", input=herold_file
+            f"F{gaussian}", input=herold_file
             #output=os.path.join(herold_path, "herold_etal_eocene_biome_1x1_N32.nc")
             )
         loggy.debug(f"Remapped Herold file: {herold_remap}")
@@ -142,7 +142,7 @@ def prepare_vegetation(self):
     loggy.debug(f"ICMGG input: {icmgg_file}")
 
     herold_remap = cdo.remapnn(
-        f"N{self.gaussian}", 
+        f"F{self.gaussian}", 
         input=herold_file, 
         output=os.path.join(self.herold, "herold_etal_eocene_biome_1x1_N32.nc")
     )
