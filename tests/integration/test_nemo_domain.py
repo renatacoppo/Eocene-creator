@@ -74,6 +74,23 @@ def test_unknown_bathymetry_name(tmp_path: Path) -> None:
         workflow(write_config(tmp_path), only=["cretaceous"])
 
 
+def test_source_grid_from_input_tree(tmp_path: Path) -> None:
+    """The source grid of the present-day bathymetry is its domain_cfg.nc in the input tree."""
+    config_file = write_config(tmp_path)
+    wf = workflow(config_file)
+    assert wf.paths["source_grid"] == str(tmp_path / "input" / "nemo" / "domain" / "eORCA1" / "domain_cfg.nc")
+
+
+def test_mesh_mask_key_is_rejected(tmp_path: Path) -> None:
+    """``nemo_domain.mesh_mask`` was removed; an old config fails with a clear message."""
+    config_file = write_config(tmp_path)
+    raw = yaml.safe_load(config_file.read_text())
+    raw["nemo_domain"]["mesh_mask"] = "/path/to/mesh_mask.nc"
+    config_file.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ConfigError, match="unknown key.*mesh_mask"):
+        load_config(config_file)
+
+
 def test_local_backend_cannot_run_domaincfg(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="domain_cfg is on.*'local' backend"):
         workflow(write_config(tmp_path, backend="local"), backend=LocalBackend())

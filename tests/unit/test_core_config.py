@@ -30,7 +30,6 @@ def nemo_domain() -> dict:
     return {
         "output_dir": "/out/domain",
         "coords_ori": "/data/coords_ori.nc",
-        "mesh_mask": "/data/mesh_mask.nc",
         "grids": {"target": "PALEORCA2", "source": "eORCA1", "staggering_source": "T", "staggering_target": "T"},
         "parameters": {"minimum_depth": 30},
         "steps": {"coordinates": True, "bathymetry": True},
@@ -101,9 +100,7 @@ def test_missing_path_key(tmp_path: Path, key: str) -> None:
     assert "config.yml" in str(err.value)
 
 
-@pytest.mark.parametrize(
-    "key", ["output_dir", "coords_ori", "mesh_mask", "grids", "parameters", "steps", "bathymetries"]
-)
+@pytest.mark.parametrize("key", ["output_dir", "coords_ori", "grids", "parameters", "steps", "bathymetries"])
 def test_missing_nemo_domain_key(tmp_path: Path, key: str) -> None:
     domain = nemo_domain()
     del domain[key]

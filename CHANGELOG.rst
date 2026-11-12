@@ -148,6 +148,9 @@ Fixed
 Removed
 ~~~~~~~
 
+- Config key ``nemo_domain.mesh_mask`` and the ``data/eORCA1/mesh_mask.nc`` input: the source grid of the
+  present-day bathymetry is read from ``{input}/nemo/domain/<grids.source>/domain_cfg.nc``, which holds the
+  same horizontal grid; an old config with the key fails with an unknown-key error (pushed to ``refactor``).
 - The old ``eocene`` command and ``cli/eocene.py`` (``-r/--run``, ``--copy``), replaced by
   ``ecefast eocene run`` (#36).
 - Tracked ``__pycache__`` files; ``modify_oifs.ipynb`` and ``modify_nemo.ipynb``, replaced by
@@ -160,6 +163,9 @@ Removed
 Output
 ~~~~~~
 
+- NEMO domain pipeline: the intermediate ``coordinates/eORCA1/coords_bounds_{T,F}.nc`` carry the global
+  attributes of the eORCA1 ``domain_cfg.nc`` (``CfgName``, ``Iperio``, ``NFold``, ...); their data and every
+  bathymetry, namelist and domain file are unchanged (pushed to ``refactor``).
 - NEMO domain pipeline: ``domain/PALEORCA2/eocene/subbasins.nc`` is now built, with ``glomsk`` only
   (present-day basin polygons do not fit Eocene geography; Eocene basins are a later task) (#39).
 - ``nemo/initial/woa13-levitus-L31_deepmip-30.nc`` is now built alongside

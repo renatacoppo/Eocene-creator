@@ -17,7 +17,7 @@ merged with `ecefast.paleo.eocene.bathymetry.EOCENE_PROCESSORS` (`EoceneBathymet
 - `output_dir`: Base output directory (coordinates/, bathymetry/, domain/)
 - `domaincfg_dir`: NEMO tools directory (for HPC compilation)
 - `coords_ori`: Pre-existing target grid coordinates (input)
-- `mesh_mask`: Pre-existing source grid mesh mask (input)
+- Source grid: `{input}/nemo/domain/<grids.source>/domain_cfg.nc` (input tree; its horizontal grid)
 
 ## Key Parameters and Decisions
 
@@ -77,7 +77,7 @@ Workflow steps controlled via `steps` flags in YAML:
   - Output: `{output_dir}/coordinates/PALEORCA2/coords_halo.nc`
 - Generate coordinate bounds for both T and F staggering via `orca_bounds.py`
   - Target grid: `coords_bounds_T.nc`, `coords_bounds_F.nc` (from coords_halo.nc)
-  - Source grid: `coords_bounds_T.nc`, `coords_bounds_F.nc` (from mesh_mask)
+  - Source grid: `coords_bounds_T.nc`, `coords_bounds_F.nc` (from the source `domain_cfg.nc` of the input tree)
 - Staggering selection controlled by `grids.staggering_target` and `grids.staggering_source`
 
 ---

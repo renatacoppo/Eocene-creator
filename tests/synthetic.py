@@ -250,7 +250,6 @@ def nemo_domain_section(output_dir: Path, root: Path, steps: dict | None = None,
     return {
         "output_dir": str(output_dir),
         "coords_ori": str(root / "coords_ori.nc"),
-        "mesh_mask": str(root / "mesh_mask.nc"),
         "grids": {"target": "PALEORCA2", "source": "eORCA1", "staggering_source": "T", "staggering_target": "T"},
         "parameters": {"minimum_depth": 30},
         "steps": steps,

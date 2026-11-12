@@ -170,10 +170,6 @@ Read by ``ecefast nemo domain``, and by the Eocene ``domain`` step when ``tools.
      - str
      - required
      - PALEORCA2 coordinates with halo (NEMO 3.6); the pipeline removes the halo.
-   * - ``nemo_domain.mesh_mask``
-     - str
-     - required
-     - eORCA1 ``mesh_mask`` (NEMO 4.2), source grid of the present-day bathymetry.
    * - ``nemo_domain.aliases``
      - mapping
      - ``{}``
@@ -182,7 +178,9 @@ Read by ``ecefast nemo domain``, and by the Eocene ``domain`` step when ``tools.
      - mapping
      - required
      - ``target`` (produced grid, ``PALEORCA2``), ``source`` (``eORCA1``), ``staggering_source``
-       and ``staggering_target`` (``T`` or ``F``).
+       and ``staggering_target`` (``T`` or ``F``). The horizontal grid of ``source`` is read from
+       ``{input}/nemo/domain/<source>/domain_cfg.nc`` (the former ``mesh_mask`` key is no longer
+       accepted: that file holds the same grid).
    * - ``nemo_domain.parameters``
      - mapping
      - required
@@ -210,7 +208,6 @@ Example (laptop part of the pipeline):
      output_dir: /path/to/EOCENE-DOMAIN-TEST
      domaincfg_dir: null
      coords_ori: /path/to/data/PALEORCA2/coords_ori.nc
-     mesh_mask: /path/to/data/eORCA1/mesh_mask.nc
      grids: {target: PALEORCA2, source: eORCA1, staggering_source: T, staggering_target: T}
      parameters: {minimum_depth: 30}
      steps: {coordinates: true, bathymetry: true, configure_domain: true}

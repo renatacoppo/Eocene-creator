@@ -70,8 +70,8 @@ All of these live at the repo root and are gitignored; never commit them.
 
 | Directory | What | How to get it |
 |---|---|---|
-| `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree, including the eORCA1 domain used by the present-day bathymetry | `scripts/get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
-| `data/` | inputs of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`, `eORCA1/mesh_mask.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `tools.precomputed.domain`) | copy from the HPC |
+| `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree, including the eORCA1 domain (grid and bathymetry of the present-day bathymetry) | `scripts/get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
+| `data/` | input of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `tools.precomputed.domain`) | copy from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplementary data | copy from the HPC or the paper supplement |
 | `EOCENE-TEST/` | output of your Eocene run | `ecefast eocene run -c configs/laptop.yml --overwrite` |
 | `EOCENE-DOMAIN-TEST/` | output of your domain-pipeline run (laptop part); always at this path in the main checkout, because the namelists contain absolute paths | see `EOCENE-BASELINE/BASELINE.txt` |

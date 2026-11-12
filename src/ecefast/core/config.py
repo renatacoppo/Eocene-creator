@@ -68,7 +68,6 @@ class NemoDomain:
 
     output_dir: str
     coords_ori: str
-    mesh_mask: str
     grids: dict[str, Any]
     parameters: dict[str, Any]
     steps: dict[str, bool]

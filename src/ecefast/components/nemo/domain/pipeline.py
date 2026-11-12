@@ -76,7 +76,9 @@ class NEMOWorkflow:
             "namelist_dir": os.path.join(config.domaincfg_dir, "DOMAINcfg") if config.domaincfg_dir else outputdir,
             # Explicit entry points: pre-existing files consumed by this workflow
             "coords_ori": config.coords_ori,
-            "mesh_mask": config.mesh_mask,
+            # Source grid of the present-day bathymetry: its domain_cfg.nc in the input tree holds the
+            # horizontal grid (glam*, gphi*, e1*, e2*) that orca_bounds.py reads, identical to its mesh_mask
+            "source_grid": os.path.join(paths.input, "nemo", "domain", config.grids["source"], "domain_cfg.nc"),
         }
         # Placeholders for source_file: the config's paths ({input}, {herold}, ...) and the optional aliases
         self.aliases = {**{k: v for k, v in dataclasses.asdict(paths).items() if v is not None}, **config.aliases}
@@ -167,7 +169,7 @@ class NEMOWorkflow:
         src = self.grids["source"]
         coordsdir = self.paths["coordsdir"]
         coords_ori = self.paths["coords_ori"]
-        mesh_mask = self.paths["mesh_mask"]
+        source_grid = self.paths["source_grid"]
 
         # Target grid: remove halo (NEMO 3.6 → 4.2 transition)
         coords_halo = os.path.join(coordsdir, tgt, "coords_halo.nc")
@@ -180,12 +182,12 @@ class NEMOWorkflow:
             logger.debug("Generating bounds for %s staggering %s", tgt, stagg)
             self.executor.run_python_script("orca_bounds.py", ["--stagg", stagg, "--no-level", coords_halo, outfile])
 
-        # Source grid: NEMO 4.2 mesh_mask (no halo removal needed)
+        # Source grid: NEMO 4.2 domain_cfg.nc of the input tree (no halo removal needed)
         for stagg in STAGGERING_OPTIONS:
             os.makedirs(os.path.join(coordsdir, src), exist_ok=True)
             outfile = os.path.join(coordsdir, src, f"coords_bounds_{stagg}.nc")
             logger.debug("Generating bounds for %s staggering %s", src, stagg)
-            self.executor.run_python_script("orca_bounds.py", ["--stagg", stagg, "--no-level", mesh_mask, outfile])
+            self.executor.run_python_script("orca_bounds.py", ["--stagg", stagg, "--no-level", source_grid, outfile])
 
     # ------------------------------------------------------------------
     # Step 2: Bathymetry pipeline (delegated to processor subclasses)

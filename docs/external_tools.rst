@@ -131,8 +131,8 @@ before it reaches ``main``) by hand. You need:
   ``environment.yaml`` with ``pip install -e ".[dev]"``. For CDO use conda-forge ``cdo`` in that
   environment with the version recorded in ``EOCENE-BASELINE/BASELINE.txt`` (or the module, if you do
   not compare with the baseline): a different CDO changes the remapped bathymetries;
-- the inputs: the ECE4-DATA-V3 tree, the Herold et al. (2014) ``Supp/`` folder, the PALEORCA2
-  ``coords_ori.nc`` and the eORCA1 ``mesh_mask.nc``;
+- the inputs: the ECE4-DATA-V3 tree, the Herold et al. (2014) ``Supp/`` folder and the PALEORCA2
+  ``coords_ori.nc``;
 - an EC-Earth4 build: the NEMO tools directory holding ``maketools`` (``nemo_domain.domaincfg_dir``)
   and the OASIS library directory (``tools.atos.oasis_lib_dir``);
 - the modules of the ``atos`` profile in ``src/ecefast/tools/hpc_profiles.yaml``: check that each

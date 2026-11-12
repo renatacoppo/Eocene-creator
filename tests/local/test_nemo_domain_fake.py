@@ -1,7 +1,7 @@
 """The NEMO domain pipeline end to end on the real laptop inputs, with the ``fake`` DOMAINcfg backend.
 
 Opt-in, like ``test_regression.py``: set ``ECEFAST_TEST_DATA`` to a directory holding ``ECE4-DATA-V3/``,
-``herold-et-al-2014/Supp/`` and ``data/`` (``PALEORCA2/coords_ori.nc``, ``eORCA1/mesh_mask.nc``), then run
+``herold-et-al-2014/Supp/`` and ``data/PALEORCA2/coords_ori.nc``, then run
 ``pytest -m local_data``. Takes about 15 s.
 
 All steps but ``generate_subbasins`` run for both bathymetries: coordinates, bathymetries (CDO), namelists, fake
@@ -43,7 +43,6 @@ def test_fake_domain_pipeline_on_real_inputs(tmp_path: Path) -> None:
         "nemo_domain": {
             "output_dir": str(output),
             "coords_ori": str(data / "data" / "PALEORCA2" / "coords_ori.nc"),
-            "mesh_mask": str(data / "data" / "eORCA1" / "mesh_mask.nc"),
             "grids": {"target": "PALEORCA2", "source": "eORCA1", "staggering_source": "T", "staggering_target": "T"},
             "parameters": {"minimum_depth": 30},
             "steps": {
@@ -68,8 +67,8 @@ def test_fake_domain_pipeline_on_real_inputs(tmp_path: Path) -> None:
             ],
         },
     }
-    for key in ("coords_ori", "mesh_mask"):
-        assert Path(config["nemo_domain"][key]).is_file(), f"missing test data: {config['nemo_domain'][key]}"
+    coords_ori = config["nemo_domain"]["coords_ori"]
+    assert Path(coords_ori).is_file(), f"missing test data: {coords_ori}"
     config_file = tmp_path / "config.yml"
     config_file.write_text(yaml.safe_dump(config))
 
