@@ -20,6 +20,55 @@ def plot_compare(original, modified, title):
     plt.show()
 
 
+def plot_before_after(
+    before: xr.DataArray,
+    after: xr.DataArray,
+    title: str = "",
+    labels: tuple[str, str] = ("Present day", "Eocene"),
+    **kwargs,
+) -> plt.Figure:
+    """Plot two 2D fields side by side with the same colour scale.
+
+    No map projection and no coastlines: present-day coastlines would be wrong on an Eocene field. Fields with
+    1D coordinates are plotted against them (lon/lat); fields on a curvilinear grid (NEMO ``y``, ``x``) are
+    plotted in index space.
+
+    Parameters
+    ----------
+    before, after : xarray.DataArray
+        The fields. Dimensions of size 1 (e.g. one time step) are dropped; what is left must be 2D.
+    title : str
+        Figure title.
+    labels : tuple of str
+        Titles of the two panels.
+    **kwargs
+        Passed to :meth:`xarray.DataArray.plot` (e.g. ``cmap``, ``vmin``, ``vmax``). By default ``vmin`` and
+        ``vmax`` span both fields.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The figure.
+
+    Raises
+    ------
+    ValueError
+        If a field is not 2D after dropping dimensions of size 1.
+    """
+    before, after = before.squeeze(drop=True), after.squeeze(drop=True)
+    for da, label in zip((before, after), labels):
+        if da.ndim != 2:
+            raise ValueError(f"plot_before_after: '{label}' field has dimensions {da.dims}, expected 2")
+    kwargs.setdefault("vmin", float(min(before.min(), after.min())))
+    kwargs.setdefault("vmax", float(max(before.max(), after.max())))
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4), layout="constrained")
+    for ax, da, label in zip(axes, (before, after), labels):
+        da.plot(ax=ax, **kwargs)
+        ax.set_title(label)
+    fig.suptitle(title)
+    return fig
+
+
 def load_grib_var(gribfile, varname, grid="r360x180"):
     """
     Load a GRIB variable and remap it to a regular lat-lon grid
@@ -42,18 +91,20 @@ def load_grib_var(gribfile, varname, grid="r360x180"):
 
 
 def load_grib_var_spec(gribfile, varname, grid="r360x181"):
+    """Load a GRIB variable, gridpoint (remapped to ``grid``) or spectral (to its Gaussian grid with ``sp2gp``)."""
     with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
         outfile = tmp.name
 
-    try:
-        # try gridpoint first
-        get_cdo().remapnn(grid, input=f"-selname,{varname} {gribfile}", output=outfile, options="-f nc4")
-    except Exception:
-        # fallback: spectral → gridpoint
-        get_cdo().sp2gp(input=f"-selname,{varname} {gribfile}", output=outfile, options="-f nc4")
+    selected = f"-selname,{varname} {gribfile}"
+    if any("spectral" in line for line in get_cdo().griddes(input=selected)):
+        get_cdo().sp2gp(input=selected, output=outfile, options="-f nc4")
+    else:
+        get_cdo().remapnn(grid, input=selected, output=outfile, options="-f nc4")
 
-    ds = xr.open_dataset(outfile)
-    return list(ds.data_vars.values())[0]
+    # decode_times=False: the steps of some EC-Earth GRIB files cannot be decoded, and plots do not need them
+    ds = xr.open_dataset(outfile, decode_times=False)
+    # sp2gp also writes lat_bnds; return the field, not the bounds
+    return next(da for name, da in ds.data_vars.items() if not name.endswith("_bnds"))
 
 
 def compare_maps(var, origfile, newfile):
