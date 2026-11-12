@@ -56,7 +56,9 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 | 6.1 ✅ | Synthetic fixtures (declared reads only), integration tests, `verify` checks | `tests/integration/`, `paleo/eocene/verify.py` | 5.2 | ‖ 6.3 |
 | 6.2 ✅ | OIFS unit tests on small CDO-made GRIB | `tests/unit/oifs/` | 4.1 | ‖ 5.3, 5.4 |
 | 6.3 ✅ | Tutorials from `plots.ipynb`, `quickstart.rst` | `notebooks/tutorials/`, docs | 4.4 | ‖ 6.1 |
-| 7.1 | Atos validation (DOMAINcfg contract, full run) | Atos | 6.1–6.3 | Paolo |
+| 8.1 | Config schema 2: component sections (`oifs:`, `nemo:`, `eocene:`), one `output_dir` per command, `{section.key}` placeholders, explicit `eocene.domain`; homogeneous local folder names (see Phase 8) | `core/config.py`, `core/workspace.py`, every `from_context`, `components/nemo/domain/`, `tools/ecearth.py`, `configs/`, docs, tutorials, tests, `.gitignore` | 6.1–6.3 | serial |
+| 8.2 | `ecefast oifs data`: the OIFS generator as a command, its constants in `oifs.data`, output only to `oifs.data.output_dir` | `components/oifs/generator.py`, `cli/`, `configs/`, docs, tests | 8.1 | serial |
+| 7.1 | Atos validation (DOMAINcfg contract, full run, OIFS generator vs ECE4-DATA TL63L31) | Atos | 8.2 | Paolo |
 | 7.2 | `refactor` → `main`, baseline regenerated, release, issue #16 updated | — | 7.1 | Renata reviews |
 
 ```
@@ -68,6 +70,7 @@ W3  3.0 ─→ 3.1 ‖ 3.2 ‖ 3.3
 W4  4.0 ─→ 4.1 ‖ 4.2 ‖ 4.3 ‖ 5.1  ─→ 4.4
 W5  5.2 ─→ 5.3 ‖ 5.4 ‖ 6.2
 W6  6.1 ‖ 6.3
+W8  8.1 config schema 2 ─→ 8.2 oifs data
 W7  7.1 Atos ─→ 7.2 merge to main
 ```
 
@@ -257,6 +260,135 @@ Done when: CI runs end to end in a few minutes.
 - [ ] `ecefast nemo domain` with `AtosBackend`; compare the new Eocene `domain_cfg.nc` with `data/domain/PALEORCA2/eocene/`.
 - [ ] `tests/hpc/test_domaincfg_contract.py`: the real `domain_cfg.nc` has every variable/dimension the fake produces.
 - [ ] Full run with `AtosBackend`; compare with the baseline.
+
+## Phase 8: untangle the configuration, OIFS data command (PRs, no output change)
+
+Why: `paths.output` (the Eocene tree) and `nemo_domain.output_dir` (the domain work folder) are easy to
+confuse; `tools.backend` silently decides whether the `domain` step copies or builds the Eocene domain;
+`grids.nemo` and `nemo_domain.grids.target` say the same thing twice; `nemo_domain.domaincfg_dir` is an Atos
+path far from the rest; local folders are named three ways (`EOCENE-TEST`, `EOCENE-DOMAIN-TEST`,
+`EOCENE-BASELINE/{eocene,domain}`); and the OIFS generator that made the TL63L31 base data cannot be run from
+`ecefast` (hardcoded Atos paths, writes into the ECE4-DATA tree).
+
+Decisions (Paolo, 2026-11-12):
+
+- Config sections follow the components: `oifs:`, `nemo:` (and later `oasis:`, `rnfm:`) hold what is specific
+  to that component, including its commands (`nemo.domain`, `oifs.data`); paleo runs have their own section
+  (`eocene:`). Settings that belong to a component move there (`grids.nemo` → `nemo.grid`, DOMAINcfg dir →
+  `nemo.domain.tools_dir`).
+- **One rule for commands and sections:** `ecefast <component> <command>` reads section `<component>.<command>`
+  (`ecefast nemo domain` → `nemo.domain`, `ecefast oifs data` → `oifs.data`); `ecefast eocene run` reads
+  `eocene`.
+- **Every command writes only to its own `output_dir`**, the same key name everywhere. A run combines the
+  output of earlier runs by referring to it: any path may use `{section.key}` placeholders, e.g.
+  `{nemo.domain.output_dir}`. One placeholder syntax for configs and for the steps' `reads`/`writes`.
+- Final products are laid out as in ECE4-DATA inside each `output_dir` (`oifs/<grid>/...`,
+  `nemo/domain/<grid>/<name>/...`), so a later run finds them where an EC-Earth tree has them; intermediate
+  files of a command go to `<output_dir>/work/`.
+- Local folders homogeneous: `OUTPUT/<command>` for runs and `BASELINE/<command>` for the frozen reference,
+  with `<command>` = `eocene`, `nemo-domain`, `oifs-data`.
+- The `domain` step can still build the Eocene domain (nested), but the config says so explicitly.
+- Before the Atos validation, so Atos validates the final structure and users migrate their configs once.
+
+### 8.1 Config schema 2
+
+```yaml
+schema: 2
+
+inputs:                           # read-only, shared                    (was paths.input, paths.herold)
+  ece4_data: /path/to/ECE4-DATA-V3
+  herold: /path/to/herold-et-al-2014/Supp
+tmpdir: null                      # scratch for every command            (was paths.tmpdir)
+
+machine:                          # where EC-Earth tools run             (was tools)
+  name: local                     # local | atos | fake                  (was tools.backend)
+  atos: {profile: atos, oasis_lib_dir: /path/to/oasis3-mct-5.2/arch_ecearth/lib}
+
+oifs:
+  grid: TL63L31                   #                                      (was grids.oifs)
+  data: {...}                     # ecefast oifs data, task 8.2
+
+nemo:
+  grid: PALEORCA2                 #                       (was grids.nemo and nemo_domain.grids.target)
+  domain:                         # ecefast nemo domain                  (was nemo_domain)
+    output_dir: /path/to/OUTPUT/nemo-domain   # nemo/domain/<grid>/<name>/ + work/  (was output_dir)
+    tools_dir: /path/to/nemo-4.2/tools        # NEMO tools with DOMAINcfg/, Atos  (was domaincfg_dir)
+    coords_ori: /path/to/data/PALEORCA2/coords_ori.nc
+    source_grid: eORCA1           # grid of the present_day bathymetry   (was grids.source)
+    staggering: {source: T, target: T}        #                          (was grids.staggering_*)
+    minimum_depth: 30             #                                      (was parameters.minimum_depth)
+    steps: {...}
+    bathymetries:
+      - name: eocene
+        processor: EoceneBathymetry
+        source_file: "{inputs.herold}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc"
+
+eocene:                           # ecefast eocene run
+  output_dir: /path/to/OUTPUT/eocene          # the Eocene tree        (was paths.output)
+  domain:                         # Eocene NEMO domain to install   (was tools.precomputed.domain + backend)
+    from: "{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene"   # output of an earlier `nemo domain`
+    build: false                  # true: run nemo.domain (eocene bathymetry) first; needs machine atos/fake
+  oifs: {aerosols: false}
+  oasis: {constant_sst: 290.0}
+```
+
+On a laptop `eocene.domain.from` points at the domain copied from Atos (`data/domain/PALEORCA2/eocene`); on
+Atos it points at `{nemo.domain.output_dir}/...`, built by `ecefast nemo domain` or with `build: true`.
+
+- [ ] `core/config.py`: schema 2 dataclasses; `{section.key}` placeholders resolved from the config (unknown
+      key, or a cycle, is an error); a schema 1 file fails with one error listing each old key and its new
+      name (no automatic migration, no support for both).
+- [ ] Step `reads`/`writes` use the same placeholders (`{inputs.ece4_data}/nemo/...`,
+      `{eocene.output_dir}/...`, `{nemo.grid}`).
+- [ ] `EoceneDomain.from_context` reads `eocene.domain`, not the backend name; `build: true` with
+      `machine.name: local` is a config error.
+- [ ] NEMO domain pipeline: final files under `<output_dir>/nemo/domain/<grid>/<name>/`, intermediates
+      (coordinates, bathymetries, namelists) under `<output_dir>/work/`. Same file contents; the baseline
+      layout moves with it.
+- [ ] Local folders: `OUTPUT/{eocene,nemo-domain}`, `BASELINE/{eocene,nemo-domain}` (moved from
+      `EOCENE-TEST`, `EOCENE-DOMAIN-TEST`, `EOCENE-BASELINE`); `.gitignore`, `compare_outputs.py`,
+      `test_regression.py`, AGENTS.md. The domain baseline is regenerated (its namelists hold absolute paths).
+- [ ] Templates `configs/laptop.tmpl`, `configs/atos.tmpl`; `docs/configuration.rst` (new layout, old → new
+      table); `overview.rst` gets a "commands, sections and outputs" diagram; quickstart, workflow, external
+      tools, tutorials, AGENTS.md commands.
+- [ ] Tests: schema, placeholders, schema 1 error; fixtures in `tests/synthetic.py`; all groups.
+- Done when: both baselines give 0 differences (apart from moved paths), and `ecefast eocene run` and
+  `ecefast nemo domain` run with the migrated `configs/laptop.yml`.
+
+### 8.2 `ecefast oifs data`
+
+The generator (`components/oifs/generator.py`, moved unchanged) makes the present-day OIFS base data of a
+resolution (e.g. TL63L31 from TL255L91: spectral and gridpoint initial state, optional climate files, vertical
+interpolation). Today it is a script with hardcoded Atos paths that writes into the ECE4-DATA tree.
+
+```yaml
+oifs:
+  grid: TL63L31                   # target resolution
+  data:                           # ecefast oifs data (inputs exist on Atos only)
+    output_dir: /path/to/OUTPUT/oifs-data     # writes oifs/<grid>/<startdate>/, oifs/<grid>/<climate>/
+    source_grid: TL255L91         # read from {inputs.ece4_data}/oifs/<source_grid>/<startdate>
+    startdate: '19900101'
+    climate_dir: /path/to/climate.v020        # was OIFS_BC['compute']; needed only with steps.boundary
+    vertical_grids_dir: /path/to/oifs-grids   # was GRIDS (made by create_corners.py)
+    steps: {spectral: true, gridpoint: true, boundary: false}
+```
+
+- [ ] Module-level constants become `oifs.data`, with today's values as defaults where they are not paths;
+      the generation logic does not change.
+- [ ] Writes only under `oifs.data.output_dir` (never `inputs.ece4_data`), through `atomic_write`; temporary
+      files in `<output_dir>/work/` or `tmpdir`; logging, not `print`; preflight of every input with one error.
+- [ ] `ecefast oifs data -c CONFIG [--dry-run]` in `cli/`; `docs/workflow.rst` section; `overview.rst`.
+- [ ] Unit tests where synthetic GRIB allows; `tests/hpc`: generate TL63L31 on Atos and compare with
+      `{inputs.ece4_data}/oifs/TL63L31` with `scripts/compare_outputs.py`.
+- [ ] AGENTS.md "Out of scope": drop "reworking the OIFS generator" (needs Renata's agreement).
+- Not in scope: `create_corners.py`, `descriptor_generator.py`, `convert_aka_bika.py` stay scripts (documented
+  as the tools that make `vertical_grids_dir` and the grid descriptions). Making `eocene` read its OIFS base
+  from `{oifs.data.output_dir}` instead of ECE4-DATA is possible with the same placeholders but not planned.
+
+### Open points
+
+- Renata agrees to wire in the OIFS generator (AGENTS.md lists its rework as out of scope).
+- Whether the generator output matches `ECE4-DATA-V3/oifs/TL63L31` can only be checked on Atos (7.1).
 
 ## Later
 
