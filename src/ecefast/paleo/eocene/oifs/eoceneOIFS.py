@@ -8,9 +8,9 @@ import shutil
 import tempfile
 from ecefast.core.cdo import get_cdo
 
-from .utils import modify_single_grib, nullify_grib
-from .utils import modify_value, replace_value, regrid_dataset, truncate_grib_file, flatten_grib_steps
-from .utils import extract_grid_info, spectral2gaussian
+from ecefast.core.grib import extract_grid_info, spectral2gaussian
+from .fields import modify_single_grib, nullify_grib
+from .fields import modify_value, replace_value, regrid_dataset, truncate_grib_file, flatten_grib_steps
 from .albedo import albedo
 from .lsmgrd import lsmgrd
 from .subgrid_orog import compute_slope

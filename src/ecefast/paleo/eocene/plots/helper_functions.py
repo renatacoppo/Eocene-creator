@@ -5,7 +5,7 @@ from ecefast.core.cdo import get_cdo
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import tempfile
-from ecefast.paleo.eocene.oifs.utils import spectral2gaussian
+from ecefast.core.grib import spectral2gaussian
 
 
 # Sanity check helper

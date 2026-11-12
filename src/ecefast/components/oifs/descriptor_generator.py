@@ -11,7 +11,7 @@ Paolo Davini (CNR-ISAC, Nov 2023)
 
 import os
 import subprocess
-from ecefast.components.oifs.utils_oifs import extract_grid_info, ecmwf_grid
+from ecefast.core.grib import extract_grid_info, ecmwf_grid
 
 # grid list
 grids = ["TL63", "TL95", "TCO95", "TL159", "TCO199", "TCO319", "TCO399"]

@@ -16,8 +16,9 @@ import os
 import argparse
 import shutil
 from ecefast.core.cdo import get_cdo
-from ecefast.components.oifs.utils_oifs import extract_grid_info, ecmwf_grid
-from ecefast.components.oifs.utils_oifs import unpack_grib_file, repack_grib_file
+from ecefast.core.grib import GRIB1, GRIB2
+from ecefast.core.grib import extract_grid_info, ecmwf_grid
+from ecefast.core.grib import unpack_grib_file, repack_grib_file
 
 
 # configurable
@@ -50,11 +51,6 @@ GRIDS = "/home/ccpd/perm/ecearth4/oifs-grids"
 
 # temporart directory
 TMPDIR = "/ec/res4/scratch/ccpd/tmpic_cy48"
-
-# CDO grib2 options
-GRIB2 = "-f grb2 --eccodes"
-GRIB1 = "-f grb1 --eccodes"
-
 
 # ---------------------------#
 
