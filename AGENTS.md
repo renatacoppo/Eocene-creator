@@ -56,7 +56,8 @@ ecefast eocene run -c configs/laptop.yml [--steps nemo] [--dry-run]   # (from ph
 # checks before pushing
 ruff check --fix . && ruff format .                             # (from phase 1)
 pytest -m "unit or integration"                                 # (from phase 1)
-python scripts/compare_outputs.py EOCENE-BASELINE EOCENE-TEST   # (from phase 0)
+python scripts/compare_outputs.py EOCENE-BASELINE/eocene EOCENE-TEST          # Eocene workflow
+python scripts/compare_outputs.py EOCENE-BASELINE/domain EOCENE-DOMAIN-TEST   # NEMO domain pipeline
 sphinx-build -W -b html docs docs/_build/html                   # (from phase 1b)
 ```
 
@@ -67,11 +68,11 @@ All of these live at the repo root and are gitignored; never commit them.
 | Directory | What | How to get it |
 |---|---|---|
 | `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree, including the eORCA1 domain used by the present-day bathymetry | `get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
-| `ECE4-DATA-EOCENE/nemo/domain/PALEORCA2/` | Eocene NEMO domain | rsync from the HPC copy of ECE4-DATA-EOCENE |
-| `data/` | inputs of the NEMO domain pipeline: `PALEORCA2/coords_ori.nc`, `eORCA1/mesh_mask.nc` (plus outputs of earlier pipeline runs) | copy from the HPC |
+| `data/` | inputs of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`, `eORCA1/mesh_mask.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `dirs.domain`) | copy from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplementary data | copy from the HPC or the paper supplement |
-| `EOCENE-TEST/` | output of your run | `eocene -c eocene/config.yml --run all --copy` |
-| `EOCENE-BASELINE/` | frozen reference output of the Eocene workflow and, in `domain/`, of the laptop part of the NEMO domain pipeline, with `BASELINE.txt` (commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
+| `EOCENE-TEST/` | output of your Eocene run | `eocene -c eocene/config.yml --run all --copy` |
+| `EOCENE-DOMAIN-TEST/` | output of your domain-pipeline run (laptop part); always at this path in the main checkout, because the namelists contain absolute paths | see `EOCENE-BASELINE/BASELINE.txt` |
+| `EOCENE-BASELINE/` | frozen reference output: `eocene/` (Eocene workflow) and `domain/` (laptop part of the NEMO domain pipeline), with `BASELINE.txt` (how each was run) (commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
 
 Tests that need this data use the `local_data` marker and read its location from
 `ECEFAST_TEST_DATA`; they skip when the variable is unset.
