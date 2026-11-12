@@ -9,7 +9,10 @@ Paolo Davini, Apr 2024
 import os
 import netCDF4 as nc
 import numpy as np
-from utils import extract_grid_info, spectral2gaussian
+from ecefast.components.oifs.utils_oifs import extract_grid_info
+
+# temporary until task 3.0: spectral2gaussian lives only in the Eocene OIFS utils (it moves to core/grib.py)
+from ecefast.paleo.eocene.oifs.utils import spectral2gaussian
 import cdo
 
 cdo = cdo.Cdo()

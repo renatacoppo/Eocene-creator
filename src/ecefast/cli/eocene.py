@@ -7,11 +7,11 @@ import os
 import xarray as xr
 import numpy as np
 
-from eocene.common import load_yaml, setup_logger
-from eocene.oifs.eoceneOIFS import EoceneOIFS
-from eocene.nemo.eoceneNEMO import EoceneNEMO
-from eocene.oasis.eoceneOASIS import EoceneOASIS
-from eocene.rnfm.eoceneRNFM import iter_track, create_basin_data
+from ecefast.core import load_yaml, setup_logger
+from ecefast.paleo.eocene.oifs.eoceneOIFS import EoceneOIFS
+from ecefast.paleo.eocene.nemo.eoceneNEMO import EoceneNEMO
+from ecefast.paleo.eocene.oasis.eoceneOASIS import EoceneOASIS
+from ecefast.paleo.eocene.rnfm.eoceneRNFM import iter_track, create_basin_data
 
 OIFS_RESO = "TL63L31"
 NEMO_RESO = "PALEORCA2"
@@ -169,7 +169,7 @@ def run_oasis(config, logger):
     eocene_oasis.create_rstos()
 
 
-def main():
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Duplicate job configuration for experiments.")
     parser.add_argument("-c", "--config", required=True, help="Path to the original job configuration file.")
     parser.add_argument("-l", "--loglevel", default="INFO", help="logger level (e.g., DEBUG, INFO, WARNING).")
@@ -184,7 +184,7 @@ def main():
         "--copy", action="store_true", help="Whether to copy the original configuration file to the output directory."
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     logger = setup_logger(level=args.loglevel)
     logger.info(f"Logger initialized with level: {args.loglevel}")

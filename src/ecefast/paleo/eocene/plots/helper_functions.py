@@ -5,7 +5,7 @@ from cdo import Cdo
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import tempfile
-from eocene.oifs.utils import spectral2gaussian
+from ecefast.paleo.eocene.oifs.utils import spectral2gaussian
 
 cdo = Cdo()
 

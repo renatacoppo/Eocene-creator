@@ -68,7 +68,7 @@ def test_eocene_workflow_matches_baseline(tmp_path: Path) -> None:
     config_file.write_text(yaml.safe_dump(config))
 
     subprocess.run(
-        [sys.executable, "-m", "eocene.cli_eocene", "-c", str(config_file), "--run", "all", "--copy"],
+        [sys.executable, "-m", "ecefast.cli.eocene", "-c", str(config_file), "--run", "all", "--copy"],
         check=True,
         cwd=tmp_path,
     )

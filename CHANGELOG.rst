@@ -49,12 +49,22 @@ Changed
   ``shapely`` declared; CDO is no longer part of the environment (system CDO, not pinned; the
   baseline records its version) (#24).
 - Whole repository formatted with ``ruff format`` in one formatting-only commit (#25).
+- All code moves into one ``ecefast`` package with a ``src/`` layout (``core``, ``tools``,
+  ``components``, ``paleo/eocene``, ``cli``); new ``ecefast`` command with the ``eocene`` and
+  ``nemo-domain`` subcommands; the config template moves to ``configs/eocene.tmpl`` (#26).
+
+Fixed
+~~~~~
+
+- NEMO domain pipeline: helper scripts run with the current Python interpreter, not ``python3``
+  from ``PATH``, and are found from the package directory (#26).
 
 Removed
 ~~~~~~~
 
 - Tracked ``__pycache__`` files; ``modify_oifs.ipynb`` and ``modify_nemo.ipynb``, replaced by
   ``notebooks/analysis/plots.ipynb`` (#22).
+- ``nemo-workflow.sh``, superseded by the NEMO domain pipeline (#26).
 
 Output
 ~~~~~~

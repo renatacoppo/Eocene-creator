@@ -3,11 +3,12 @@
 NEMO bathymetry workflow: generates domain configuration files for PALEORCA2.
 
 Each bathymetry source is handled by a BathymetryProcessor subclass that lives
-in processors/.  The YAML entry names the class; all algorithm choices are
+in bathymetry/.  The YAML entry names the class; all algorithm choices are
 encapsulated in the class.
 
 Usage:
-    python3 cli-domain-paleorca.py --config nemo_workflow.yaml [--only NAME [NAME ...]]
+    ecefast nemo-domain --config nemo_workflow.yaml [--only NAME [NAME ...]]
+    python -m ecefast.components.nemo.domain.pipeline --config nemo_workflow.yaml [--only NAME [NAME ...]]
 """
 
 import argparse
@@ -17,15 +18,13 @@ import os
 import yaml
 from cdo import Cdo
 
-from common.executor import SubprocessExecutor
-from common.logger import setup_logging
-from common.util import process_domain_cfg, extract_maskutil, check_files_exist
-from processors.present_day import PresentDayBathymetry
-from processors.eocene import EoceneBathymetry
+from ecefast.components.nemo.common.executor import SubprocessExecutor
+from ecefast.components.nemo.common.logger import setup_logging
+from ecefast.components.nemo.common.util import process_domain_cfg, extract_maskutil, check_files_exist
+from ecefast.components.nemo.bathymetry.present_day import PresentDayBathymetry
 
-# Absolute path to the directory containing this script — used to locate
-# helper scripts in utils/ and domain-tools/ regardless of the caller's cwd.
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# temporary until task 5.2: components must not import paleo
+from ecefast.paleo.eocene.bathymetry import EoceneBathymetry
 
 logger = logging.getLogger("nemo.workflow")
 
@@ -76,7 +75,7 @@ class NEMOWorkflow:
 
         self.log_level = log_level
         self.cdo = Cdo()
-        self.executor = SubprocessExecutor(_SCRIPT_DIR)
+        self.executor = SubprocessExecutor()
         self._validate_paths()
 
     # ------------------------------------------------------------------
@@ -119,7 +118,7 @@ class NEMOWorkflow:
         if cls is None:
             raise ValueError(
                 f"Processor '{name}' not found in PROCESSOR_REGISTRY. "
-                "Add an import and a registry entry in cli-domain-paleorca.py."
+                "Add an import and a registry entry in ecefast/components/nemo/domain/pipeline.py."
             )
         return cls(cfg, self.paths, self.grids, self.params, self.cdo)
 
@@ -144,18 +143,14 @@ class NEMOWorkflow:
         for stagg in STAGGERING_OPTIONS:
             outfile = os.path.join(coordsdir, tgt, f"coords_bounds_{stagg}.nc")
             logger.debug("Generating bounds for %s staggering %s", tgt, stagg)
-            self.executor.run_python_script(
-                "utils/generate-orca-bounds.py", ["--stagg", stagg, "--no-level", coords_halo, outfile]
-            )
+            self.executor.run_python_script("orca_bounds.py", ["--stagg", stagg, "--no-level", coords_halo, outfile])
 
         # Source grid: NEMO 4.2 mesh_mask (no halo removal needed)
         for stagg in STAGGERING_OPTIONS:
             os.makedirs(os.path.join(coordsdir, src), exist_ok=True)
             outfile = os.path.join(coordsdir, src, f"coords_bounds_{stagg}.nc")
             logger.debug("Generating bounds for %s staggering %s", src, stagg)
-            self.executor.run_python_script(
-                "utils/generate-orca-bounds.py", ["--stagg", stagg, "--no-level", mesh_mask, outfile]
-            )
+            self.executor.run_python_script("orca_bounds.py", ["--stagg", stagg, "--no-level", mesh_mask, outfile])
 
     # ------------------------------------------------------------------
     # Step 2: Bathymetry pipeline (delegated to processor subclasses)
@@ -192,7 +187,7 @@ class NEMOWorkflow:
             namelist_out = os.path.join(namelist_dir, f"namelist_cfg_{name}")
             logger.info("Generating namelist for %s: %s", name, namelist_out)
             self.executor.run_python_script(
-                "domain-tools/config-namelist-domain.py",
+                "domain/namelist.py",
                 [
                     "--bathymetry",
                     output_file,
@@ -215,7 +210,7 @@ class NEMOWorkflow:
         names = [cfg["name"] for cfg in self.bathymetries]
 
         logger.info("Running domain configuration (HPC step)...")
-        self.executor.run_bash_script("domain-tools/run_domain_cfg.sh", [domaincfg_dir] + names)
+        self.executor.run_bash_script("domain/run_domain_cfg.sh", [domaincfg_dir] + names)
 
     # ------------------------------------------------------------------
     # Step 5: Post-process domain_cfg + extract maskutil
@@ -246,7 +241,7 @@ class NEMOWorkflow:
     def generate_subbasins(self):
         """Generate ocean subbasin masks for present-day bathymetry only.
 
-        Calls generate-subbasins.py script for each bathymetry.
+        Calls the domain/subbasins.py script for each bathymetry.
         Only applicable to PresentDayBathymetry processor.
         """
         domaincfg_dir = self.paths["domaincfg_dir"]
@@ -267,7 +262,7 @@ class NEMOWorkflow:
             logger.info("Generating subbasin masks for %s -> %s", name, tgt_dir)
 
             self.executor.run_python_script(
-                "domain-tools/generate-subbasins.py", ["--src_dir", src_dir, "--tgt_dir", tgt_dir, "--name", name]
+                "domain/subbasins.py", ["--src_dir", src_dir, "--tgt_dir", tgt_dir, "--name", name]
             )
 
     # ------------------------------------------------------------------
@@ -311,7 +306,7 @@ class NEMOWorkflow:
         logger.info("Workflow complete.")
 
 
-def main():
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="NEMO bathymetry workflow")
     parser.add_argument("--config", default="nemo_workflow.yaml")
     parser.add_argument(
@@ -323,7 +318,7 @@ def main():
     parser.add_argument(
         "-l", "--log-level", default="INFO", metavar="LEVEL", help="Logging level: DEBUG, INFO, WARNING (default: INFO)"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     setup_logging(args.log_level)
 

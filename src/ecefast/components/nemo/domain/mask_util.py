@@ -6,7 +6,7 @@ Also modifies the domain_cfg file by renaming the vertical dimension
 
 DEPRECATED: This standalone script is maintained for backwards compatibility only.
 The functionality has been moved to NEMOWorkflow._process_domain_cfg() and
-NEMOWorkflow._extract_maskutil() methods in cli-domain-paleorca.py.
+NEMOWorkflow._extract_maskutil() methods in ecefast/components/nemo/domain/pipeline.py.
 """
 
 import argparse

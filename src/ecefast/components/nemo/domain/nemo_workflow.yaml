@@ -57,7 +57,7 @@ steps:
 # All algorithm choices (variable, mask_type, remap_method, etc.) live in the
 # processor class.  Only per-instance/per-machine fields go here.
 #
-# To add a new bathymetry: create processors/<name>.py, subclass BathymetryProcessor,
+# To add a new bathymetry: create bathymetry/<name>.py (paleo ones in ecefast/paleo/), subclass BathymetryProcessor,
 # set class attributes, optionally override postprocess(), then add an entry below.
 bathymetries:
 
@@ -75,5 +75,5 @@ bathymetries:
   # Template for future paleographies — uncomment and fill in:
   # - name:        cretaceous
   #   enabled:     false
-  #   processor:   CretaceousBathymetry           # define in processors/cretaceous.py
+  #   processor:   CretaceousBathymetry           # define in ecefast/paleo/cretaceous/bathymetry.py
   #   source_file: "/path/to/cretaceous_topo.nc"

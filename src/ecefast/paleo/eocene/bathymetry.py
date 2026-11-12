@@ -5,7 +5,7 @@ Remaps a negative-elevation field (ocean where value < 0) to PALEORCA2 using
 bilinear interpolation.  No strait corrections are applied.
 """
 
-from .base import BathymetryProcessor
+from ecefast.components.nemo.bathymetry.base import BathymetryProcessor
 
 
 class EoceneBathymetry(BathymetryProcessor):

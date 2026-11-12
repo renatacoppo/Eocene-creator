@@ -16,7 +16,7 @@ import xarray as xr
 import matplotlib.pyplot as plt
 
 from .base import BathymetryProcessor
-from config import get_corrections_for_grid
+from ecefast.components.nemo.config import get_corrections_for_grid
 
 logger = logging.getLogger("nemo.processors.present_day")
 

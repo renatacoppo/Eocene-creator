@@ -5,8 +5,10 @@ This repository provides a workflow to prepare Eocene boundary conditions for EC
 The main entry point is:
 
 ```bash
-./eocene/cli-eocene.py
+ecefast eocene ...
 ```
+
+(the old `eocene` command does the same; it is removed in phase 4b of the refactor).
 
 ## What the CLI does
 
@@ -41,7 +43,8 @@ pip install -e .
 From the repository root:
 
 ```bash
-python eocene/cli-eocene.py -c eocene/config.yml --copy
+cp configs/eocene.tmpl configs/eocene.yml   # then set the paths; configs/*.yml is gitignored
+ecefast eocene -c configs/eocene.yml --copy
 ```
 
 ## Command-line options
@@ -56,11 +59,11 @@ python eocene/cli-eocene.py -c eocene/config.yml --copy
 Examples:
 
 ```bash
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --copy
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --run oifs -l DEBUG
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --run nemo -l INFO
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --run rnfm
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --run all --copy
+ecefast eocene -c configs/eocene.yml --copy
+ecefast eocene -c configs/eocene.yml --run oifs -l DEBUG
+ecefast eocene -c configs/eocene.yml --run nemo -l INFO
+ecefast eocene -c configs/eocene.yml --run rnfm
+ecefast eocene -c configs/eocene.yml --run all --copy
 ```
 
 ## Configuration file
@@ -86,7 +89,7 @@ Field meaning:
 - `domain`: directory containing `domain_cfg.nc` and `maskutil.nc` modified for Eocene bathymetry
 - `tmpdir`: reserved temporary directory path (not used yet)
 
-A template is available in `eocene/config.tmpl`.
+A template is available in `configs/eocene.tmpl`.
 
 ## What `--copy` copies
 

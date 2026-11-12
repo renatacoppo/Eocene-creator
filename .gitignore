@@ -1,9 +1,10 @@
-eocene.egg-info
+*.egg-info
 dist
 __pycache__/
 *.idx
 .vscode/
 eocene/*.yml
+configs/*.yml
 *.grb
 *.grib
 *.nc

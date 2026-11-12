@@ -16,8 +16,8 @@ import os
 import argparse
 import shutil
 import cdo
-from utils_oifs import extract_grid_info, ecmwf_grid
-from utils_oifs import unpack_grib_file, repack_grib_file
+from ecefast.components.oifs.utils_oifs import extract_grid_info, ecmwf_grid
+from ecefast.components.oifs.utils_oifs import unpack_grib_file, repack_grib_file
 
 cdo = cdo.Cdo()
 cdo.debug = True

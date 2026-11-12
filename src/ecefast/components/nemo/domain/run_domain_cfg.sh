@@ -2,7 +2,7 @@
 # run_domain_cfg.sh <domaincfg_dir> <name1> [name2 ...]
 #
 # HPC-only block: module loading, compilation, and execution of the NEMO
-# DOMAINcfg tool. Called from cli-domain-paleorca.py via subprocess.
+# DOMAINcfg tool. Called from ecefast/components/nemo/domain/pipeline.py via subprocess.
 # Module loading must live here — it cannot propagate back to a Python parent process.
 
 set -euo pipefail

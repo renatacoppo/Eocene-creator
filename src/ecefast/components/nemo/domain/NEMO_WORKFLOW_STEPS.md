@@ -3,7 +3,7 @@
 ## Overview
 This workflow processes bathymetry and coordinate data to generate NEMO domain configuration files for both present-day and Eocene paleoenvironments on the PALEORCA2 grid.
 
-**Main Entry Point**: `cli-domain-paleorca.py --config nemo_workflow.yaml`
+**Main Entry Point**: `ecefast nemo-domain --config nemo_workflow.yaml`
 
 **Configuration**: Controlled via `nemo_workflow.yaml` with profile-based paths:
 - `output_dir`: Base output directory (coordinates/, bathymetry/, domain/)
@@ -66,7 +66,7 @@ Workflow steps controlled via `steps` flags in YAML:
 
 - Remove halo from target grid coordinates (`coords_ori`) using CDO `sethalo(-1,-1)`
   - Output: `{output_dir}/coordinates/PALEORCA2/coords_halo.nc`
-- Generate coordinate bounds for both T and F staggering via `generate-orca-bounds.py`
+- Generate coordinate bounds for both T and F staggering via `orca_bounds.py`
   - Target grid: `coords_bounds_T.nc`, `coords_bounds_F.nc` (from coords_halo.nc)
   - Source grid: `coords_bounds_T.nc`, `coords_bounds_F.nc` (from mesh_mask)
 - Staggering selection controlled by `grids.staggering_target` and `grids.staggering_source`
@@ -75,7 +75,7 @@ Workflow steps controlled via `steps` flags in YAML:
 
 ## Step 3: Present-Day Bathymetry Processing
 **YAML Key**: `steps.bathymetry`, `bathymetries[name=present_day]`
-**Processor**: `PresentDayBathymetry` (processors/present_day.py)
+**Processor**: `PresentDayBathymetry` (bathymetry/present_day.py)
 **Method**: `NEMOWorkflow.process_bathymetry(cfg)`
 
 ### 3a. Extract and Remap Bathymetry
@@ -96,7 +96,7 @@ Workflow steps controlled via `steps` flags in YAML:
 
 ## Step 4: Eocene Paleobathymetry Processing
 **YAML Key**: `steps.bathymetry`, `bathymetries[name=eocene]`
-**Processor**: `EoceneBathymetry` (processors/eocene.py)
+**Processor**: `EoceneBathymetry` (ecefast/paleo/eocene/bathymetry.py)
 **Method**: `NEMOWorkflow.process_bathymetry(cfg)`
 
 ### 4a. Extract and Remap Paleobathymetry
@@ -119,7 +119,7 @@ Workflow steps controlled via `steps` flags in YAML:
 ## Step 5: Configure Domain Namelists
 **YAML Key**: `steps.configure_domain`
 **Method**: `NEMOWorkflow.configure_domain_namelists()`
-**Script**: `domain-tools/config-namelist-domain.py`
+**Script**: `domain/namelist.py`
 
 - Read bathymetry files and extract grid dimensions automatically
 - Generate NEMO DOMAINcfg namelists via Jinja2 template (`namelist_cfg.j2`)
@@ -137,7 +137,7 @@ Workflow steps controlled via `steps` flags in YAML:
 ## Step 6: Run NEMO Domain Configuration Tool (HPC)
 **YAML Key**: `steps.domain_cfg`
 **Method**: `NEMOWorkflow.run_domain_cfg()`
-**Script**: `domain-tools/run_domain_cfg.sh`
+**Script**: `domain/run_domain_cfg.sh`
 
 - Load HPC modules from `config/hpc_modules.yaml` (environment: atos)
   - Modules: prgenv/intel, intel/2021.4.0, hdf5-parallel/1.12.2, netcdf4-parallel/4.9.1, etc.
@@ -176,7 +176,7 @@ Workflow steps controlled via `steps` flags in YAML:
 ## Step 8: Generate Ocean Subbasin Masks (Present-Day Only)
 **YAML Key**: `steps.generate_subbasins`
 **Method**: `NEMOWorkflow.generate_subbasins()`
-**Script**: `domain-tools/generate-subbasins.py`
+**Script**: `domain/subbasins.py`
 
 - Only runs for `PresentDayBathymetry` processor (skips Eocene)
 - Read `mesh_mask_{name}.nc` from `{domaincfg_dir}/DOMAINcfg/`
