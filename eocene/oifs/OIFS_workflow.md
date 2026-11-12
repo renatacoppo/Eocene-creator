@@ -4,7 +4,7 @@ This guide tries to put together some info on the procedure developed to set up 
 
 > The guides assumes you already have a TL63L31 configuration up and running
 
-> A lot of the procedure is taken from the `modify_oifs.ipynb` notebook which builds on the `EoceneOIFS` class 
+> A lot of the procedure is taken from the former `modify_oifs.ipynb` notebook (now replaced by `notebooks/analysis/plots.ipynb`) which builds on the `EoceneOIFS` class 
 
 This guides provide some clarification the generation of the 4 fundamental files required for OIFS. 
 
