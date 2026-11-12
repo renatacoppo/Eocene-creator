@@ -194,7 +194,7 @@ class EoceneNEMO():
             None (default): build both profiles below, one file each.
             "deepmip_cold": idealized cold DeepMIP-like profile (output suffix deepmip-30).
             "woa_pi": zonal mean of present-day WOA over the present-day ocean,
-                      broadcast in longitude (output suffix woa-pi).
+            broadcast in longitude (output suffix woa-pi).
         so_value : float
             Salinity to assign everywhere (default = 34.7).
         output_file : str or None

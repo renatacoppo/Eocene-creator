@@ -70,10 +70,11 @@ class EoceneOIFS():
         Create a new topographic variable (land-sea mask, opensea mask, bathymetry, orography, sd_orography)
         from the topography and sd topography data.
 
-        Args:
-            data (xarray.Dataset): Topography data.
-            flag (str): Type of variable to create. One of:
-                        "landsea_mask", "mask_opensea", "bathymetry", "orography", "sd_orography".
+        Parameters
+        ----------
+        flag : str
+            Type of variable to create. One of:
+            "landsea_mask", "mask_opensea", "bathymetry", "orography", "sd_orography".
         """
 
         if not flag:
