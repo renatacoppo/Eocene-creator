@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Pull a subset of ECE4-DATA-V3 from a remote: OIFS TL63L31, NEMO PALEORCA2 (+ grid-independent
-# initial files and the ORCA2 domain read by the Eocene workflow), OASIS PALEORCA2, runoff-mapper.
+# initial files and the ORCA2 domain read by the Eocene workflow, eORCA1 domain read by the present-day
+# bathymetry of the NEMO domain pipeline), OASIS PALEORCA2, runoff-mapper.
 # Usage: ./get_ece4_data.sh user@host:/path/to/ECE4-DATA-V3 [/local/dest] [-n]
 #        ECE4_DATA_SRC=user@host:/path/to/ECE4-DATA-V3 ./get_ece4_data.sh
 #   -n  dry run (list what would be transferred)
@@ -35,6 +36,7 @@ rsync -avhL -m --partial --progress ${DRY:+--dry-run} \
   --include='/nemo/initial/zdfiwm_forcing_r720x360.nc' \
   --include='/nemo/initial/Goutorbe_ghflux.nc' \
   --include='/nemo/domain/ORCA2/domain_cfg.nc' \
+  --include='/nemo/domain/eORCA1/domain_cfg.nc' \
   --include='/nemo/**/PALEORCA2/***' \
   --include='/nemo/**PALEORCA2*' \
   --include='/nemo/**/' \
