@@ -27,6 +27,10 @@ class EoceneBathymetry(BathymetryProcessor):
     mask_type = "negative_elevation"
     remap_method = "remapbil"
     output_prefix = "HEROLD"
+    # Global subbasin mask only: the present-day basin polygons do not fit Eocene geography (unassigned NE Pacific,
+    # Pacific west of South America labelled Atlantic, cuts through open water in the Tethys and north of
+    # Australia). Assessment and options: notebooks/analysis/eocene-subbasins.ipynb, PR #39, issue #16.
+    regional_subbasins = False
     # setgrid is None — source file already carries a proper grid description
 
 

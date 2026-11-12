@@ -132,6 +132,27 @@ def test_fake_pipeline_end_to_end(tmp_path: Path) -> None:
         assert domain["bottom_level"].values[0, 2, 4] == 5  # the 50 m point
 
 
+def test_subbasins_for_every_bathymetry(tmp_path: Path) -> None:
+    """``generate_subbasins`` writes ``subbasins.nc`` for every bathymetry (task 5.3): all masks for present day,
+    the global mask only for the Eocene (``EoceneBathymetry.regional_subbasins`` is False)."""
+    # both use the synthetic remapped bathymetry: only the processor class matters here
+    bathy = "{output_dir}/bathymetry/PALEORCA2/HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc"
+    bathymetries = [
+        {"name": "present_day", "processor": "PresentDayBathymetry", "source_file": "x", "output_file": bathy},
+        {"name": "eocene", "processor": "EoceneBathymetry", "source_file": "{herold}/topo.nc"},
+    ]
+    steps = {**STEPS_WITHOUT_GRIDS, "generate_subbasins": True}
+    config = write_config(tmp_path, steps=steps, bathymetries=bathymetries)
+    cli.main(["nemo", "domain", "-c", str(config), "-l", "WARNING"])
+    expected = {"present_day": ["atlmsk", "pacmsk", "indmsk", "indpacmsk", "glomsk"], "eocene": ["glomsk"]}
+    for name, variables in expected.items():
+        domain_dir = tmp_path / "domain" / "domain" / "PALEORCA2" / name
+        assert sorted(p.name for p in domain_dir.iterdir()) == ["domain_cfg.nc", "maskutil.nc", "subbasins.nc"]
+        with xr.open_dataset(domain_dir / "subbasins.nc") as masks, xr.open_dataset(domain_dir / "maskutil.nc") as m:
+            assert list(masks.data_vars) == variables, name
+            np.testing.assert_array_equal(masks["glomsk"].values, m["tmaskutil"].values[0])
+
+
 def test_cli_without_nemo_domain_section(tmp_path: Path) -> None:
     config_file = write_config(tmp_path)
     raw = yaml.safe_load(config_file.read_text())
