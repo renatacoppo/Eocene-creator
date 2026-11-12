@@ -30,6 +30,14 @@ Changed
   dropped, phases 1 and 4 split, Eocene subbasins as the one planned output change (#18).
 - Refactor work moves to the ``refactor`` branch; ``docs/refactor-plan.md`` gets the task and wave
   table; ``data/`` is ignored (#16).
+- ``EoceneNEMO.create_ocean_init`` defaults to ``profile=None``, which builds both ocean initial
+  files (``deepmip_cold`` and ``woa_pi``); the ``eocene`` CLI calls it without arguments (#PR).
+
+Output
+~~~~~~
+
+- ``nemo/initial/woa13-levitus-L31_deepmip-30.nc`` is now built alongside
+  ``nemo/initial/woa13-levitus-L31_woa-pi.nc`` (#PR).
 
 0.0.2
 -----

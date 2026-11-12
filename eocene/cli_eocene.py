@@ -109,7 +109,7 @@ def run_nemo(config, logger):
     # Create NEMO modifications
     eocene_nemo.create_tidal_mixing()
     eocene_nemo.create_geothermal_flux()
-    eocene_nemo.create_ocean_init(profile="woa_pi")
+    eocene_nemo.create_ocean_init()
     eocene_nemo.create_runoff()
 
 def run_runoff(config, logger):
