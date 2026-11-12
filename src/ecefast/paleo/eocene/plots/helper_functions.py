@@ -1,13 +1,11 @@
 import xarray as xr
 import numpy as np
-from cdo import Cdo
+from ecefast.core.cdo import get_cdo
 
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import tempfile
 from ecefast.paleo.eocene.oifs.utils import spectral2gaussian
-
-cdo = Cdo()
 
 
 # Sanity check helper
@@ -30,7 +28,7 @@ def load_grib_var(gribfile, varname, grid="r360x180"):
     with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
         outfile = tmp.name
 
-    cdo.remapnn(grid, input=f"-selname,{varname} {gribfile}", output=outfile, options="-f nc4")
+    get_cdo().remapnn(grid, input=f"-selname,{varname} {gribfile}", output=outfile, options="-f nc4")
 
     ds = xr.open_dataset(outfile)
 
@@ -49,10 +47,10 @@ def load_grib_var_spec(gribfile, varname, grid="r360x181"):
 
     try:
         # try gridpoint first
-        cdo.remapnn(grid, input=f"-selname,{varname} {gribfile}", output=outfile, options="-f nc4")
+        get_cdo().remapnn(grid, input=f"-selname,{varname} {gribfile}", output=outfile, options="-f nc4")
     except Exception:
         # fallback: spectral → gridpoint
-        cdo.sp2gp(input=f"-selname,{varname} {gribfile}", output=outfile, options="-f nc4")
+        get_cdo().sp2gp(input=f"-selname,{varname} {gribfile}", output=outfile, options="-f nc4")
 
     ds = xr.open_dataset(outfile)
     return list(ds.data_vars.values())[0]

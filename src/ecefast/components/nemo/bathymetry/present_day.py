@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 from .base import BathymetryProcessor
 from ecefast.components.nemo.config import get_corrections_for_grid
 
-logger = logging.getLogger("nemo.processors.present_day")
+logger = logging.getLogger(__name__)
 
 
 class PresentDayBathymetry(BathymetryProcessor):

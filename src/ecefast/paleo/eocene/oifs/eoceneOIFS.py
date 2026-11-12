@@ -6,7 +6,7 @@ import xarray as xr
 import numpy as np
 import shutil
 import tempfile
-from cdo import Cdo
+from ecefast.core.cdo import get_cdo
 
 from .utils import modify_single_grib, nullify_grib
 from .utils import modify_value, replace_value, regrid_dataset, truncate_grib_file, flatten_grib_steps
@@ -16,8 +16,7 @@ from .lsmgrd import lsmgrd
 from .subgrid_orog import compute_slope
 from .vegetation import vegetation_zhang
 
-cdo = Cdo()
-loggy = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class EoceneOIFS:
@@ -134,7 +133,9 @@ class EoceneOIFS:
         if flag in ["landsea_mask", "orography", "sd_orography"]:
             if os.path.exists(os.path.join(self.herold, f"{flag}_remap.nc")):
                 os.remove(os.path.join(self.herold, f"{flag}_remap.nc"))
-            cdo.remapcon(f"F{self.gaussian}", input=filename, output=os.path.join(self.herold, f"{flag}_remap.nc"))
+            get_cdo().remapcon(
+                f"F{self.gaussian}", input=filename, output=os.path.join(self.herold, f"{flag}_remap.nc")
+            )
             return os.path.join(self.herold, f"{flag}_remap.nc")
         else:
             return filename
@@ -151,10 +152,10 @@ class EoceneOIFS:
         with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
             icmgg_remap = tmp.name
 
-        loggy.info("Reading land-sea mask from %s", icmgg_file)
+        logger.info("Reading land-sea mask from %s", icmgg_file)
 
         # Convert GRIB to regular Gaussian NetCDF
-        cdo.remapnn(
+        get_cdo().remapnn(
             f"F{self.gaussian}", input=f"-setgridtype,regular {icmgg_file}", output=icmgg_remap, options="-f nc4"
         )
 
@@ -169,7 +170,7 @@ class EoceneOIFS:
         if lsm.dims != ("lat", "lon"):
             lsm = lsm.transpose("lat", "lon")
 
-        loggy.info("Land-sea mask prepared with shape %s and dims %s", lsm.shape, lsm.dims)
+        logger.info("Land-sea mask prepared with shape %s and dims %s", lsm.shape, lsm.dims)
 
         # Clean up temporary file
         os.remove(icmgg_remap)
@@ -381,7 +382,7 @@ class EoceneOIFS:
         }
 
         for name, step in steps.items():
-            loggy.debug(
+            logger.debug(
                 "Step '%s': variables=%s myfunction=%s kwargs=%s",
                 name,
                 step["variables"],
@@ -399,7 +400,7 @@ class EoceneOIFS:
             )
 
         # Zero out snow depth / related fields (different function signature)
-        loggy.debug("Modifying': variables=%s", "sd")
+        logger.debug("Modifying': variables=%s", "sd")
         nullify_grib(inputfile=output_surface, outputfile=output_surface, variables=["sd"])
 
     def create_iniua(self):
@@ -428,7 +429,7 @@ class EoceneOIFS:
         on the IFS grid, using the US Standard Atmosphere for density interpolation.
         """
 
-        loggy.info("Loading Herold aerosol data")
+        logger.info("Loading Herold aerosol data")
         paleoaerfile = os.path.join(self.herold, "herold_etal_eocene_CAM4_BAM_aerosols.nc")
         aer_paleo = xr.open_dataset(paleoaerfile)
 
@@ -449,7 +450,7 @@ class EoceneOIFS:
         # Check or generate US Standard Atmosphere
         ua_file = os.path.join(self.herold, "us_standard_atmosphere_newlevs.nc")
         if not os.path.exists(ua_file):
-            loggy.info("Generating US Standard Atmosphere data")
+            logger.info("Generating US Standard Atmosphere data")
             # US Standard Atmosphere data (alt, temp, g, pressure, density, mu)
             data = """
             -1000   21.50   9.810   11.39   1.347   1.821
@@ -502,7 +503,7 @@ class EoceneOIFS:
             new_log_pressure = np.log(aer_paleo.lev)
             ds_interp = ds_new.interp(log_pressure=new_log_pressure, method="linear")
             ds_interp.to_netcdf(ua_file)
-            loggy.info("US Standard Atmosphere saved at %s", ua_file)
+            logger.info("US Standard Atmosphere saved at %s", ua_file)
         else:
             ds_interp = xr.open_dataset(ua_file)
 
@@ -522,7 +523,7 @@ class EoceneOIFS:
         }
 
         # Convert mixing ratio (kg/kg) -> mass concentration (kg/m3)
-        loggy.info("Converting aerosol mixing ratios")
+        logger.info("Converting aerosol mixing ratios")
 
         aer_mass = xr.Dataset()
 
@@ -530,7 +531,7 @@ class EoceneOIFS:
             aer_mass[ifs_name] = aer_paleo_newbin[herold_name] * ds_interp.density
 
         # Regrid all variables simultaneously
-        loggy.info("Regridding aerosol fields")
+        logger.info("Regridding aerosol fields")
 
         aer_mass_rg = regrid_dataset(
             aer_mass,
@@ -540,7 +541,7 @@ class EoceneOIFS:
         aer_mass_rg = aer_mass_rg.assign_coords(altitude=("lev", ds_interp.altitude.values))
 
         # Vertical integration
-        loggy.info("Computing column-integrated aerosol mass")
+        logger.info("Computing column-integrated aerosol mass")
 
         for var in var_dict.keys():
             colmass = -aer_mass_rg[var].integrate(coord="altitude")
@@ -553,5 +554,5 @@ class EoceneOIFS:
             os.remove(output_path)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         aer_ifs_paleo.to_netcdf(output_path)
-        loggy.info("Eocene aerosol data saved at %s", output_path)
+        logger.info("Eocene aerosol data saved at %s", output_path)
         return output_path

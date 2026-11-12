@@ -48,6 +48,10 @@ Changed
 - ``environment.yaml``: Python >= 3.11, all Python dependencies from conda-forge, ``jinja2`` and
   ``shapely`` declared; CDO is no longer part of the environment (system CDO, not pinned; the
   baseline records its version) (#24).
+- One logger hierarchy ``ecefast``: ``core.logger.setup_logger`` replaces the NEMO
+  ``setup_logging``, modules log through ``logging.getLogger(__name__)``; one shared, lazily
+  created ``Cdo`` instance (``core.cdo.get_cdo``), so importing a module no longer starts CDO; the
+  ``eocene`` CLI and the NEMO domain pipeline log the CDO version at start (#PRNUM).
 - Whole repository formatted with ``ruff format`` in one formatting-only commit (#25).
 - All code moves into one ``ecefast`` package with a ``src/`` layout (``core``, ``tools``,
   ``components``, ``paleo/eocene``, ``cli``); new ``ecefast`` command with the ``eocene`` and

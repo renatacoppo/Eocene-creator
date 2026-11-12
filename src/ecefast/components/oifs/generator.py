@@ -15,12 +15,10 @@ import subprocess
 import os
 import argparse
 import shutil
-import cdo
+from ecefast.core.cdo import get_cdo
 from ecefast.components.oifs.utils_oifs import extract_grid_info, ecmwf_grid
 from ecefast.components.oifs.utils_oifs import unpack_grib_file, repack_grib_file
 
-cdo = cdo.Cdo()
-cdo.debug = True
 
 # configurable
 target_grid = "TL63L31"
@@ -83,7 +81,7 @@ def generate_spectral_conditions(OIFS_IC, spectral, TMPDIR):
     # NEW PROCEDURE FOR CY48
     # in cycle all is grb2 so no problem with this
     print("Truncating spectral file ICMSHECE4INIT to", spectral, "harmonics")
-    cdo.sp2sp(spectral, input=f"{OIFS_IC}/ICMSHECE4INIT", output=f"{TMPDIR}/ICMSHECE4INIT", options=GRIB2)
+    get_cdo().sp2sp(spectral, input=f"{OIFS_IC}/ICMSHECE4INIT", output=f"{TMPDIR}/ICMSHECE4INIT", options=GRIB2)
 
     # OLD PROCEDURE FOR CY43
     # The file has to be split in two since orography is GRIB1 and the rest is GRIB2
@@ -117,7 +115,7 @@ def generate_gridpoint_conditions(OIFS_IC, target_spectral, TMPDIR, clean=True):
         # interpolate
         for grbfile in [grib1, grib2]:
             if os.path.exists(grbfile):
-                cdo.remapnn(gridfile, input=grbfile, output=f"{grbfile}.remap", options="--eccodes")
+                get_cdo().remapnn(gridfile, input=grbfile, output=f"{grbfile}.remap", options="--eccodes")
         # pack them together
         repack_grib_file(f"{grib1}.remap", f"{grib2}.remap", f"{TMPDIR}/{file}")
         if clean:
@@ -141,8 +139,8 @@ def generate_boundary_conditions(OIFS_BC, target_grid, climate_version, TMPDIR, 
         print("Building BCs from", ecmwf_name, "data")
         variables = ["alb", "aluvp", "aluvd", "alnip", "alnid", "lail", "laih"]
         paths = [f"{OIFS_BC['compute']}/{ecmwf_name}/month_{var}" for var in variables]
-        cdo.mergetime(options="-L", input=paths, output=f"{TMPDIR}/temp.grb")
-        cdo.settaxis("2021-01-15,00:00:00,1month", input=f"{TMPDIR}/temp.grb", output=f"{BC_TGT}/ICMCLECE4-1990")
+        get_cdo().mergetime(options="-L", input=paths, output=f"{TMPDIR}/temp.grb")
+        get_cdo().settaxis("2021-01-15,00:00:00,1month", input=f"{TMPDIR}/temp.grb", output=f"{BC_TGT}/ICMCLECE4-1990")
         os.remove(f"{TMPDIR}/temp.grb")
 
 
@@ -162,8 +160,8 @@ def vertical_interpolation(TMPDIR, GRIDS, target_spectral, vertical, IC_TGT, do_
     print("Vertical interpolation is necessary")
     print("Select z and lnsp from ICMSHECE4INIT...")
     VERTVALUES = (int(vertical) + 1) * 2
-    cdo.selname("z", input=f"{TMPDIR}/ICMSHECE4INIT", output=f"{TMPDIR}/orog.grb", options=GRIB2)
-    cdo.selname("lnsp", input=f"{TMPDIR}/ICMSHECE4INIT", output=f"{TMPDIR}/lnsp.grb", options=GRIB2)
+    get_cdo().selname("z", input=f"{TMPDIR}/ICMSHECE4INIT", output=f"{TMPDIR}/orog.grb", options=GRIB2)
+    get_cdo().selname("lnsp", input=f"{TMPDIR}/ICMSHECE4INIT", output=f"{TMPDIR}/lnsp.grb", options=GRIB2)
 
     # Modify lnsp to avoid CDO issues
     subprocess.call(
@@ -172,12 +170,12 @@ def vertical_interpolation(TMPDIR, GRIDS, target_spectral, vertical, IC_TGT, do_
 
     # Convert spectral fields to Gaussian grid
     print("Converting ICMSHECE4INIT to Gaussian grid")
-    cdo.sp2gpl(input=f"{TMPDIR}/ICMSHECE4INIT", output=f"{TMPDIR}/sp2gauss.grb", options=GRIB2)
+    get_cdo().sp2gpl(input=f"{TMPDIR}/ICMSHECE4INIT", output=f"{TMPDIR}/sp2gauss.grb", options=GRIB2)
 
     # Remap spectral fields to Gaussian reduced grid
     print("Remapping spectral fields from Gaussian to Gaussian reduced")
-    remapped = cdo.remapcon(f"{GRIDS}/{target_spectral}_grid.nc", input=f"{TMPDIR}/sp2gauss.grb", options=GRIB2)
-    cdo.setgrid(f"grids/{target_spectral}.txt", input=remapped, output=f"{TMPDIR}/sp2gauss_reduced.grb")
+    remapped = get_cdo().remapcon(f"{GRIDS}/{target_spectral}_grid.nc", input=f"{TMPDIR}/sp2gauss.grb", options=GRIB2)
+    get_cdo().setgrid(f"grids/{target_spectral}.txt", input=remapped, output=f"{TMPDIR}/sp2gauss_reduced.grb")
 
     # Merge files for interpolation
     print("Merging files")
@@ -187,11 +185,11 @@ def vertical_interpolation(TMPDIR, GRIDS, target_spectral, vertical, IC_TGT, do_
     # Perform hybrid levels interpolation
     print("Remapping vertical on hybrid levels")
     gridfile = f"grids/L{vertical}.txt"
-    cdo.remapeta(gridfile, input=f"{TMPDIR}/single.grb", output=f"{TMPDIR}/remapped.grb", options=GRIB2)
+    get_cdo().remapeta(gridfile, input=f"{TMPDIR}/single.grb", output=f"{TMPDIR}/remapped.grb", options=GRIB2)
 
     # Create INITUA file
     print("Selecting fields to create ICMSHECE4INIUA and setting Gaussian reduced grid")
-    cdo.setgrid(
+    get_cdo().setgrid(
         f"grids/{target_spectral}.txt",
         input=f"-selname,q,o3,crwc,cswc,clwc,ciwc,cc {TMPDIR}/remapped.grb",
         output=f"{IC_TGT}/ICMGGECE4INIUA",
@@ -200,7 +198,7 @@ def vertical_interpolation(TMPDIR, GRIDS, target_spectral, vertical, IC_TGT, do_
 
     # Convert back to spectral space
     print("Converting back to spectral (through Gaussian regular) the spectral fields")
-    cdo.gp2spl(
+    get_cdo().gp2spl(
         input=f"-setgridtype,regular -selname,t,vo,d {TMPDIR}/remapped.grb",
         output=f"{TMPDIR}/spback.grb",
         options="--eccodes",
@@ -235,6 +233,8 @@ def vertical_interpolation(TMPDIR, GRIDS, target_spectral, vertical, IC_TGT, do_
 
 
 if __name__ == "__main__":
+    get_cdo().debug = True
+
     # Parse command-line arguments
     args = parse_arguments()
     target_grid = args.target

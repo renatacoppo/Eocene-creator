@@ -5,9 +5,7 @@ import os
 import numpy as np
 import xarray as xr
 import subprocess
-from cdo import Cdo
 
-cdo = Cdo()
 
 # CDO grib2 options
 GRIB2 = "-f grb2 --eccodes"

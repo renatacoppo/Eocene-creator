@@ -40,7 +40,7 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 | 1.3 ✅ | Docs skeleton, `docs.yml` workflow, `.readthedocs.yaml` | `docs/*.rst`, `docs/conf.py`, `.github/workflows/docs.yml` | 0.5 | ‖ 1.1, 1.2 |
 | 1.4 ✅ | ruff config, one format-only commit, `.git-blame-ignore-revs` | everything | 1.1–1.3 | serial |
 | 2.1 ✅ | `src/` move, import fixes, broken scripts, package data, `ecefast` entry point; `common/executor.py` runs scripts with `sys.executable`, not `python3` from PATH | everything | 1.4 | serial, freeze |
-| 3.0 | `core/logging`, `core/cdo`; replace 2 loggers and 8 `Cdo()` | imports in many files | 2.1 | serial |
+| 3.0 ✅ | `core/logging`, `core/cdo`; replace 2 loggers and 8 `Cdo()` | imports in many files | 2.1 | serial |
 | 3.1 | Config schema v1, `configs/*.tmpl`, `configuration.rst`, migrate both configs | `core/config.py`, `configs/`, docs | 3.0 | ‖ 3.2, 3.3 |
 | 3.2 | `core/grib.py` merge; Eocene OIFS non-GRIB helpers to `fields.py` | `components/oifs/`, `paleo/eocene/oifs/` | 3.0 | ‖ 3.1, 3.3 |
 | 3.3 | `components/nemo/domain/postprocess.py`; delete `domain/mask_util.py` | `components/nemo/domain/` | 3.0 | ‖ 3.1, 3.2 |
@@ -194,8 +194,9 @@ Done when: `pip install -e .` works; both baselines match; CI green.
 
 ## Phase 3: shared helpers and config (PR)
 
-- [ ] `core/logging.py` (one `ecefast` logger), `core/config.py` (one YAML loader).
-- [ ] `core/cdo.py`: one shared `Cdo` instance/accessor; replace the 8 module-level `Cdo()`.
+- [x] `core/logger.py` (one `ecefast` logger) (task 3.0).
+- [ ] `core/config.py` (one YAML loader).
+- [x] `core/cdo.py`: one shared `Cdo` instance/accessor; replace the module-level `Cdo()` (task 3.0).
 - [ ] `core/grib.py`: merge `utils_oifs.py` and the GRIB half of `paleo/eocene/oifs/utils.py` (`unpack/repack_grib_file`,
       `extract_grid_info`); the rest → `paleo/eocene/oifs/fields.py`.
 - [ ] `components/nemo/domain/postprocess.py`: one `domain_cfg` + `maskutil` writer (keep `common/util.py`; delete

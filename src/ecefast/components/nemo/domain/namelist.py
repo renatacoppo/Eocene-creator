@@ -7,7 +7,10 @@ import os
 from jinja2 import Environment, FileSystemLoader
 import xarray as xr
 
-logger = logging.getLogger("nemo.domain_tools")
+from ecefast.core.logger import setup_logger
+
+# explicit name: this file runs as a script (pipeline subprocess), where __name__ is "__main__"
+logger = logging.getLogger("ecefast.components.nemo.domain.namelist")
 
 
 def get_args():
@@ -66,15 +69,7 @@ def find_bathymetry_variable(file):
 
 def main(args):
     """Main function to generate the namelist_cfg file based on the provided bathymetry and coordinates files."""
-    level = getattr(logging, args.log_level.upper(), logging.INFO)
-    root = logging.getLogger("nemo")
-    root.setLevel(level)
-    root.propagate = False
-    handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s | %(name)s | %(levelname)8s -> %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    )
-    root.addHandler(handler)
+    setup_logger(args.log_level)
 
     file = xr.open_dataset(args.bathymetry)
 

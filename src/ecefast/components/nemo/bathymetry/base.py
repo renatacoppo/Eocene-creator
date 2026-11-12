@@ -18,7 +18,7 @@ import logging
 import os
 import tempfile
 
-logger = logging.getLogger("nemo.processors")
+logger = logging.getLogger(__name__)
 
 
 # CDO operator chains and sign-flip flag per mask type.

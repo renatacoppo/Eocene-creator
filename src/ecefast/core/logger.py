@@ -1,45 +1,47 @@
-"""Module to implement logging configurations"""
+"""The ``ecefast`` logger.
+
+Every module logs through ``logging.getLogger(__name__)``, so all loggers sit under ``ecefast``. Entry points
+(the CLI and the NEMO helper scripts) call :func:`setup_logger` once to attach the handler and set the level.
+"""
 
 import logging
 
+LOGGER_NAME = "ecefast"
+LOG_FORMAT = "%(asctime)s | %(name)s | %(levelname)8s -> %(message)s"
+DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-def setup_logger(level=None, name=None):
-    """Define a logger to be used extensively within smmregrid"""
 
-    if name is None:
-        name = "eocene"
+def setup_logger(level: str | int | None = None) -> logging.Logger:
+    """Configure the ``ecefast`` logger and return it.
 
-    loglev = convert_logger(level)
+    Calling it again only updates the level; it never adds a second handler.
 
-    logger = logging.getLogger(name)  # Create a logger specific to your module
+    Parameters
+    ----------
+    level : str, int or None
+        Log level name (``"DEBUG"``, ``"INFO"``, ...) or number. ``None`` means ``"WARNING"``.
 
-    if logger.handlers:
-        if level != logging.getLevelName(logger.getEffectiveLevel()):
-            logger.setLevel(loglev)
-            logger.info("Updating the log_level to %s", loglev)
-        return logger
+    Returns
+    -------
+    logging.Logger
+        The ``ecefast`` logger.
+    """
+    logger = logging.getLogger(LOGGER_NAME)
+    logger.setLevel(convert_logger(level))
 
-    # avoid duplication/propagation of loggers
-    logger.propagate = False
-
-    logger.setLevel(loglev)  # Set the desired log level
-
-    # Create a formatter to specify the log format
-    formatter = logging.Formatter("%(asctime)s | %(name)s | %(levelname)8s -> %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-
-    # Create a handler for the logger
-    handler = logging.StreamHandler()
-    # handler.setLevel(loglev)  # Set the desired log level for the handler
-    handler.setFormatter(formatter)  # Assign the formatter to the handler
-    logger.addHandler(handler)  # Add the handler to the logger
+    if not logger.handlers:
+        # avoid duplication through the root logger
+        logger.propagate = False
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
+        logger.addHandler(handler)
 
     return logger
 
 
-def convert_logger(loglev=None):
-    """Convert a string or integer to a valid logging level"""
+def convert_logger(loglev: str | int | None = None) -> str:
+    """Convert a string or integer to a valid logging level name."""
 
-    # Default log level for the AQUA framework
     loglev_default = "WARNING"
 
     # If loglev is a string, convert it to uppercase

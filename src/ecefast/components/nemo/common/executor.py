@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-logger = logging.getLogger("nemo.commands.executor")
+logger = logging.getLogger(__name__)
 
 # Helper scripts live in the package (ecefast/components/nemo), not in the caller's cwd.
 NEMO_DIR = Path(__file__).resolve().parents[1]

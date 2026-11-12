@@ -19,10 +19,9 @@ import subprocess
 import xesmf as xe
 import shutil
 import tempfile
-from cdo import Cdo
+from ecefast.core.cdo import get_cdo
 
-cdo = Cdo()
-loggy = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _to_tll(field):
@@ -41,18 +40,18 @@ def vegetation_zhang(field, var=None, herold_path=None, gaussian=None, **kwargs)
     Always returns a Dataset with tvh, tvl, cvh, cvl.
     """
 
-    loggy.info("Starting vegetation mapping (Zhang method)")
+    logger.info("Starting vegetation mapping (Zhang method)")
 
     # --- Load Herold biome data and remap ---
     herold_file = os.path.join(herold_path, "herold_etal_eocene_biome_1x1.nc")
-    loggy.debug(f"Loading Herold file: {herold_file}")
+    logger.debug(f"Loading Herold file: {herold_file}")
 
-    herold_remap = cdo.remapnn(
+    herold_remap = get_cdo().remapnn(
         f"F{gaussian}",
         input=herold_file,
         # output=os.path.join(herold_path, "herold_etal_eocene_biome_1x1_N32.nc")
     )
-    loggy.debug(f"Remapped Herold file: {herold_remap}")
+    logger.debug(f"Remapped Herold file: {herold_remap}")
 
     herold = xr.open_dataset(herold_remap)
 
@@ -62,7 +61,7 @@ def vegetation_zhang(field, var=None, herold_path=None, gaussian=None, **kwargs)
     cvh = xr.zeros_like(tvh)
     cvl = xr.zeros_like(tvl)
 
-    loggy.debug(f"Initial shapes tvh={tvh.shape}, tvl={tvl.shape}, cvh={cvh.shape}, cvl={cvl.shape}")
+    logger.debug(f"Initial shapes tvh={tvh.shape}, tvl={tvl.shape}, cvh={cvh.shape}, cvl={cvl.shape}")
 
     # === Biome to vegetation ID mappings ===
     # Herold et al. (2014) biomes (BIOME4 megabiomes):
@@ -89,7 +88,7 @@ def vegetation_zhang(field, var=None, herold_path=None, gaussian=None, **kwargs)
     }
 
     for biome_id in range(1, 10):  # assuming biome IDs go from 1 to 9
-        loggy.debug(f"Processing biome {biome_id}")
+        logger.debug(f"Processing biome {biome_id}")
 
         mask = herold["eocene_biome_hp"] == biome_id
 
@@ -98,23 +97,23 @@ def vegetation_zhang(field, var=None, herold_path=None, gaussian=None, **kwargs)
             mask = mask.expand_dims(time=tvh["time"])
 
         # Sanity check
-        loggy.debug(f"Biome {biome_id}: mask shape {mask.shape}")
+        logger.debug(f"Biome {biome_id}: mask shape {mask.shape}")
         for arr_name, arr in zip(["tvh", "tvl"], [tvh, tvl]):
-            loggy.debug(f"Array {arr_name} shape: {arr.shape}")
+            logger.debug(f"Array {arr_name} shape: {arr.shape}")
             if mask.shape != arr.shape:
-                loggy.debug(f"WARNING: mask shape {mask.shape} != {arr_name} shape {arr.shape}")
+                logger.debug(f"WARNING: mask shape {mask.shape} != {arr_name} shape {arr.shape}")
 
         if biome_id in biome_to_tvh:
-            loggy.debug(f"Mapping biome {biome_id} → tvh={biome_to_tvh[biome_id]}")
+            logger.debug(f"Mapping biome {biome_id} → tvh={biome_to_tvh[biome_id]}")
             tvh = xr.where(mask, biome_to_tvh[biome_id], tvh)
             cvh = xr.where(mask, biome_to_cover.get(biome_id, 1.0), cvh)
 
         elif biome_id in biome_to_tvl:
-            loggy.debug(f"Mapping biome {biome_id} → tvl={biome_to_tvl[biome_id]}")
+            logger.debug(f"Mapping biome {biome_id} → tvl={biome_to_tvl[biome_id]}")
             tvl = xr.where(mask, biome_to_tvl[biome_id], tvl)
             cvl = xr.where(mask, biome_to_cover.get(biome_id, 1.0), cvl)
         else:
-            loggy.warning(f"Warning: biome {biome_id} not in mapping.")
+            logger.warning(f"Warning: biome {biome_id} not in mapping.")
 
     field = xr.Dataset(
         {
@@ -127,8 +126,8 @@ def vegetation_zhang(field, var=None, herold_path=None, gaussian=None, **kwargs)
         attrs=field.attrs,
     )
 
-    loggy.info("Vegetation mapping (Zhang) completed successfully")
-    loggy.debug(f"Output dataset: {field}")
+    logger.info("Vegetation mapping (Zhang) completed successfully")
+    logger.debug(f"Output dataset: {field}")
     return field
 
 
@@ -140,21 +139,21 @@ def prepare_vegetation(self):
     Perform a mapping from present-day initial conditions
     """
 
-    loggy.info("Preparing vegetation dataset (present-day mapping)")
+    logger.info("Preparing vegetation dataset (present-day mapping)")
 
     herold_file = os.path.join(self.herold, "herold_etal_eocene_biome_1x1.nc")
     icmgg_file = os.path.join(self.idir_init, "ICMGGECE4INIT")
 
-    loggy.debug(f"Herold file: {herold_file}")
-    loggy.debug(f"ICMGG input: {icmgg_file}")
+    logger.debug(f"Herold file: {herold_file}")
+    logger.debug(f"ICMGG input: {icmgg_file}")
 
-    herold_remap = cdo.remapnn(
+    herold_remap = get_cdo().remapnn(
         f"F{self.gaussian}", input=herold_file, output=os.path.join(self.herold, "herold_etal_eocene_biome_1x1_N32.nc")
     )
 
     if os.path.exists(os.path.join(self.herold, "ICMGG.nc")):
         os.remove(os.path.join(self.herold, "ICMGG.nc"))
-    icmgg_remap = cdo.setgridtype(
+    icmgg_remap = get_cdo().setgridtype(
         "regularnn", input=icmgg_file, output=os.path.join(self.herold, "ICMGG.nc"), options=NC4
     )
 
@@ -163,7 +162,7 @@ def prepare_vegetation(self):
 
     biome_dict = {"tvh": {}, "tvl": {}}
 
-    loggy.info("Building biome-to-vegetation lookup table")
+    logger.info("Building biome-to-vegetation lookup table")
 
     for vegtype in ["tvh", "tvl"]:
         for i in range(1, 11):
@@ -172,13 +171,13 @@ def prepare_vegetation(self):
             unique, counts = np.unique(vegid, return_counts=True)
             if unique.size > 0:
                 biome_dict[vegtype][i] = int(unique[np.argmax(counts)])
-                loggy.debug(f"{vegtype} biome {i} → {biome_dict[vegtype][i]}")
+                logger.debug(f"{vegtype} biome {i} → {biome_dict[vegtype][i]}")
             else:
                 biome_dict[vegtype][i] = None
-                loggy.debug(f"{vegtype} biome {i} → None")
+                logger.debug(f"{vegtype} biome {i} → None")
 
     eocene_icmgg = icmgg[["tvh", "tvl", "cvh", "cvl"]]
-    loggy.info("Applying biome mapping to Eocene dataset")
+    logger.info("Applying biome mapping to Eocene dataset")
 
     for vegtype in ["tvh", "tvl"]:
         eocene_icmgg[vegtype] = eocene_icmgg[vegtype] * 0
@@ -194,11 +193,11 @@ def prepare_vegetation(self):
     output_path = os.path.join(self.odir_init, "ICMGG_vegetation.nc")
 
     if os.path.exists(output_path):
-        loggy.debug(f"Removing existing file: {output_path}")
+        logger.debug(f"Removing existing file: {output_path}")
         os.remove(output_path)
 
     eocene_icmgg.to_netcdf(output_path)
 
-    loggy.info(f"Vegetation dataset saved to {output_path}")
+    logger.info(f"Vegetation dataset saved to {output_path}")
 
     return os.path.join(self.odir_init, "ICMGG_vegetation.nc")

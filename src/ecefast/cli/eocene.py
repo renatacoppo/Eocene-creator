@@ -8,6 +8,7 @@ import xarray as xr
 import numpy as np
 
 from ecefast.core import load_yaml, setup_logger
+from ecefast.core.cdo import cdo_version
 from ecefast.paleo.eocene.oifs.eoceneOIFS import EoceneOIFS
 from ecefast.paleo.eocene.nemo.eoceneNEMO import EoceneNEMO
 from ecefast.paleo.eocene.oasis.eoceneOASIS import EoceneOASIS
@@ -188,6 +189,7 @@ def main(argv: list[str] | None = None) -> None:
 
     logger = setup_logger(level=args.loglevel)
     logger.info(f"Logger initialized with level: {args.loglevel}")
+    logger.info("CDO version: %s", cdo_version())
     if not os.path.exists(args.config):
         raise FileNotFoundError(f"Configuration file {args.config} does not exist.")
     config = load_yaml(args.config)
