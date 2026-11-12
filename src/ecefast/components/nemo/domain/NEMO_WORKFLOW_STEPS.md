@@ -159,15 +159,20 @@ Workflow steps controlled via `steps` flags in YAML:
 
 ### 7a. Process domain_cfg.nc
 - Read `domain_cfg_{name}.nc` from `{domaincfg_dir}/DOMAINcfg/`
-- Rename vertical dimension: `nav_lev` → `z`
+- Rename vertical dimension: `nav_lev` → `z`; `nav_lev` stays as a plain variable on `z`
 - Add PALEORCA attributes: `cn_cfg='PALEORCA'`, `nn_cfg=2`
+- Write with no `_FillValue` on any variable and `time_counter` as the unlimited dimension
 - Write to: `{output_dir}/domain/{grid}/{name}/domain_cfg.nc`
 
 ### 7b. Extract maskutil.nc
 - Read `mesh_mask_{name}.nc` from `{domaincfg_dir}/DOMAINcfg/`
 - Extract mask variables: `tmaskutil`, `umaskutil`, `vmaskutil`
-- Rename time dimension: `time_counter` → `t`
+- Rename time dimension: `time_counter` → `t` (unlimited) and drop the `time_counter` variable
+- Replace the global attributes with `Conventions='CF-1.1'`
 - Write to: `{output_dir}/domain/{grid}/{name}/maskutil.nc`
+
+These two functions are the only writer of `domain_cfg.nc` and `maskutil.nc` (the old standalone
+`domain/mask_util.py` script, a copy of them, was removed). Tests: `tests/unit/test_nemo_postprocess.py`.
 
 **Dependency check**: Verifies domain_cfg and mesh_mask files exist before running
 
