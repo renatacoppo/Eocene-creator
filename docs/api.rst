@@ -15,9 +15,18 @@ Core
 .. automodule:: ecefast.core.io
    :members:
 
+.. automodule:: ecefast.core.provenance
+   :members:
+
 .. automodule:: ecefast.core.grib
    :members:
    :undoc-members:
+
+Eocene pipeline
+---------------
+
+.. automodule:: ecefast.paleo.eocene.pipeline
+   :members:
 
 OIFS
 ----

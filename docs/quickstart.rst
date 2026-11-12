@@ -31,23 +31,35 @@ ignored by git. On ECMWF Atos start from ``configs/atos.tmpl``.
 3. Run the workflow
 -------------------
 
-Copy the input subtree to the output directory and run every component:
+Check that every input exists and see what would run, without writing anything:
 
 .. code-block:: bash
 
-   ecefast eocene -c configs/laptop.yml --run all --copy
+   ecefast eocene run -c configs/laptop.yml --dry-run
 
-Run one component (``oifs``, ``nemo``, ``oasis`` or ``rnfm``) with more logging:
+Copy the input subtree to the output directory and run every step (``--overwrite`` replaces an
+output directory that is not empty):
 
 .. code-block:: bash
 
-   ecefast eocene -c configs/laptop.yml --run nemo -l DEBUG
+   ecefast eocene run -c configs/laptop.yml --overwrite
+
+Rerun some steps (``domain``, ``oasis``, ``oifs``, ``nemo``, ``rnfm``) on that output, with more
+logging:
+
+.. code-block:: bash
+
+   ecefast eocene run -c configs/laptop.yml --steps nemo -l DEBUG
 
 Options:
 
 .. code-block:: text
 
-   -c, --config     Path to the YAML configuration file. Required.
-   -l, --loglevel   Logging level. Default: INFO.
-   -r, --run        Part of the workflow to run: oasis, oifs, nemo, rnfm, all. Default: all.
-   --copy           Copy the required input subtree to the output directory before running.
+   -c, --config      Configuration file (schema 1). Required.
+   --steps a,b       Comma-separated step names. Default: all steps.
+   --dry-run         Check all inputs and show the plan; write nothing.
+   --overwrite       Let 'stage' replace an output directory that is not empty.
+   -l, --loglevel    Log level. Default: INFO.
+
+``ecefast eocene steps`` lists the steps. The pipeline, the steps and ``provenance.yml`` are
+described in :doc:`workflow`.

@@ -27,7 +27,7 @@ the other sections, and every key with a default, can be left out.
      precomputed:
        domain: /path/to/domain/PALEORCA2/eocene
 
-This is enough for ``ecefast eocene -c configs/laptop.yml --run all --copy``.
+This is enough for ``ecefast eocene run -c configs/laptop.yml``.
 
 ``schema``
 ----------
@@ -63,7 +63,8 @@ This is enough for ``ecefast eocene -c configs/laptop.yml --run all --copy``.
    * - ``paths.output``
      - str
      - required
-     - Output tree of ``ecefast eocene``. ``--copy`` deletes and recreates it.
+     - Output tree of ``ecefast eocene run``. The ``stage`` step refuses it if it is not empty,
+       unless ``--overwrite`` is given: then it deletes and recreates it.
    * - ``paths.herold``
      - str
      - required
@@ -97,7 +98,7 @@ The four paths are also placeholders in ``nemo_domain.bathymetries`` (``{input}`
      - str
      - ``null``
      - Directory with the Eocene ``domain_cfg.nc`` and ``maskutil.nc``, built on Atos by the
-       NEMO domain pipeline. ``ecefast eocene --run nemo`` (and ``all``) copies them into the
+       NEMO domain pipeline. The ``domain`` step of ``ecefast eocene run`` copies them into the
        output tree and stops with an error if the key is not set.
    * - ``tools.atos.profile``
      - str

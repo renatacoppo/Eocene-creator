@@ -5,10 +5,8 @@ This repository provides a workflow to prepare Eocene boundary conditions for EC
 The main entry point is:
 
 ```bash
-ecefast eocene ...
+ecefast eocene run -c configs/laptop.yml
 ```
-
-(the old `eocene` command does the same; it is removed in phase 4b of the refactor).
 
 ## What the CLI does
 
@@ -44,27 +42,35 @@ From the repository root:
 
 ```bash
 cp configs/laptop.tmpl configs/laptop.yml   # then set the paths; configs/*.yml is gitignored
-ecefast eocene -c configs/laptop.yml --copy
+ecefast eocene run -c configs/laptop.yml --dry-run     # check all inputs, show the plan, write nothing
+ecefast eocene run -c configs/laptop.yml               # run every step
 ```
 
 ## Command-line options
 
 ```text
--c, --config   Path to the YAML configuration file. Required.
--l, --log      Logging level. Default: INFO.
--r, --run      Workflow section to run: oifs, nemo, oasis, rnfm, all. Default: all.
---copy         Copy the required input subtree to the output directory before running.
+ecefast eocene run -c CONFIG [--steps a,b] [--dry-run] [--overwrite] [-l LEVEL]
+
+-c, --config      YAML configuration file (schema 1). Required.
+--steps a,b       Comma-separated steps: stage, domain, oasis, oifs, nemo, rnfm. Default: all.
+--dry-run         Check all inputs and show the plan; write nothing.
+--overwrite       Let 'stage' replace an output directory that is not empty.
+-l, --loglevel    Logging level. Default: INFO.
+
+ecefast eocene steps   List the steps: what each needs, reads and writes.
 ```
 
 Examples:
 
 ```bash
-ecefast eocene -c configs/laptop.yml --copy
-ecefast eocene -c configs/laptop.yml --run oifs -l DEBUG
-ecefast eocene -c configs/laptop.yml --run nemo -l INFO
-ecefast eocene -c configs/laptop.yml --run rnfm
-ecefast eocene -c configs/laptop.yml --run all --copy
+ecefast eocene run -c configs/laptop.yml --overwrite           # rebuild everything in an existing output
+ecefast eocene run -c configs/laptop.yml --steps oifs -l DEBUG  # rerun one step on an existing output
+ecefast eocene run -c configs/laptop.yml --steps oasis,nemo
 ```
+
+A missing input stops the run before anything is written, with one error listing every missing
+file. A successful run writes `provenance.yml` into the output directory (steps, config hash,
+git commit, tool versions, times). Details in `docs/workflow.rst`.
 
 ## Configuration file
 
@@ -86,9 +92,14 @@ Optional sections: `grids` (`oifs: TL63L31`, `nemo: PALEORCA2`), `eocene` (`oifs
 `oasis.constant_sst: 290.0`) and `nemo_domain` (the NEMO domain pipeline, `ecefast nemo-domain -c <file>`).
 Every key is described in `docs/configuration.rst`. The old `dirs:` format is no longer read.
 
-## What `--copy` copies
+## What `stage` copies
 
-The copy step does not clone the full input tree. It copies only the subsets currently used by the workflow:
+The `stage` step does not clone the full input tree. It copies only the subsets currently used by the workflow:
+
+- `oifs/`: `composition`, `ifsdata`, `vtables`, `rtables` and the OIFS grid (`TL63L31`)
+- `nemo/`: `cfc`, `climatology`, `initial`, `weights`
+- `oasis/<nemo grid>`
+- `cmip6-data` is symlinked, not copied
 
 ## Workflow notes
 
@@ -110,7 +121,7 @@ The OIFS workflow:
 
 The NEMO workflow:
 
-- copies `domain_cfg.nc` and `maskutil.nc` into the output tree
+- copies `domain_cfg.nc` and `maskutil.nc` into the output tree (`domain` step)
 - creates tidal mixing forcing
 - creates geothermal heat flux forcing
 - creates ocean initial conditions

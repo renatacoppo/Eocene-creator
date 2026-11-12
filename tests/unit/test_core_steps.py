@@ -268,6 +268,7 @@ def test_stage_copies_the_subset(ctx: Context) -> None:
     input_tree(Path(ctx.paths.input))
     out = Path(ctx.paths.output)
     (out / "old.txt").write_text("overwritten")
+    ctx.overwrite = True
     run_pipeline([Stage], ctx)
     copied = sorted(str(p.relative_to(out)) for p in out.rglob("f.txt"))
     assert copied == [
@@ -279,6 +280,15 @@ def test_stage_copies_the_subset(ctx: Context) -> None:
     assert (out / "cmip6-data").is_symlink()
     assert (out / "cmip6-data" / "f.txt").read_text() == "cmip6-data"
     assert not (out / "old.txt").exists()
+
+
+def test_stage_refuses_non_empty_output_without_overwrite(ctx: Context) -> None:
+    input_tree(Path(ctx.paths.input))
+    out = Path(ctx.paths.output)
+    (out / "old.txt").write_text("kept")
+    with pytest.raises(PipelineError, match="is not empty"):
+        run_pipeline([Stage], ctx)
+    assert outputs(ctx) == ["old.txt"]
 
 
 def test_stage_refuses_output_containing_input(tmp_path: Path) -> None:
