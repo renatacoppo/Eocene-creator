@@ -8,10 +8,71 @@ version for discussion; this file is the checklist. Rules are in [AGENTS.md](../
 - **Output must not change.** Every refactor PR reproduces the baseline from phase 0 (`compare_outputs.py`
   reports 0 differences). Exception, agreed in advance: **phase 5** adds the Eocene subbasins file; it is declared
   under *Output* and the baseline is regenerated after it is merged.
-- **One PR per phase** (phases 1 and 4 are split in two), reviewed by the other author. Moves use `git mv`.
-- **Freeze** during phase 2: no other PR on `eocene/` or `ecefast/` open at the same time.
-- **Out of scope**: WEIGHTS driver (namelists move as data, untouched), OIFS generator rework (moved as-is,
-  constants stay), finer-grained steps, HPC targets other than Atos.
+- **One PR per task** (see the wave table below), into the `refactor` branch. Moves use `git mv`.
+- **Freeze** during task 2.1 (the `src/` move): no other PR into `refactor` open at the same time.
+- **Out of scope**: WEIGHTS driver (namelists move as data; only their hardcoded paths become placeholders),
+  OIFS generator rework (moved as-is, constants stay), finer-grained steps, HPC targets other than Atos.
+
+## Branching
+
+- `refactor` is created from `main` after #18. `main` stays frozen until the refactor is done.
+- Each task: a branch from `origin/refactor` (its own worktree when sessions run in parallel), one PR into `refactor`.
+- The author merges a PR into `refactor` once CI is green and `compare_outputs.py` reports 0 differences. Planned
+  output changes (0.2, 5.3) list the changed files instead, and the baseline is regenerated right after.
+- The final `refactor` → `main` PR is reviewed by the other author and merged with a merge commit (no squash).
+- `main` → `refactor` with `git merge` if anything lands on `main`; never rebase `refactor`.
+- CI (from task 1.2) runs on pull requests to both `main` and `refactor`.
+
+## Tasks and waves
+
+A wave starts when the tasks it depends on are merged into `refactor`. Tasks in the same wave marked ‖ touch
+disjoint files and can run in parallel sessions; "serial" tasks touch files that every later task depends on.
+
+| ID | Task | Files | Depends on | Runs |
+|---|---|---|---|---|
+| 0.1 | Create `refactor`; AGENTS.md git rules; `data/` in `.gitignore` | AGENTS.md, plan | #18 | serial |
+| 0.2 | Ocean init: `profile=None` builds both files, CLI calls it without arguments (**output change**) | `eoceneNEMO.py`, `cli_eocene.py`, CHANGELOG | 0.1 | ‖ 0.3 |
+| 0.3 | `compare_outputs.py` with a self-test on tiny synthetic files; fetch script gets eORCA1 | `scripts/compare_outputs.py`, `get_ece4_data.sh` | 0.1 | ‖ 0.2 |
+| 0.4 | Fetch all local data (rsync, Eocene domain, `data/`) | local only | 0.3 | Paolo |
+| 0.5 | Env, both baselines, vertical-grid check, `BASELINE.txt` | local only | 0.2, 0.3, 0.4 | serial, with Paolo |
+| 1.1 | Housekeeping: pycache, notebooks, `scripts/`, `config.tmpl` placeholders | notebooks, `unsorted/`, `eocene/config.tmpl` | 0.5 | ‖ 1.2, 1.3 |
+| 1.2 | Env pin, `pyproject`, pytest markers, first tests, `ci.yml`, local regression test | `environment.yaml`, `pyproject.toml`, `tests/`, `.github/workflows/ci.yml` | 0.5 | ‖ 1.1, 1.3 |
+| 1.3 | Docs skeleton, `docs.yml` workflow, `.readthedocs.yaml` | `docs/*.rst`, `docs/conf.py`, `.github/workflows/docs.yml` | 0.5 | ‖ 1.1, 1.2 |
+| 1.4 | ruff config, one format-only commit, `.git-blame-ignore-revs` | everything | 1.1–1.3 | serial |
+| 2.1 | `src/` move, import fixes, broken scripts, package data, `ecefast` entry point | everything | 1.4 | serial, freeze |
+| 3.0 | `core/logging`, `core/cdo`; replace 2 loggers and 8 `Cdo()` | imports in many files | 2.1 | serial |
+| 3.1 | Config schema v1, `configs/*.tmpl`, `configuration.rst`, migrate both configs | `core/config.py`, `configs/`, docs | 3.0 | ‖ 3.2, 3.3 |
+| 3.2 | `core/grib.py` merge; Eocene OIFS non-GRIB helpers to `fields.py` | `components/oifs/`, `paleo/eocene/oifs/` | 3.0 | ‖ 3.1, 3.3 |
+| 3.3 | `components/nemo/domain/postprocess.py`; delete `generate-mask-util.py` | `components/nemo/domain/` | 3.0 | ‖ 3.1, 3.2 |
+| 4.0 | `core/steps.py`, `workspace.py`, `io.py` (atomic helper), `Stage`, runner tests | new `core/` files, `tests/` | 3.1 | serial |
+| 4.1 | `EoceneOIFS` step, atomic writes, `aerosols` option | `paleo/eocene/oifs/` | 4.0, 3.2 | ‖ 4.2, 4.3, 5.1 |
+| 4.2 | `EoceneNEMO`, `EoceneDomain` with vertical-grid check | `paleo/eocene/nemo.py`, `domain.py` | 4.0 | ‖ 4.1, 4.3, 5.1 |
+| 4.3 | `EoceneOASIS`, new `EoceneRNFM` | `paleo/eocene/oasis.py`, `rnfm.py` | 4.0 | ‖ 4.1, 4.2, 5.1 |
+| 4.4 | `pipeline.py`, `ecefast eocene run`, provenance, remove `cli_eocene.py`, `workflow.rst` | `cli/`, `paleo/eocene/pipeline.py` | 4.1–4.3 | serial |
+| 5.1 | `tools/ecearth.py` (atos, local, fake), `hpc_profiles.yaml`, `run_domain_cfg.sh` without paths | `tools/` | 3.0 | ‖ wave 4 |
+| 5.2 | Bathymetry registry, backend in the domain pipeline, `ecefast nemo domain`, `EoceneDomain` uses the backend, import-linter | `components/nemo/domain/`, `cli/` | 5.1, 4.4 | serial |
+| 5.3 | Subbasins for every bathymetry, check notebook (**output change**) | subbasins code, `notebooks/analysis/` | 5.2 | ‖ 5.4, 6.2 |
+| 5.4 | Remaining hardcoded paths (WEIGHTS namelists → placeholders), grep check in CI | scattered, `components/nemo/namelists/` | 5.2 | ‖ 5.3, 6.2 |
+| 6.1 | Synthetic fixtures (declared reads only), integration tests, `verify` checks | `tests/integration/`, `paleo/eocene/verify.py` | 5.2 | ‖ 6.3 |
+| 6.2 | OIFS unit tests on small CDO-made GRIB | `tests/unit/oifs/` | 4.1 | ‖ 5.3, 5.4 |
+| 6.3 | Tutorials from `plots.ipynb`, `quickstart.rst` | `notebooks/tutorials/`, docs | 4.4 | ‖ 6.1 |
+| 7.1 | Atos validation (DOMAINcfg contract, full run) | Atos | 6.1–6.3 | Paolo |
+| 7.2 | `refactor` → `main`, baseline regenerated, release, issue #16 updated | — | 7.1 | Renata reviews |
+
+```
+W0  0.1 ─┬─ 0.2 ──────────────┐
+         └─ 0.3 ─ 0.4 (Paolo) ─┴─ 0.5 baseline
+W1  1.1 ‖ 1.2 ‖ 1.3  ─→ 1.4 ruff
+W2  2.1 src move (freeze)
+W3  3.0 ─→ 3.1 ‖ 3.2 ‖ 3.3
+W4  4.0 ─→ 4.1 ‖ 4.2 ‖ 4.3 ‖ 5.1  ─→ 4.4
+W5  5.2 ─→ 5.3 ‖ 5.4 ‖ 6.2
+W6  6.1 ‖ 6.3
+W7  7.1 Atos ─→ 7.2 merge to main
+```
+
+The phase sections below hold the detailed checklists; task IDs map onto them (0.x = phase 0, 1.1–1.2 and 1.4 =
+phase 1a, 1.3 = phase 1b, 4.0–4.3 = phase 4a, 4.4 = phase 4b).
 
 ## Decisions (agreed)
 
@@ -60,7 +121,7 @@ Local data needed (all gitignored, see AGENTS.md):
 |---|---|---|
 | `ECE4-DATA-V3/` | Eocene workflow inputs, plus `nemo/domain/eORCA1/domain_cfg.nc` (present-day bathymetry source) | `get_ece4_data.sh`, extended with the eORCA1 domain |
 | `ECE4-DATA-EOCENE/nemo/domain/PALEORCA2/` | Eocene domain built on Atos | rsync from HPC |
-| `NEMO-COORDINATES/` (name to confirm) | `PALEORCA2/coords_ori.nc`, `eORCA1/mesh_mask.nc` | copied by hand from the HPC |
+| `data/` | `PALEORCA2/coords_ori.nc`, `eORCA1/mesh_mask.nc` (plus outputs of earlier runs) | copied by hand from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplement | HPC or paper |
 
 Steps:
@@ -92,7 +153,7 @@ the original files. That is existing behaviour, frozen in the baseline; the AGEN
 
 No behaviour change.
 
-- [ ] `git rm -r --cached` `__pycache__/`, `.ipynb_checkpoints/`; extend `.gitignore` (`EOCENE-*`, `NEMO-COORDINATES/`, `docs/_build/`).
+- [ ] `git rm -r --cached` `__pycache__/`, `.ipynb_checkpoints/`; extend `.gitignore` (`docs/_build/`; `data/` is already ignored by 0.1).
 - [ ] Remove `modify_oifs.ipynb`, `modify_nemo.ipynb`; other notebooks to `notebooks/analysis/` with outputs cleared.
 - [ ] `get_ece4_data.sh`, `unsorted/add_lonlat.py` to `scripts/`.
 - [ ] Placeholder paths in `eocene/config.tmpl`.
@@ -124,7 +185,7 @@ Pure moves and import fixes.
       and `oifs_create_corners.py` import a `utils` module that does not exist in `ecefast/oifs/`: point them to `utils_oifs`,
       no logic change.
 - [ ] `EoceneBathymetry` → `paleo/eocene/bathymetry.py` (temporary direct import from the NEMO pipeline until phase 5).
-- [ ] WEIGHTS namelists → `components/nemo/namelists/`; OIFS generator → `components/oifs/generator.py`, unchanged.
+- [ ] WEIGHTS namelists → `components/nemo/namelists/` (paths become placeholders in 5.4); OIFS generator → `components/oifs/generator.py`, unchanged.
 - [ ] Package data in `pyproject.toml` (grids, yaml, j2, namelists). Retire `nemo-workflow.sh`.
 - [ ] Entry point `ecefast` dispatching to the existing Eocene and NEMO mains (the old `eocene` entry point stays until 4b).
 - [ ] Extend the import smoke test to every module.
@@ -176,7 +237,7 @@ Done when: `pip install -e .` works; both baselines match; CI green.
       listed in the PR and under *Output*; baseline regenerated after merge.
 - [ ] `ecefast nemo domain -c ... --bathymetry present_day eocene`.
 - [ ] import-linter contract in CI.
-- [ ] No hardcoded `/lus`, `/home`, `/ec`, `/Users` paths left outside the OIFS generator (flagged for later).
+- [ ] No hardcoded `/lus`, `/home`, `/ec`, `/Users` paths left outside the OIFS generator (flagged for later); WEIGHTS namelists get placeholders, nothing else changes in them.
 
 ## Phase 6: CI integration tests and tutorials (PR)
 

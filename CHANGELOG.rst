@@ -28,6 +28,8 @@ Changed
 - Refactor plan and ``AGENTS.md`` revised after a feasibility review: domain-pipeline baseline,
   shared CDO wrapper in ``core``, per-file atomic writes, old ``eocene`` CLI and ``dirs:`` config
   dropped, phases 1 and 4 split, Eocene subbasins as the one planned output change (#18).
+- Refactor work moves to the ``refactor`` branch; ``docs/refactor-plan.md`` gets the task and wave
+  table; ``data/`` is ignored (#16).
 
 0.0.2
 -----

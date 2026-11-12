@@ -20,8 +20,10 @@ Herold et al. (2014) paleo datasets.
 The repo is being restructured into a single `ecefast` package
 (issue [#16](https://github.com/renatacoppo/Eocene-creator/issues/16), plan in
 [docs/refactor-plan.md](docs/refactor-plan.md)). Some rules below refer to pieces that do not
-exist yet; they are tagged **(from phase N)** and apply as soon as that phase is merged.
-Until then, follow the spirit of the rule in the current layout (`ecefast/`, `eocene/`).
+exist yet; they are tagged **(from phase N)** and apply as soon as that phase is merged into
+the `refactor` branch. Until then, follow the spirit of the rule in the current layout
+(`ecefast/`, `eocene/`). Refactor work targets the `refactor` branch, not `main` (see
+[Git and pull requests](#git-and-pull-requests)).
 
 Target layout:
 
@@ -66,7 +68,7 @@ All of these live at the repo root and are gitignored; never commit them.
 |---|---|---|
 | `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree, including the eORCA1 domain used by the present-day bathymetry | `get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
 | `ECE4-DATA-EOCENE/nemo/domain/PALEORCA2/` | Eocene NEMO domain | rsync from the HPC copy of ECE4-DATA-EOCENE |
-| `NEMO-COORDINATES/` | `PALEORCA2/coords_ori.nc` and `eORCA1/mesh_mask.nc`, inputs of the NEMO domain pipeline | copy from the HPC |
+| `data/` | inputs of the NEMO domain pipeline: `PALEORCA2/coords_ori.nc`, `eORCA1/mesh_mask.nc` (plus outputs of earlier pipeline runs) | copy from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplementary data | copy from the HPC or the paper supplement |
 | `EOCENE-TEST/` | output of your run | `eocene -c eocene/config.yml --run all --copy` |
 | `EOCENE-BASELINE/` | frozen reference output of the Eocene workflow and, in `domain/`, of the laptop part of the NEMO domain pipeline, with `BASELINE.txt` (commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
@@ -324,17 +326,32 @@ published on Read the Docs.
 
 - **Never commit to `main`.** Work on a branch, open a PR against
   `renatacoppo/Eocene-creator` `main`.
-- **Every PR is reviewed by the other author** (Renata or Paolo). No self-merge.
+- **Every PR to `main` is reviewed by the other author** (Renata or Paolo). No self-merge.
 - The PR description says what changed, whether output changes, and which test groups ran.
 - File moves use `git mv` so history follows the file.
-- One topic per PR. During the refactor: one phase per PR, and no feature PRs while the `src/`
-  move (phase 2) is open.
+- One topic per PR.
+
+### During the refactor: the `refactor` branch
+
+- All refactor work goes into the long-lived `refactor` branch; `main` stays frozen until the
+  refactor is done. Each task of [docs/refactor-plan.md](docs/refactor-plan.md) (wave table) is
+  one branch, created from `origin/refactor`, with one PR **against `refactor`**.
+- PRs into `refactor` may be merged by their author once CI is green and
+  `scripts/compare_outputs.py` reports 0 differences against `EOCENE-BASELINE` (the PR says so).
+  Planned output changes (0.2, 5.3) are the exception: they say which files change, and the
+  baseline is regenerated right after the merge.
+- The other author reviews the final `refactor` → `main` PR. It is merged with a merge commit
+  (no squash, no rebase) so the `git mv` history is kept.
+- Bring `main` into `refactor` with `git merge`, never rebase `refactor`.
+- Parallel tasks must not touch the same files (see the wave table). While task 2.1 (the `src/`
+  move) is open, no other PR into `refactor` is open.
 
 ## Out of scope for now
 
 Do not start these without an issue agreed by both authors:
 
-- reworking the WEIGHTS driver (its namelists move as data, untouched);
+- reworking the WEIGHTS driver (its namelists move as data; only their hardcoded paths become
+  placeholders);
 - reworking the OIFS generator (moved as-is, constants stay);
 - splitting steps more finely than one per component;
 - HPC targets other than ECMWF Atos.
