@@ -13,9 +13,8 @@ from ecefast.components.oifs.utils_oifs import extract_grid_info
 
 # temporary until task 3.0: spectral2gaussian lives only in the Eocene OIFS utils (it moves to core/grib.py)
 from ecefast.paleo.eocene.oifs.utils import spectral2gaussian
-import cdo
+from ecefast.core.cdo import get_cdo
 
-cdo = cdo.Cdo()
 # cdo.debug = True
 
 
@@ -38,12 +37,12 @@ for resolution in resolutions:
 
     # convert to netcdf
     print(f"Converting GRIB {infile_name} to NetCDF {netcdf_name}")
-    cdo.selname(variable_name, input=infile_name, output=netcdf_name, options="-f nc4")
+    get_cdo().selname(variable_name, input=infile_name, output=netcdf_name, options="-f nc4")
 
     # there is a strange bug in cdo. latitude are not recognized in the original grid file
     # however, we know them from gaussian grid associated
     print(f"Creating gaussian grid {gaussian_name}")
-    cdo.const(f"1,n{gaussian}", output=gaussian_name, options="-f nc4")
+    get_cdo().const(f"1,n{gaussian}", output=gaussian_name, options="-f nc4")
     # ubprocess.call(["cdo", "-f", "nc4", f"const,1,n{gaussian}", gaussian_name])
 
     # load the latitudes from the new file

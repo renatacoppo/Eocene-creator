@@ -4,7 +4,7 @@ import logging
 import os
 import yaml
 
-logger = logging.getLogger("nemo.config")
+logger = logging.getLogger(__name__)
 
 # Absolute path to config directory
 _CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))

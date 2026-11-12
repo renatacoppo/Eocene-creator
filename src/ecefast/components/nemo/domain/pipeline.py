@@ -16,17 +16,18 @@ import logging
 import os
 
 import yaml
-from cdo import Cdo
 
+from ecefast.core.cdo import cdo_version, get_cdo
+from ecefast.core.logger import setup_logger
 from ecefast.components.nemo.common.executor import SubprocessExecutor
-from ecefast.components.nemo.common.logger import setup_logging
 from ecefast.components.nemo.common.util import process_domain_cfg, extract_maskutil, check_files_exist
 from ecefast.components.nemo.bathymetry.present_day import PresentDayBathymetry
 
 # temporary until task 5.2: components must not import paleo
 from ecefast.paleo.eocene.bathymetry import EoceneBathymetry
 
-logger = logging.getLogger("nemo.workflow")
+# explicit name: this module also runs with `python -m`, where __name__ is "__main__"
+logger = logging.getLogger("ecefast.components.nemo.domain.pipeline")
 
 
 # Registry: maps the processor name used in YAML to the class.
@@ -74,7 +75,7 @@ class NEMOWorkflow:
             self.bathymetries = [cfg for cfg in self.bathymetries if cfg["name"] in only]
 
         self.log_level = log_level
-        self.cdo = Cdo()
+        self.cdo = get_cdo()
         self.executor = SubprocessExecutor()
         self._validate_paths()
 
@@ -320,7 +321,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    setup_logging(args.log_level)
+    setup_logger(args.log_level)
+    logger.info("CDO version: %s", cdo_version())
 
     with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)

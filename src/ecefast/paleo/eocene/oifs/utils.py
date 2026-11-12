@@ -9,11 +9,10 @@ import numpy as np
 import xarray as xr
 import xesmf as xe
 import subprocess
-from cdo import Cdo
+from ecefast.core.cdo import get_cdo
 
-cdo = Cdo()
 
-loggy = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # CDO grib2 options
 GRIB2 = "-f grb2 --eccodes"
@@ -49,22 +48,22 @@ def nullify_grib(
     Returns:
         None. The zeroed output is written to ``outputfile``.
     """
-    loggy.info(f"Nullifying variables {variables} in GRIB file {inputfile}")
+    logger.info(f"Nullifying variables {variables} in GRIB file {inputfile}")
 
     if not os.path.exists(inputfile):
-        loggy.warning(f"{inputfile} does not exist!")
+        logger.warning(f"{inputfile} does not exist!")
         return
 
     varlist = ",".join(variables)
-    loggy.debug(f"Variable list: {varlist}")
+    logger.debug(f"Variable list: {varlist}")
 
-    singlefile = cdo.selname(varlist, input=inputfile, options="--eccodes")
-    zeroed_file = cdo.mulc(0, input=singlefile, options="--eccodes")
+    singlefile = get_cdo().selname(varlist, input=inputfile, options="--eccodes")
+    zeroed_file = get_cdo().mulc(0, input=singlefile, options="--eccodes")
 
     if debug:
         debug_path = f"debug_nullify_grib_{'_'.join(variables)}.nc"
-        cdo.copy(input=zeroed_file, output=debug_path)
-        loggy.debug(f"Debug copy of zeroed field written to {debug_path}")
+        get_cdo().copy(input=zeroed_file, output=debug_path)
+        logger.debug(f"Debug copy of zeroed field written to {debug_path}")
 
     replace_field(inputfile, zeroed_file, outputfile, variables, filter_method=filter_method, debug=debug)
 
@@ -77,26 +76,26 @@ def modify_grib(inputfile, outputfile, myfunction, spectral=False, **kwargs):
     This is deprecated in OIFS cy48 since all data should be GRIB2
     """
 
-    loggy.info(f"Modifying GRIB file {inputfile} using {myfunction.__name__}")
+    logger.info(f"Modifying GRIB file {inputfile} using {myfunction.__name__}")
 
     # Unpack the GRIB file
     grib1, grib2 = unpack_grib_file(inputfile, "tmp")
 
     for file in [grib1, grib2]:
         if os.path.exists(file):
-            loggy.info(f"Converting to netcdf file {file}")
+            logger.info(f"Converting to netcdf file {file}")
 
             # Convert to netcdf: if spectral use sp2gpl, else use setgridtype
             if spectral:
-                loggy.debug("Using spectral conversion (sp2gpl)")
-                netcdf = cdo.sp2gpl(input=file, options=NC4)
+                logger.debug("Using spectral conversion (sp2gpl)")
+                netcdf = get_cdo().sp2gpl(input=file, options=NC4)
             else:
-                loggy.debug("Using gridtype conversion (regular)")
-                netcdf = cdo.setgridtype("regular", input=file, options=NC4)
-            loggy.info(f"Modifying GRIB file {file} using function {myfunction.__name__}")
+                logger.debug("Using gridtype conversion (regular)")
+                netcdf = get_cdo().setgridtype("regular", input=file, options=NC4)
+            logger.info(f"Modifying GRIB file {file} using function {myfunction.__name__}")
 
             # open the netcdf and modify it
-            loggy.debug(f"Opening dataset {netcdf}")
+            logger.debug(f"Opening dataset {netcdf}")
             field = xr.open_dataset(netcdf, engine="netcdf4")
             field = myfunction(field, **kwargs)
 
@@ -106,12 +105,12 @@ def modify_grib(inputfile, outputfile, myfunction, spectral=False, **kwargs):
             field.to_netcdf(temp_path)
             shutil.move(temp_path, netcdf)
 
-            loggy.info(f"Converting back to GRIB file {file}")
+            logger.info(f"Converting back to GRIB file {file}")
             grib = GRIB1 if file == grib1 else GRIB2
             if spectral:
-                cdo.gp2spl(input=netcdf, output=file, options=grib)
+                get_cdo().gp2spl(input=netcdf, output=file, options=grib)
             else:
-                cdo.remapnn(inputfile, input=netcdf, output=file, options=grib)
+                get_cdo().remapnn(inputfile, input=netcdf, output=file, options=grib)
 
     repack_grib_file(grib1, grib2, outputfile, clean=True)
 
@@ -156,22 +155,22 @@ def modify_single_grib(
         None. The modified output is written to ``outputfile``.
     """
     if not os.path.exists(inputfile):
-        loggy.warning(f"{inputfile} does not exist!")
+        logger.warning(f"{inputfile} does not exist!")
         return
 
-    loggy.info(f"Modifying variables {variables} in {inputfile}")
+    logger.info(f"Modifying variables {variables} in {inputfile}")
 
     varlist = ",".join(variables)
-    singlefile = cdo.selname(varlist, input=inputfile, options="--eccodes")
+    singlefile = get_cdo().selname(varlist, input=inputfile, options="--eccodes")
     grib_version = detect_grib_version(singlefile)
-    loggy.debug(f"Detected GRIB version: {grib_version}")
+    logger.debug(f"Detected GRIB version: {grib_version}")
 
     # Convert to netcdf: if spectral use sp2gpl, else use setgridtype
     if spectral:
-        netcdf = cdo.sp2gpl(input=singlefile, options=NC4)
+        netcdf = get_cdo().sp2gpl(input=singlefile, options=NC4)
     else:
-        netcdf = cdo.setgridtype("regular", input=singlefile, options=NC4)
-    loggy.info(f"Modifying GRIB file {inputfile} using function {myfunction.__name__}")
+        netcdf = get_cdo().setgridtype("regular", input=singlefile, options=NC4)
+    logger.info(f"Modifying GRIB file {inputfile} using function {myfunction.__name__}")
 
     # Open the netcdf and modify it
     field = xr.open_dataset(netcdf, engine="netcdf4", decode_times=False)
@@ -183,20 +182,20 @@ def modify_single_grib(
     field.to_netcdf(temp_path)
     shutil.move(temp_path, netcdf)
 
-    loggy.info(f"Repacking modified GRIB for {variables}")
-    loggy.info(f"Converting back to GRIB file {singlefile}")
+    logger.info(f"Repacking modified GRIB for {variables}")
+    logger.info(f"Converting back to GRIB file {singlefile}")
 
     grib = GRIB1 if grib_version == 1 else GRIB2
 
     if spectral:
-        cdo.gp2spl(input=netcdf, output=singlefile, options=grib)
+        get_cdo().gp2spl(input=netcdf, output=singlefile, options=grib)
     else:
-        cdo.remapnn(inputfile, input=netcdf, output=singlefile, options=grib)
+        get_cdo().remapnn(inputfile, input=netcdf, output=singlefile, options=grib)
 
     if debug:
         debug_path = "debug_modify_single_grib.nc"
-        cdo.copy(input=singlefile, output=debug_path)
-        loggy.debug(f"Debug copy of modified field written to {debug_path}")
+        get_cdo().copy(input=singlefile, output=debug_path)
+        logger.debug(f"Debug copy of modified field written to {debug_path}")
 
     replace_field(inputfile, singlefile, outputfile, variables, filter_method=filter_method, debug=debug)
 
@@ -206,12 +205,12 @@ def truncate_grib_file(inputfile, outputfile, variables, orig=63, trunc=1):
     Truncate the GRIB file to a specific size.
     """
     varlist = ",".join(variables)
-    loggy.info(f"Truncating variables {varlist} from {inputfile}")
+    logger.info(f"Truncating variables {varlist} from {inputfile}")
 
-    trunc = cdo.sp2sp(str(trunc), input=f"-selname,{varlist} {inputfile}", options=NC4)
-    compact = cdo.sp2sp(str(orig), input=trunc, options=GRIB2)
+    trunc = get_cdo().sp2sp(str(trunc), input=f"-selname,{varlist} {inputfile}", options=NC4)
+    compact = get_cdo().sp2sp(str(orig), input=trunc, options=GRIB2)
     where_expr = ",".join([f"shortName!={v}" for v in variables])
-    loggy.debug(f"Filtering expression: {where_expr}")
+    logger.debug(f"Filtering expression: {where_expr}")
 
     with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
         temp_path = tmpfile.name
@@ -266,7 +265,7 @@ def replace_field(
     Raises:
         ValueError: If ``filter_method`` is not "shortName" or "paramId".
     """
-    loggy.debug(f"Replacing variables {variable} in {inputfile}")
+    logger.debug(f"Replacing variables {variable} in {inputfile}")
 
     # Unique, self-describing temp filenames instead of fixed shared names
     with tempfile.NamedTemporaryFile(prefix="replace_field_filtered_", suffix=".grib", delete=False) as f:
@@ -309,7 +308,7 @@ def replace_field(
         if moved_input_path and os.path.exists(moved_input_path):
             os.remove(moved_input_path)
     else:
-        loggy.debug(
+        logger.debug(
             f"Keeping intermediate files for inspection (debug=True): "
             f"{filtered_path}, {singlefile}" + (f", {moved_input_path}" if moved_input_path else "")
         )
@@ -321,7 +320,7 @@ def modify_value(field, var, newvalue):
     """
     for v in var:
         if v in field.variables:
-            loggy.debug(f"Setting variable {v} to constant value {newvalue}")
+            logger.debug(f"Setting variable {v} to constant value {newvalue}")
             field[v].data = np.full(field[v].shape, newvalue)
     return field
 
@@ -331,14 +330,14 @@ def replace_value(field, var, newfield):
     Replace the field in a dataset with a dataarray
     """
     if "time" not in newfield.dims:
-        loggy.debug("Expanding time dimension for new field")
+        logger.debug("Expanding time dimension for new field")
         newfield = newfield.expand_dims("time", axis=0)
 
     newfield = newfield.transpose("time", "lat", "lon")
 
     for v in var:
         if v in field.variables:
-            loggy.debug(f"Replacing variable {v} in the field")
+            logger.debug(f"Replacing variable {v} in the field")
             field[v].data = newfield.data
     return field
 
@@ -407,7 +406,7 @@ def regrid_dataset(data, regrid_to_reference, method="remapbil"):
         ds_in.to_netcdf(infile)
         ds_ref.to_netcdf(gridfile)
 
-        getattr(cdo, method)(gridfile, input=infile, output=outfile)
+        getattr(get_cdo(), method)(gridfile, input=infile, output=outfile)
 
         ds_out = xr.open_dataset(outfile).load()
 
@@ -422,7 +421,7 @@ def unpack_grib_file(inputfile, tmpfile):
     Unpack a GRIB file using grib_copy.
     This is used to split the GRIB messages into GRIB1 and GRIB2.
     """
-    loggy.info(f"Unpacking GRIB file {inputfile} into {tmpfile}_grib1 and {tmpfile}_grib2")
+    logger.info(f"Unpacking GRIB file {inputfile} into {tmpfile}_grib1 and {tmpfile}_grib2")
     subprocess.run(["grib_copy", "-w", "edition=1", inputfile, f"{tmpfile}_grib1"], check=True)
     subprocess.run(["grib_copy", "-w", "edition=2", inputfile, f"{tmpfile}_grib2"], check=True)
     return f"{tmpfile}_grib1", f"{tmpfile}_grib2"
@@ -436,20 +435,20 @@ def repack_grib_file(grib1, grib2, outputfile, clean=True):
     if os.path.exists(outputfile):
         os.remove(outputfile)
     if not os.path.exists(grib1):
-        loggy.info(f"Repacking GRIB file {grib2} into {outputfile}")
+        logger.info(f"Repacking GRIB file {grib2} into {outputfile}")
         subprocess.run(["grib_copy", grib2, outputfile], check=True)
     elif not os.path.exists(grib2):
-        loggy.info(f"Repacking GRIB file {grib1} into {outputfile}")
+        logger.info(f"Repacking GRIB file {grib1} into {outputfile}")
         subprocess.run(["grib_copy", grib1, outputfile], check=True)
     else:
-        loggy.info(f"Repacking GRIB file {grib1} and {grib2} into {outputfile}")
+        logger.info(f"Repacking GRIB file {grib1} and {grib2} into {outputfile}")
         subprocess.run(["grib_copy", grib1, grib2, outputfile], check=True)
 
     # cleanup
     if clean:
         for file in [grib1, grib2]:
             if os.path.exists(file):
-                loggy.debug(f"Removing temporary file {file}")
+                logger.debug(f"Removing temporary file {file}")
                 os.remove(file)
 
 
@@ -457,7 +456,7 @@ def count_grib_messages(inputfile):
     """Return the number of messages in a GRIB file."""
     result = subprocess.run(["grib_count", inputfile], check=True, capture_output=True, text=True)
     n = int(result.stdout.strip())
-    loggy.debug(f"{inputfile} contains {n} messages")
+    logger.debug(f"{inputfile} contains {n} messages")
     return n
 
 
@@ -470,7 +469,7 @@ def flatten_grib_steps(inputfile, n_messages=None):
     if n_messages is None:
         n_messages = count_grib_messages(inputfile)
 
-    loggy.info(f"Flattening {n_messages} messages in {inputfile}")
+    logger.info(f"Flattening {n_messages} messages in {inputfile}")
 
     tmp_in = "tmp_input.grb"
     shutil.copyfile(inputfile, tmp_in)
@@ -490,7 +489,7 @@ def flatten_grib_steps(inputfile, n_messages=None):
             vdate = subprocess.run(
                 ["grib_get", "-p", "validityDate", msg_file], check=True, capture_output=True, text=True
             ).stdout.strip()
-            loggy.debug(f"Message {i}: validityDate={vdate}")
+            logger.debug(f"Message {i}: validityDate={vdate}")
 
             subprocess.run(
                 [

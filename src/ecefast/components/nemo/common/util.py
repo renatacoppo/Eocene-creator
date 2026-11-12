@@ -9,7 +9,7 @@ import logging
 import os
 import xarray as xr
 
-logger = logging.getLogger("nemo.util")
+logger = logging.getLogger(__name__)
 
 
 def process_domain_cfg(src_dir, tgt_dir, name):

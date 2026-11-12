@@ -12,10 +12,9 @@ import numpy as np
 import xarray as xr
 import pandas as pd
 from scipy.spatial import cKDTree
-from cdo import Cdo
+from ecefast.core.cdo import get_cdo
 
-cdo = Cdo()
-loggy = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _lonlat_to_xyz(lon, lat):
@@ -55,7 +54,7 @@ class EoceneNEMO:
         self.herold_folder = herold_folder
         self.input_folder = input_folder
         self.output_folder = output_folder
-        self.cdo = Cdo()
+        self.cdo = get_cdo()
 
         self.grid = grid
 
@@ -72,7 +71,7 @@ class EoceneNEMO:
 
         if cleanup and os.path.exists(output_file):
             os.remove(output_file)
-            loggy.info("Cleaning file: %s", output_file)
+            logger.info("Cleaning file: %s", output_file)
 
         herold_file_remap = self.cdo.remapcon(self.grid, input=herold_file_orig)
         herold_bath_remap = self.cdo.remapcon(self.grid, input=herold_bath_orig)
@@ -112,7 +111,7 @@ class EoceneNEMO:
         # write output file
         os.makedirs(os.path.join(self.output_folder, "nemo/initial"), exist_ok=True)
         ds_out.to_netcdf(output_file)
-        loggy.info("Written NEMO 4.2 tidal file: %s", output_file)
+        logger.info("Written NEMO 4.2 tidal file: %s", output_file)
 
         ds_m2.close()
         ds_pd.close()
@@ -127,7 +126,7 @@ class EoceneNEMO:
 
         if cleanup and os.path.exists(gh_file_out):
             os.remove(gh_file_out)
-            loggy.info("Cleaning file: %s", gh_file_out)
+            logger.info("Cleaning file: %s", gh_file_out)
 
         # Loading Geothermal flux NEMO file
         ds_gh = xr.open_dataset(gh_file)
@@ -169,7 +168,7 @@ class EoceneNEMO:
         ds_gh["gh_flux"][0, :, :] = q_interp
 
         ds_gh.to_netcdf(gh_file_out)
-        loggy.info("Written NEMO 4.2 tidal file: %s", gh_file_out)
+        logger.info("Written NEMO 4.2 tidal file: %s", gh_file_out)
         ds_gh.close()
 
         return None
@@ -280,7 +279,7 @@ class EoceneNEMO:
 
         woa.to_netcdf(output_file, mode="w")
 
-        loggy.info("Ocean initial conditions written to %s", output_file)
+        logger.info("Ocean initial conditions written to %s", output_file)
 
         return woa
 
@@ -301,7 +300,7 @@ class EoceneNEMO:
         # write output file
         os.makedirs(os.path.join(self.output_folder, "nemo/climatology"), exist_ok=True)
         ds_out.to_netcdf(runoff_output)
-        loggy.info("Written NEMO 4.2 runoff file: %s", runoff_output)
+        logger.info("Written NEMO 4.2 runoff file: %s", runoff_output)
 
         ds_rnf.close()
 
