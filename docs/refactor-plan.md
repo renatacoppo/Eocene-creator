@@ -36,7 +36,7 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 | 0.4 ✅ | Fetch all local data (rsync, Eocene domain, `data/`) | local only | 0.3 | Paolo |
 | 0.5 ✅ | Env, both baselines, vertical-grid check, `BASELINE.txt` | local only | 0.2, 0.3, 0.4 | serial, with Paolo |
 | 1.1 | Housekeeping: pycache, notebooks, `scripts/`, `config.tmpl` placeholders | notebooks, `unsorted/`, `eocene/config.tmpl` | 0.5 | ‖ 1.2, 1.3 |
-| 1.2 | Env pin, `pyproject`, pytest markers, first tests, `ci.yml`, local regression test; declare `jinja2` and `shapely` (imported, undeclared); move pip-installed deps (`scipy`, `netcdf4`, `dask`, `cartopy`, ...) to conda | `environment.yaml`, `pyproject.toml`, `tests/`, `.github/workflows/ci.yml` | 0.5 | ‖ 1.1, 1.3 |
+| 1.2 | Env, `pyproject`, pytest markers, first tests, `ci.yml`, local regression test; declare `jinja2` and `shapely` (imported, undeclared); move pip-installed deps (`scipy`, `netcdf4`, `dask`, `cartopy`, ...) to conda | `environment.yaml`, `pyproject.toml`, `tests/`, `.github/workflows/ci.yml` | 0.5 | ‖ 1.1, 1.3 |
 | 1.3 | Docs skeleton, `docs.yml` workflow, `.readthedocs.yaml` | `docs/*.rst`, `docs/conf.py`, `.github/workflows/docs.yml` | 0.5 | ‖ 1.1, 1.2 |
 | 1.4 | ruff config, one format-only commit, `.git-blame-ignore-revs` | everything | 1.1–1.3 | serial |
 | 2.1 | `src/` move, import fixes, broken scripts, package data, `ecefast` entry point; `common/executor.py` runs scripts with `sys.executable`, not `python3` from PATH | everything | 1.4 | serial, freeze |
@@ -156,7 +156,8 @@ No behaviour change.
 - [ ] Remove `modify_oifs.ipynb`, `modify_nemo.ipynb`; other notebooks to `notebooks/analysis/` with outputs cleared.
 - [ ] `get_ece4_data.sh`, `unsorted/add_lonlat.py` to `scripts/`.
 - [ ] Placeholder paths in `eocene/config.tmpl`.
-- [ ] `environment.yaml`: `python>=3.11`, CDO pinned exactly to the baseline version.
+- [ ] `environment.yaml`: `python>=3.11`; CDO not pinned and not in the env (Homebrew on macOS, conda-forge in CI);
+      the regression test skips unless `cdo` matches the version in `BASELINE.txt`.
 - [ ] `pyproject.toml`: `requires-python = ">=3.11"`, fix the `hhttps` typo, `dev` extras (pytest, pytest-cov, ruff, import-linter).
 - [ ] pytest config with markers `unit`, `integration`, `local_data`, `hpc`.
 - [ ] `tests/test_import.py`: import every module of the `eocene` package. `ecefast/` is not a package yet

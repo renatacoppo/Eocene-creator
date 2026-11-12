@@ -186,11 +186,14 @@ the docs.
   grid (`nav_lev`, `e3t_1d`). `EoceneNEMO` reads the present-day domain from the input tree on
   purpose; do not change which domain it reads. The check in `EoceneDomain` / `verify` must fail
   on a mismatch, never warn.
-- **CDO.** Use the most recent CDO release available on conda-forge, pinned exactly in
-  `environment.yaml`. Follow the grid naming scheme of that version (ECMWF style: `F<N>` regular
-  Gaussian, `N<N>` reduced Gaussian, e.g. `F32` for TL63); do not add version checks to support
-  old names. Upgrading CDO is its own PR: bump the pin, regenerate the baseline, list the output
-  changes in the changelog.
+- **CDO.** CDO is not pinned and not part of `environment.yaml`: use the most recent release
+  available on each machine (Homebrew on macOS, conda-forge `cdo` on Linux and in CI, the module
+  on the HPC). `EOCENE-BASELINE/BASELINE.txt` records the exact CDO version of the baseline, and
+  compares are only valid with that version: a different CDO legitimately changes results (e.g.
+  the remapped bathymetries). Follow the grid naming scheme of that version (ECMWF style: `F<N>`
+  regular Gaussian, `N<N>` reduced Gaussian, e.g. `F32` for TL63); do not add version checks to
+  support old names. Upgrading the CDO used for the baseline is its own PR: regenerate the
+  baseline and list the output changes in the changelog.
 
 ## Data formats: NetCDF and GRIB
 
@@ -321,7 +324,8 @@ published on Read the Docs.
 
 - **Ask before adding any dependency.** It must be on conda-forge.
 - Add it to both `environment.yaml` and `pyproject.toml`.
-- Do not bump pinned versions in a non-science PR (CDO: see [Scientific integrity](#scientific-integrity)).
+- Do not bump pinned versions in a non-science PR. CDO is not pinned; changing the CDO used for the
+  baseline follows [Scientific integrity](#scientific-integrity).
 
 ## Git and pull requests
 
