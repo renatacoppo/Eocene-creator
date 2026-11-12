@@ -15,16 +15,16 @@ Unreleased
 Added
 ~~~~~
 
-- ``AGENTS.md``: rules for contributors and coding agents; ``CLAUDE.md`` imports it.
-- ``CHANGELOG.rst``.
+- ``AGENTS.md``: rules for contributors and coding agents; ``CLAUDE.md`` imports it (#17).
+- ``CHANGELOG.rst`` (#17).
 - ``get_ece4_data.sh``: fetches the OIFS TL63L31, NEMO PALEORCA2, OASIS PALEORCA2 and
-  runoff-mapper subset of ECE4-DATA-V3 for local runs.
-- Refactor plan towards a single ``ecefast`` package (``docs/refactor-plan.md``, issue #16).
+  runoff-mapper subset of ECE4-DATA-V3 for local runs (#17).
+- Refactor plan towards a single ``ecefast`` package (``docs/refactor-plan.md``, issue #16) (#17).
 
 Changed
 ~~~~~~~
 
-- ``.gitignore`` ignores local test data and outputs.
+- ``.gitignore`` ignores local test data and outputs (#17).
 
 0.0.2
 -----
