@@ -70,3 +70,37 @@ coordinates, bathymetries and DOMAINcfg namelists; DOMAINcfg itself runs on Atos
 
 ``ecefast eocene steps`` lists the steps. The pipeline, the steps and ``provenance.yml`` are
 described in :doc:`workflow`.
+
+Tutorials
+---------
+
+The notebooks in ``notebooks/tutorials/`` show the workflow step by step, with a plot of each field before
+(present-day input) and after (Eocene output). Read them in order:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Notebook
+     - What it shows
+   * - ``01_quickstart.ipynb``
+     - The steps above from Python: check the input data, write a configuration from ``configs/laptop.tmpl``,
+       ``ecefast eocene steps``, a dry run, a full run, the output tree and ``provenance.yml``.
+   * - ``02_oifs.ipynb``
+     - The ``oifs`` step: land-sea mask, orography, sub-grid orography, vegetation, albedo and leaf area index.
+   * - ``03_nemo.ipynb``
+     - The ``domain`` and ``nemo`` steps: Eocene bathymetry, the vertical grid check, tidal mixing, geothermal heat
+       flux, ocean initial state, runoff; the laptop part of ``ecefast nemo domain``.
+   * - ``04_oasis_rnfm.ipynb``
+     - The ``oasis`` and ``rnfm`` steps (both small, so they share a notebook): OASIS restart and river basins.
+
+They run in the ``eocene`` environment with Jupyter (``ipykernel`` is part of the environment), in about two
+minutes in all, on the local test data. Two environment variables give the paths:
+
+.. code-block:: bash
+
+   export ECEFAST_TEST_DATA=/path/to/data          # holds ECE4-DATA-V3/, herold-et-al-2014/, data/
+   export ECEFAST_TUTORIAL_DIR=/path/to/scratch    # optional; default: ecefast-tutorial in the system temp dir
+
+``01_quickstart.ipynb`` writes the configuration and the output into ``ECEFAST_TUTORIAL_DIR``; the other notebooks
+read them, so run it first.
