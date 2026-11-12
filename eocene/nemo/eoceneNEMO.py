@@ -183,20 +183,46 @@ class EoceneNEMO():
 
         return None
 
-    def create_ocean_init(self, profile="deepmip_cold", so_value=34.7, output_file=None):
+    def create_ocean_init(self, profile=None, so_value=34.7, output_file=None):
         """
         Create ocean initial conditions (thetao and so) for NEMO
         based on WOA climatology and an idealized temperature profile.
 
         Parameters
         ----------
-        profile : str
+        profile : str or None
+            None (default): build both profiles below, one file each.
             "deepmip_cold": idealized cold DeepMIP-like profile (output suffix deepmip-30).
             "woa_pi": zonal mean of present-day WOA over the present-day ocean,
                       broadcast in longitude (output suffix woa-pi).
         so_value : float
             Salinity to assign everywhere (default = 34.7).
+        output_file : str or None
+            Output path for a single profile. Default: the input path of
+            ``nemo/initial/woa13-levitus-L31.nc`` under the output folder, with
+            ``_<suffix>`` before the extension. Not allowed with ``profile=None``.
+
+        Returns
+        -------
+        xarray.Dataset or dict of xarray.Dataset
+            The written dataset; with ``profile=None``, a dict keyed by profile.
+
+        Raises
+        ------
+        ValueError
+            If ``profile`` is unknown, or ``output_file`` is given with ``profile=None``.
         """
+
+        if profile is None:
+            if output_file is not None:
+                raise ValueError(
+                    "output_file needs a single profile ('deepmip_cold' or 'woa_pi'); "
+                    "profile=None builds both files with their default names"
+                )
+            return {
+                name: self.create_ocean_init(profile=name, so_value=so_value)
+                for name in ("deepmip_cold", "woa_pi")
+            }
 
         if profile not in ("deepmip_cold", "woa_pi"):
             raise ValueError(f"Unknown profile: {profile}. Options are: deepmip_cold, woa_pi")
