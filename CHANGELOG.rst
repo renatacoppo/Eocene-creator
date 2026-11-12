@@ -20,6 +20,8 @@ Added
   ``rtol=1e-6``, GRIB with ``grib_compare``), with a self-test (#20).
 - pytest markers (``unit``, ``integration``, ``local_data``, ``hpc``), first unit tests, a local
   regression test against the baseline and a CI workflow on Python 3.14 (#24).
+- Documentation skeleton (Sphinx, reStructuredText, Read the Docs config) and a docs build
+  workflow (#23).
 - ``CHANGELOG.rst`` (#17).
 - ``get_ece4_data.sh``: fetches the OIFS TL63L31, NEMO PALEORCA2, OASIS PALEORCA2 and
   runoff-mapper subset of ECE4-DATA-V3 for local runs (#17).
