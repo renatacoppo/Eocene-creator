@@ -124,6 +124,8 @@ Changed
 Fixed
 ~~~~~
 
+- Tests restore the ``ecefast`` logger after each test, so the ``local_data`` NEMO domain test no longer
+  breaks the logger unit test (#41).
 - NEMO domain pipeline: with ``domaincfg_dir: null`` the ``generate_mask`` and
   ``generate_subbasins`` steps looked for the DOMAINcfg output in a relative ``DOMAINcfg/``
   folder instead of next to the namelists (``output_dir/domain``) (#37).
