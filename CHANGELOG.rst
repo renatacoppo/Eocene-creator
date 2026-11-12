@@ -15,6 +15,9 @@ Unreleased
 Added
 ~~~~~
 
+- OIFS unit tests on synthetic data and tiny GRIB files (``tests/unit/oifs/``) (#40).
+- CI step that fails on hardcoded personal or HPC paths (allowlist: the OIFS generator and planning
+  notes) (#38).
 - import-linter contracts in ``pyproject.toml`` (layers ``cli > paleo > components > tools >
   core``; OIFS, NEMO, OASIS and RNFM independent), checked by ``lint-imports`` in CI (#37).
 - The Eocene ``domain`` step builds the Eocene domain with the NEMO domain pipeline when
@@ -54,6 +57,13 @@ Added
 Changed
 ~~~~~~~
 
+- WEIGHTS namelists use ``{input}`` and ``{woce_dir}`` placeholders instead of HPC paths;
+  ``create_corners.py`` (``--oifs-dir``, ``--tgt-dir``) and ``descriptor_generator.py``
+  (``--oifs-bc``) take their paths as arguments; notebook paths are placeholders (#38).
+- The NEMO domain pipeline writes ``subbasins.nc`` for every bathymetry; processors with
+  ``regional_subbasins = False`` (``EoceneBathymetry``) get the global mask ``glomsk`` only;
+  ``subbasins.py`` logs instead of printing; ``notebooks/analysis/eocene-subbasins.ipynb`` records
+  the assessment of present-day basins on Eocene geography (#39).
 - The vertical grid check of the ``domain`` step accepts differences up to 1e-6 m in ``nav_lev``
   and ``e3t_1d`` (floating-point rounding between DOMAINcfg builds and the fake backend, about
   1e-12 m); a different number of levels or a larger difference is still an error, whose message
@@ -140,6 +150,8 @@ Removed
 Output
 ~~~~~~
 
+- NEMO domain pipeline: ``domain/PALEORCA2/eocene/subbasins.nc`` is now built, with ``glomsk`` only
+  (present-day basin polygons do not fit Eocene geography; Eocene basins are a later task) (#39).
 - ``nemo/initial/woa13-levitus-L31_deepmip-30.nc`` is now built alongside
   ``nemo/initial/woa13-levitus-L31_woa-pi.nc`` (#19).
 
