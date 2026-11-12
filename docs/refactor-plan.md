@@ -53,9 +53,9 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 | 5.2 ✅ | Bathymetry registry, backend in the domain pipeline, `ecefast nemo domain`, `EoceneDomain` uses the backend, import-linter | `components/nemo/domain/`, `cli/` | 5.1, 4.4 | serial |
 | 5.3 ✅ | Subbasins for every bathymetry, check notebook (**output change**) | subbasins code, `notebooks/analysis/` | 5.2 | ‖ 5.4, 6.2 |
 | 5.4 ✅ | Remaining hardcoded paths (WEIGHTS namelists → placeholders), grep check in CI | scattered, `components/nemo/namelists/` | 5.2 | ‖ 5.3, 6.2 |
-| 6.1 | Synthetic fixtures (declared reads only), integration tests, `verify` checks | `tests/integration/`, `paleo/eocene/verify.py` | 5.2 | ‖ 6.3 |
+| 6.1 ✅ | Synthetic fixtures (declared reads only), integration tests, `verify` checks | `tests/integration/`, `paleo/eocene/verify.py` | 5.2 | ‖ 6.3 |
 | 6.2 ✅ | OIFS unit tests on small CDO-made GRIB | `tests/unit/oifs/` | 4.1 | ‖ 5.3, 5.4 |
-| 6.3 | Tutorials from `plots.ipynb`, `quickstart.rst` | `notebooks/tutorials/`, docs | 4.4 | ‖ 6.1 |
+| 6.3 ✅ | Tutorials from `plots.ipynb`, `quickstart.rst` | `notebooks/tutorials/`, docs | 4.4 | ‖ 6.1 |
 | 7.1 | Atos validation (DOMAINcfg contract, full run) | Atos | 6.1–6.3 | Paolo |
 | 7.2 | `refactor` → `main`, baseline regenerated, release, issue #16 updated | — | 7.1 | Renata reviews |
 

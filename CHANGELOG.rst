@@ -15,6 +15,11 @@ Unreleased
 Added
 ~~~~~
 
+- Tutorial notebooks in ``notebooks/tutorials/`` (``01_quickstart``, ``02_oifs``, ``03_nemo``,
+  ``04_oasis_rnfm``), linked from ``docs/quickstart.rst``; plot helper ``plot_before_after`` (#43).
+- ``ecefast eocene run`` checks the outputs of the steps that ran (``paleo/eocene/verify.py``): every
+  declared output exists, no NaN in NetCDF data variables, vertical grid rule; integration test of
+  the pipeline on a synthetic input tree that holds only the declared ``reads`` (#42).
 - OIFS unit tests on synthetic data and tiny GRIB files (``tests/unit/oifs/``) (#40).
 - CI step that fails on hardcoded personal or HPC paths (allowlist: the OIFS generator and planning
   notes) (#38).
@@ -124,6 +129,7 @@ Changed
 Fixed
 ~~~~~
 
+- ``load_grib_var_spec`` returned ``lat_bnds`` instead of the field for spectral GRIB files (#43).
 - Tests restore the ``ecefast`` logger after each test, so the ``local_data`` NEMO domain test no longer
   breaks the logger unit test (#41).
 - NEMO domain pipeline: with ``domaincfg_dir: null`` the ``generate_mask`` and
