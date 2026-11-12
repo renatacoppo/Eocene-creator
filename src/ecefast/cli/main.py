@@ -2,8 +2,8 @@
 
 Argument parsing only. Each subcommand passes the rest of the command line to its own ``main``::
 
-    ecefast eocene -c configs/eocene.yml --run all --copy
-    ecefast nemo-domain --config nemo_workflow.yaml
+    ecefast eocene -c configs/laptop.yml --run all --copy
+    ecefast nemo-domain -c configs/laptop.yml
 """
 
 import argparse

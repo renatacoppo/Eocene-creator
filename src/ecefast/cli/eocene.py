@@ -7,18 +7,15 @@ import os
 import xarray as xr
 import numpy as np
 
-from ecefast.core import load_yaml, setup_logger
+from ecefast.core import Config, ConfigError, load_config, setup_logger
 from ecefast.core.cdo import cdo_version
 from ecefast.paleo.eocene.oifs.eoceneOIFS import EoceneOIFS
 from ecefast.paleo.eocene.nemo.eoceneNEMO import EoceneNEMO
 from ecefast.paleo.eocene.oasis.eoceneOASIS import EoceneOASIS
 from ecefast.paleo.eocene.rnfm.eoceneRNFM import iter_track, create_basin_data
 
-OIFS_RESO = "TL63L31"
-NEMO_RESO = "PALEORCA2"
 
-
-def run_copy(input_dir, output_dir, logger):
+def run_copy(input_dir, output_dir, logger, oifs_reso, nemo_reso):
     """Copy the input folder to the output folder to preserve original data."""
 
     logger.info(f"Copying input data from {input_dir} to {output_dir}")
@@ -38,9 +35,9 @@ def run_copy(input_dir, output_dir, logger):
     for item in os.listdir(input_dir):
         if item in ["oifs", "nemo", "oasis"]:
             for subitem in os.listdir(os.path.join(input_dir, item)):
-                if item == "oasis" and subitem not in [NEMO_RESO]:
+                if item == "oasis" and subitem not in [nemo_reso]:
                     continue
-                if item == "oifs" and subitem not in ["composition", "ifsdata", "vtables", "rtables", OIFS_RESO]:
+                if item == "oifs" and subitem not in ["composition", "ifsdata", "vtables", "rtables", oifs_reso]:
                     continue
                 if item == "nemo" and subitem not in ["cfc", "climatology", "initial", "weights"]:
                     continue
@@ -57,18 +54,18 @@ def run_copy(input_dir, output_dir, logger):
             logger.info(f"Skipping {item}!")
 
 
-def run_oifs(config, logger):
+def run_oifs(config: Config, logger):
     """Run the OIFS modifications based on the provided configuration."""
 
     logger.info("Starting OIFS modifications")
 
     # eocene class init
     eocene_oifs = EoceneOIFS(
-        idir=config["dirs"]["input"],
-        odir=config["dirs"]["output"],
-        herold=config["dirs"]["herold"],
+        idir=config.paths.input,
+        odir=config.paths.output,
+        herold=config.paths.herold,
         startdate="19900101",
-        resolution=OIFS_RESO,
+        resolution=config.grids.oifs,
     )
 
     # Load Herold datasets (land sea mask, orography, sd_orography)
@@ -87,25 +84,26 @@ def run_oifs(config, logger):
         lsm_present=lsm_present, landsea=lsm_eocene["landsea_mask"], sd_orog=sd_orog["sd_orography"]
     )
     eocene_oifs.create_iniua()
-    # eocene_oifs.aerosols()
+    if config.eocene.oifs.aerosols:
+        eocene_oifs.aerosols()
 
 
-def run_nemo(config, logger):
+def run_nemo(config: Config, logger):
     """Run the NEMO modifications based on the provided configuration."""
 
     logger.info("Starting NEMO modifications")
 
     # eocene class init
     eocene_nemo = EoceneNEMO(
-        herold_folder=config["dirs"]["herold"],
-        input_folder=config["dirs"]["input"],
-        output_folder=config["dirs"]["output"],
+        herold_folder=config.paths.herold,
+        input_folder=config.paths.input,
+        output_folder=config.paths.output,
     )
 
     # copy domain and maskutil files
     for filename in ["domain_cfg.nc", "maskutil.nc"]:
-        src = os.path.join(config["dirs"]["domain"], filename)
-        dst = os.path.join(config["dirs"]["output"], "nemo", "domain", "PALEORCA2", filename)
+        src = os.path.join(config.tools.precomputed.domain, filename)
+        dst = os.path.join(config.paths.output, "nemo", "domain", config.grids.nemo, filename)
         if os.path.exists(dst):
             os.remove(dst)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -119,12 +117,12 @@ def run_nemo(config, logger):
     eocene_nemo.create_runoff()
 
 
-def run_runoff(config, logger):
+def run_runoff(config: Config, logger):
 
     logger.info("Reading oroslope file...")
-    oroslopefile = os.path.join(config["dirs"]["herold"], "herold_etal_eocene_runoff_1x1.nc")
-    runoff_file = os.path.join(config["dirs"]["input"], "runoff-mapper/runoff_maps.nc")
-    final_file = os.path.join(config["dirs"]["output"], "runoff-mapper/runoff_maps.nc")
+    oroslopefile = os.path.join(config.paths.herold, "herold_etal_eocene_runoff_1x1.nc")
+    runoff_file = os.path.join(config.paths.input, "runoff-mapper/runoff_maps.nc")
+    final_file = os.path.join(config.paths.output, "runoff-mapper/runoff_maps.nc")
     oroslope = xr.load_dataset(oroslopefile)
     oroslope = oroslope.rename({"xc": "longitude", "yc": "latitude"})
     oroslope = oroslope.assign_coords(longitude=oroslope.longitude[0], latitude=oroslope.latitude[:, 0])
@@ -160,14 +158,14 @@ def run_runoff(config, logger):
     )
 
 
-def run_oasis(config, logger):
+def run_oasis(config: Config, logger):
     logger.info("Starting OASIS modifications")
 
     # eocene class init
-    eocene_oasis = EoceneOASIS(idir=config["dirs"]["input"], odir=config["dirs"]["output"], nemo_resolution=NEMO_RESO)
+    eocene_oasis = EoceneOASIS(idir=config.paths.input, odir=config.paths.output, nemo_resolution=config.grids.nemo)
 
     # Create OASIS modifications
-    eocene_oasis.create_rstos()
+    eocene_oasis.create_rstos(constant_sst=config.eocene.oasis.constant_sst)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -190,12 +188,12 @@ def main(argv: list[str] | None = None) -> None:
     logger = setup_logger(level=args.loglevel)
     logger.info(f"Logger initialized with level: {args.loglevel}")
     logger.info("CDO version: %s", cdo_version())
-    if not os.path.exists(args.config):
-        raise FileNotFoundError(f"Configuration file {args.config} does not exist.")
-    config = load_yaml(args.config)
+    config = load_config(args.config)
+    if args.run in ["nemo", "all"] and config.tools.precomputed.domain is None:
+        raise ConfigError(f"{args.config}: '--run {args.run}' needs 'tools.precomputed.domain' (the Eocene domain)")
 
     if args.copy:
-        run_copy(config["dirs"]["input"], config["dirs"]["output"], logger)
+        run_copy(config.paths.input, config.paths.output, logger, config.grids.oifs, config.grids.nemo)
 
     logger.info(f"Loaded configuration: {config}")
     if args.run in ["oasis", "all"]:
