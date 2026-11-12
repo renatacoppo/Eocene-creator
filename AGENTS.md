@@ -209,7 +209,7 @@ EC-Earth. Preserve, whenever possible:
   dates, packing type, `bitsPerValue`). Change values with ecCodes on a clone of the original
   message; avoid GRIB → NetCDF → GRIB round trips. If a round trip cannot be avoided, restore the
   metadata and message order afterwards. Existing code that already changes the message order
-  (`repack_grib_file` groups GRIB2 before GRIB1) is frozen in the baseline; do not copy that
+  (`repack_grib_file` writes all GRIB1 messages, then all GRIB2 messages) is frozen in the baseline; do not copy that
   pattern into new code.
 - When preserving something is not possible, say why in a code comment and in the PR.
 - Files created from scratch use CF-style `units`, `long_name` and, where one exists,
