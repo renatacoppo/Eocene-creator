@@ -44,7 +44,7 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 | 3.1 ✅ | Config schema v1, `configs/*.tmpl`, `configuration.rst`, migrate both configs | `core/config.py`, `configs/`, docs | 3.0 | ‖ 3.2, 3.3 |
 | 3.2 ✅ | `core/grib.py` merge; Eocene OIFS non-GRIB helpers to `fields.py` | `components/oifs/`, `paleo/eocene/oifs/` | 3.0 | ‖ 3.1, 3.3 |
 | 3.3 ✅ | `components/nemo/domain/postprocess.py`; delete `domain/mask_util.py` | `components/nemo/domain/` | 3.0 | ‖ 3.1, 3.2 |
-| 4.0 | `core/steps.py`, `workspace.py`, `io.py` (atomic helper), `Stage`, runner tests | new `core/` files, `tests/` | 3.1 | serial |
+| 4.0 ✅ | `core/steps.py`, `workspace.py`, `io.py` (atomic helper), `Stage`, runner tests | new `core/` files, `tests/` | 3.1 | serial |
 | 4.1 | `EoceneOIFS` step, atomic writes, `aerosols` option; `prepare_herold` writes to `tmpdir`, not into the herold folder | `paleo/eocene/oifs/` | 4.0, 3.2 | ‖ 4.2, 4.3, 5.1 |
 | 4.2 | `EoceneNEMO`, `EoceneDomain` with vertical-grid check | `paleo/eocene/nemo.py`, `domain.py` | 4.0 | ‖ 4.1, 4.3, 5.1 |
 | 4.3 | `EoceneOASIS`, new `EoceneRNFM` | `paleo/eocene/oasis.py`, `rnfm.py` | 4.0 | ‖ 4.1, 4.2, 5.1 |
@@ -208,9 +208,9 @@ Done when: `pip install -e .` works; both baselines match; CI green.
 
 ## Phase 4a: steps, runner, preflight, atomic writes (PR)
 
-- [ ] `core/workspace.py`: roots (`input` read-only, `tmpdir`, `output`), placeholders (`{input}`, `{output}`, `{herold}`, ...),
+- [x] `core/workspace.py`: roots (`input` read-only, `tmpdir`, `output`), placeholders (`{input}`, `{output}`, `{herold}`, ...),
       guards, `Stage` (today's `run_copy`).
-- [ ] `core/steps.py`: `ComponentStep`, `run_pipeline(PIPELINE, ctx, select, dry_run)`: `needs` order, preflight on `reads`, run, check `writes`.
+- [x] `core/steps.py`: `ComponentStep`, `run_pipeline(PIPELINE, ctx, select, dry_run)`: `needs` order, preflight on `reads`, run, check `writes`.
 - [ ] `core/io.py`: atomic write helper (write to a temporary file in the same directory, then `os.replace`); every
       `create_*` writes through it. Baseline must match.
 - [ ] Wrap `EoceneOIFS`, `EoceneNEMO`, `EoceneOASIS`; new thin `EoceneRNFM` around `run_runoff`; `EoceneDomain`

@@ -6,6 +6,15 @@ Generated from the docstrings.
 Core
 ----
 
+.. automodule:: ecefast.core.steps
+   :members:
+
+.. automodule:: ecefast.core.workspace
+   :members:
+
+.. automodule:: ecefast.core.io
+   :members:
+
 .. automodule:: ecefast.core.grib
    :members:
    :undoc-members:
