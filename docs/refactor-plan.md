@@ -35,10 +35,10 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 | 0.3 ✅ | `compare_outputs.py` with a self-test on tiny synthetic files; fetch script gets eORCA1 | `scripts/compare_outputs.py`, `get_ece4_data.sh` | 0.1 | ‖ 0.2 |
 | 0.4 ✅ | Fetch all local data (rsync, Eocene domain, `data/`) | local only | 0.3 | Paolo |
 | 0.5 ✅ | Env, both baselines, vertical-grid check, `BASELINE.txt` | local only | 0.2, 0.3, 0.4 | serial, with Paolo |
-| 1.1 | Housekeeping: pycache, notebooks, `scripts/`, `config.tmpl` placeholders | notebooks, `unsorted/`, `eocene/config.tmpl` | 0.5 | ‖ 1.2, 1.3 |
-| 1.2 | Env, `pyproject`, pytest markers, first tests, `ci.yml`, local regression test; declare `jinja2` and `shapely` (imported, undeclared); move pip-installed deps (`scipy`, `netcdf4`, `dask`, `cartopy`, ...) to conda | `environment.yaml`, `pyproject.toml`, `tests/`, `.github/workflows/ci.yml` | 0.5 | ‖ 1.1, 1.3 |
-| 1.3 | Docs skeleton, `docs.yml` workflow, `.readthedocs.yaml` | `docs/*.rst`, `docs/conf.py`, `.github/workflows/docs.yml` | 0.5 | ‖ 1.1, 1.2 |
-| 1.4 | ruff config, one format-only commit, `.git-blame-ignore-revs` | everything | 1.1–1.3 | serial |
+| 1.1 ✅ | Housekeeping: pycache, notebooks, `scripts/`, `config.tmpl` placeholders | notebooks, `unsorted/`, `eocene/config.tmpl` | 0.5 | ‖ 1.2, 1.3 |
+| 1.2 ✅ | Env, `pyproject`, pytest markers, first tests, `ci.yml`, local regression test; declare `jinja2` and `shapely` (imported, undeclared); move pip-installed deps (`scipy`, `netcdf4`, `dask`, `cartopy`, ...) to conda | `environment.yaml`, `pyproject.toml`, `tests/`, `.github/workflows/ci.yml` | 0.5 | ‖ 1.1, 1.3 |
+| 1.3 ✅ | Docs skeleton, `docs.yml` workflow, `.readthedocs.yaml` | `docs/*.rst`, `docs/conf.py`, `.github/workflows/docs.yml` | 0.5 | ‖ 1.1, 1.2 |
+| 1.4 ✅ | ruff config, one format-only commit, `.git-blame-ignore-revs` | everything | 1.1–1.3 | serial |
 | 2.1 | `src/` move, import fixes, broken scripts, package data, `ecefast` entry point; `common/executor.py` runs scripts with `sys.executable`, not `python3` from PATH | everything | 1.4 | serial, freeze |
 | 3.0 | `core/logging`, `core/cdo`; replace 2 loggers and 8 `Cdo()` | imports in many files | 2.1 | serial |
 | 3.1 | Config schema v1, `configs/*.tmpl`, `configuration.rst`, migrate both configs | `core/config.py`, `configs/`, docs | 3.0 | ‖ 3.2, 3.3 |
