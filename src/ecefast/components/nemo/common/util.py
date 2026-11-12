@@ -12,13 +12,21 @@ import xarray as xr
 logger = logging.getLogger(__name__)
 
 
-def process_domain_cfg(src_dir, tgt_dir, name):
-    """Modify domain_cfg file by renaming the vertical dimension and resetting it.
+def process_domain_cfg(src_dir: str, tgt_dir: str, name: str) -> None:
+    """Post-process a DOMAINcfg ``domain_cfg_<name>.nc`` into ``<tgt_dir>/domain_cfg.nc``.
 
-    Args:
-        src_dir: Path to the source directory containing domain_cfg_{name}.nc
-        tgt_dir: Path to the target directory where the modified file will be saved
-        name: Bathymetry name to identify the correct domain_cfg_{name}.nc file
+    Renames the vertical dimension ``nav_lev`` to ``z`` (``nav_lev`` stays as a plain variable),
+    sets the global attributes ``cn_cfg = "PALEORCA"`` and ``nn_cfg = 2``, and writes with no
+    ``_FillValue`` and ``time_counter`` as the unlimited dimension.
+
+    Parameters
+    ----------
+    src_dir : str
+        Directory containing ``domain_cfg_<name>.nc``.
+    tgt_dir : str
+        Output directory, created if missing.
+    name : str
+        Bathymetry name.
     """
     domain_file = f"domain_cfg_{name}.nc"
     logger.debug("Processing %s from %s", domain_file, src_dir)
@@ -46,13 +54,20 @@ def process_domain_cfg(src_dir, tgt_dir, name):
     logger.debug("Written %s", output_path)
 
 
-def extract_maskutil(src_dir, tgt_dir, name):
-    """Extract mask variables from mesh_mask and save to maskutil.nc.
+def extract_maskutil(src_dir: str, tgt_dir: str, name: str) -> None:
+    """Extract ``tmaskutil``, ``umaskutil``, ``vmaskutil`` from ``mesh_mask_<name>.nc`` into ``maskutil.nc``.
 
-    Args:
-        src_dir: Path to the source directory containing mesh_mask_{name}.nc
-        tgt_dir: Path to the target directory where maskutil.nc will be saved
-        name: Bathymetry name to identify the correct mesh_mask_{name}.nc file
+    The time dimension ``time_counter`` is renamed to ``t`` (unlimited) and its variable dropped;
+    the global attributes are replaced by ``Conventions = "CF-1.1"``.
+
+    Parameters
+    ----------
+    src_dir : str
+        Directory containing ``mesh_mask_<name>.nc``.
+    tgt_dir : str
+        Output directory, created if missing.
+    name : str
+        Bathymetry name.
     """
     mesh_file = f"mesh_mask_{name}.nc"
     logger.debug("Extracting maskutil from %s", mesh_file)
