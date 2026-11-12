@@ -21,7 +21,7 @@ from ecefast.components.nemo.bathymetry import PROCESSORS
 from ecefast.components.nemo.domain.pipeline import NEMOWorkflow
 from ecefast.core.config import ConfigError
 from ecefast.core.io import atomic_write
-from ecefast.core.steps import ComponentStep
+from ecefast.core.steps import ComponentStep, PipelineError
 from ecefast.core.workspace import Context
 from ecefast.paleo.eocene.bathymetry import EOCENE_PROCESSORS
 from ecefast.tools.ecearth import get_backend
@@ -93,7 +93,7 @@ class EoceneDomain(ComponentStep):
     # With tools.backend: local it also reads domain_cfg.nc and maskutil.nc from tools.precomputed.domain; with
     # atos or fake it runs the NEMO domain pipeline, which reads and writes outside the Eocene tree
     # (nemo_domain.output_dir). Neither fits a class-level list that cannot depend on the backend, so both are
-    # checked in from_context.
+    # checked in from_context, which the runner calls for every selected step before the first one runs.
     reads = ["{input}/nemo/domain/{nemo_grid}/domain_cfg.nc"]
     writes = [f"{{output}}/nemo/domain/{{nemo_grid}}/{filename}" for filename in DOMAIN_FILES]
 
@@ -135,7 +135,7 @@ class EoceneDomain(ComponentStep):
                 )
             missing = [f for f in DOMAIN_FILES if not os.path.isfile(os.path.join(precomputed_dir, f))]
             if missing:
-                raise FileNotFoundError(
+                raise PipelineError(
                     f"Step 'domain': missing in tools.precomputed.domain ({precomputed_dir}): {', '.join(missing)}"
                 )
             return cls(precomputed_dir, ctx.paths.input, ctx.paths.output, ctx.grids.nemo)
@@ -155,6 +155,10 @@ class EoceneDomain(ComponentStep):
         workflow = NEMOWorkflow(
             domain, ctx.paths, {**PROCESSORS, **EOCENE_PROCESSORS}, backend, only=[EOCENE_BATHYMETRY]
         )
+        try:
+            workflow.check()
+        except PipelineError as e:
+            raise PipelineError(f"Step 'domain' builds the Eocene domain with the NEMO domain pipeline. {e}") from e
         return cls(workflow.domain_dir(EOCENE_BATHYMETRY), ctx.paths.input, ctx.paths.output, ctx.grids.nemo, workflow)
 
     def run(self) -> None:

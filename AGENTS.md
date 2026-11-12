@@ -9,6 +9,8 @@ a rule.
 All code, comments, docstrings, documentation, commit messages, issues and PRs are written in
 **English**.
 
+Do not exit from the main code folder unless asked by the user. 
+
 ## What this repo does
 
 Builds EC-Earth4 input data (OIFS TL63L31, NEMO PALEORCA2, OASIS, runoff-mapper) and modifies it
@@ -55,6 +57,7 @@ ecefast eocene run -c configs/laptop.yml --dry-run       # check all inputs, sho
 ecefast eocene steps                                     # list the steps (needs, reads, writes)
 ecefast nemo domain -c configs/laptop.yml                # NEMO domain pipeline (section nemo_domain)
 ecefast nemo domain -c configs/laptop.yml --bathymetry eocene   # only some bathymetries
+ecefast nemo domain -c configs/laptop.yml --dry-run      # check all inputs, show the plan, write nothing
 
 # checks before pushing
 ruff check --fix . && ruff format .                             # (from phase 1)

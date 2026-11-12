@@ -144,6 +144,7 @@ Run on an interactive or batch node, not on a login node:
 .. code-block:: bash
 
    ecefast eocene run -c configs/atos.yml --dry-run    # every input found, plan shown
+   ecefast nemo domain -c configs/atos.yml --dry-run   # every input found, plan shown
    ecefast nemo domain -c configs/atos.yml             # DOMAINcfg through the atos backend
    ECEFAST_HPC_DOMAINCFG_DIR=/path/to/nemo-4.2/tools/DOMAINcfg pytest -m hpc tests/hpc
    ecefast eocene run -c configs/atos.yml --overwrite  # full run, Eocene domain built here

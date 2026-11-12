@@ -135,6 +135,16 @@ class BathymetryProcessor:
         stem = os.path.splitext(os.path.basename(remap_file))[0]
         return os.path.join(output_dir, f"{stem}_corrected.nc")
 
+    def reads(self) -> list[str]:
+        """Files the pipeline reads: the source file, the target bounds and the source grid description (if any).
+
+        Used by the input checks of the domain pipeline. Subclasses that read more files extend the list.
+        """
+        files = [self.cfg["source_file"], self._target_bounds()]
+        if self.setgrid:
+            files.append(self.setgrid)
+        return files
+
     def expected_output(self):
         """
         Return the deterministic final output path without running the pipeline.

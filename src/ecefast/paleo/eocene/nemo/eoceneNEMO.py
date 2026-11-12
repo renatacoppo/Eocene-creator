@@ -52,6 +52,11 @@ def woa_zonal_mean(thetao, ocean_mask):
     return zm.broadcast_like(thetao)
 
 
+# EarthByte palaeo ocean floor age grids (Muller, Sdrolias, Gaina, Steinberger and Heine, 2008, Science), 0.1 deg,
+# ASCII columns lon, lat, age (Myr), depth-to-basement, bathymetry (m); create_geothermal_flux reads the 55 Ma one
+AGE_GRID_URL = "https://www.earthbyte.org/webdav/ftp/earthbyte/agegrid/Palaeo/2008/Data/age_depth_bath_55.xyadb.bz2"
+
+
 class EoceneNEMO(ComponentStep):
     """Modify NEMO input files for the Eocene: tidal mixing, geothermal flux, ocean initial state, runoff."""
 
@@ -70,6 +75,10 @@ class EoceneNEMO(ComponentStep):
         "{input}/nemo/domain/ORCA2/domain_cfg.nc",
         "{input}/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc",
     ]
+    # the age grid is not in the Herold et al. (2014) supplement
+    sources = {
+        "{herold}/age_depth_bath_55.xyadb": (f"{AGE_GRID_URL} (bunzip2, then put it in the herold folder)"),
+    }
     writes = [
         "{output}/nemo/initial/zdfiwm_forcing_r720x360.nc",
         "{output}/nemo/initial/Goutorbe_ghflux.nc",

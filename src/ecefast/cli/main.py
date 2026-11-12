@@ -1,7 +1,7 @@
 """The ``ecefast`` command: argument parsing only.
 
 Commands: ``ecefast eocene run -c CONFIG [--steps a,b] [--dry-run] [--overwrite] [-l LEVEL]``,
-``ecefast eocene steps`` and ``ecefast nemo domain -c CONFIG [--bathymetry NAME ...] [-l LEVEL]``.
+``ecefast eocene steps`` and ``ecefast nemo domain -c CONFIG [--bathymetry NAME ...] [--dry-run] [-l LEVEL]``.
 """
 
 import argparse
@@ -45,10 +45,18 @@ def eocene_main(argv: list[str]) -> None:
     argv : list of str
         Arguments after ``ecefast eocene``.
     """
+    from ecefast.core.steps import step_summary
+    from ecefast.paleo.eocene.pipeline import PIPELINE
+
     parser = argparse.ArgumentParser(prog="ecefast eocene", description=SUBCOMMANDS["eocene"])
     commands = parser.add_subparsers(dest="command", required=True)
 
-    run_parser = commands.add_parser("run", help="run the Eocene pipeline (all steps, or the ones in --steps)")
+    run_parser = commands.add_parser(
+        "run",
+        help="run the Eocene pipeline (all steps, or the ones in --steps)",
+        epilog=format_step_list("steps, in run order (for --steps)", {s.name: step_summary(s) for s in PIPELINE}),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     run_parser.add_argument("-c", "--config", required=True, help="configuration file (schema 1)")
     run_parser.add_argument(
         "--steps", type=lambda s: [n.strip() for n in s.split(",") if n.strip()], help="comma-separated step names"
@@ -65,7 +73,7 @@ def eocene_main(argv: list[str]) -> None:
 
     from ecefast.core import ConfigError, setup_logger
     from ecefast.core.steps import PipelineError
-    from ecefast.paleo.eocene.pipeline import PIPELINE, run
+    from ecefast.paleo.eocene.pipeline import run
 
     if args.command == "steps":
         print(format_steps(PIPELINE))
@@ -83,20 +91,30 @@ def nemo_main(argv: list[str]) -> None:
     """Run ``ecefast nemo domain [args ...]``.
 
     The domain pipeline gets the generic bathymetry processors merged with the Eocene ones. Exits with code 1,
-    after logging the error, if the configuration is invalid.
+    after logging the error, if the configuration is invalid or an input is missing.
 
     Parameters
     ----------
     argv : list of str
         Arguments after ``ecefast nemo``.
     """
+    from ecefast.components.nemo.domain.pipeline import STEP_DESCRIPTIONS
+
     parser = argparse.ArgumentParser(prog="ecefast nemo", description=SUBCOMMANDS["nemo"])
     commands = parser.add_subparsers(dest="command", required=True)
 
-    domain_parser = commands.add_parser("domain", help="run the NEMO domain pipeline (section nemo_domain)")
+    domain_parser = commands.add_parser(
+        "domain",
+        help="run the NEMO domain pipeline (section nemo_domain)",
+        epilog=format_step_list("steps, in run order (switched on and off in nemo_domain.steps)", STEP_DESCRIPTIONS),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     domain_parser.add_argument("-c", "--config", required=True, help="configuration file with a 'nemo_domain' section")
     domain_parser.add_argument(
         "--bathymetry", nargs="+", metavar="NAME", help="run only these bathymetries (default: all enabled ones)"
+    )
+    domain_parser.add_argument(
+        "--dry-run", action="store_true", help="check all inputs and show the plan; write nothing"
     )
     domain_parser.add_argument("-l", "--loglevel", default="INFO", help="log level (DEBUG, INFO, WARNING, ...)")
 
@@ -105,14 +123,22 @@ def nemo_main(argv: list[str]) -> None:
     from ecefast.components.nemo.bathymetry import PROCESSORS
     from ecefast.components.nemo.domain.pipeline import run
     from ecefast.core import ConfigError, setup_logger
+    from ecefast.core.steps import PipelineError
     from ecefast.paleo.eocene.bathymetry import EOCENE_PROCESSORS
 
     logger = setup_logger(level=args.loglevel)
+    processors = {**PROCESSORS, **EOCENE_PROCESSORS}
     try:
-        run(args.config, {**PROCESSORS, **EOCENE_PROCESSORS}, only=args.bathymetry, log_level=args.loglevel)
-    except ConfigError as e:
+        run(args.config, processors, only=args.bathymetry, log_level=args.loglevel, dry_run=args.dry_run)
+    except (ConfigError, PipelineError) as e:
         logger.error("%s", e)
         sys.exit(1)
+
+
+def format_step_list(title: str, descriptions: dict[str, str]) -> str:
+    """Help text: ``title:`` then one line per step, its name and its description."""
+    width = max(len(name) for name in descriptions)
+    return "\n".join([f"{title}:", *(f"  {name:<{width}}  {text}" for name, text in descriptions.items())])
 
 
 def format_steps(steps: list) -> str:

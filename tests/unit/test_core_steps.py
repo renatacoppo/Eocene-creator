@@ -97,6 +97,19 @@ def test_one_missing_read_is_singular(ctx: Context) -> None:
         run_pipeline([make_step("a", reads=["{input}/nope"])], ctx)
 
 
+def test_missing_read_shows_its_source(ctx: Context) -> None:
+    """A missing read listed in ``sources`` gets a line saying where to get it; the others do not."""
+    a = make_step("a", reads=["{herold}/age.xyadb", "{input}/other.nc"])
+    a.sources = {"{herold}/age.xyadb": "https://example.org/age.xyadb.bz2"}
+    with pytest.raises(PipelineError) as err:
+        run_pipeline([a], ctx)
+    assert str(err.value).splitlines()[1:] == [
+        f"  a  needs  {ctx.paths.herold}/age.xyadb",
+        "     get it from https://example.org/age.xyadb.bz2",
+        f"  a  needs  {ctx.paths.input}/other.nc",
+    ]
+
+
 def test_read_written_by_earlier_step_is_not_missing(ctx: Context) -> None:
     a = make_step("a", writes=["{output}/a.txt"])
     b = make_step("b", needs=["a"], reads=["{output}/a.txt"])

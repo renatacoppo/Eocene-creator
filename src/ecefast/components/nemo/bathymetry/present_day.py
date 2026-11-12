@@ -48,6 +48,10 @@ class PresentDayBathymetry(BathymetryProcessor):
         stagg = grids.get("staggering_source", "T")
         self.setgrid = os.path.join(paths["coordsdir"], src, f"coords_bounds_{stagg}.nc")
 
+    def reads(self) -> list[str]:
+        """The base files, plus the optional comparison files of the plot (``orca1_file``, ``orca2_file``)."""
+        return super().reads() + [self.cfg[key] for key in ("orca1_file", "orca2_file") if self.cfg.get(key)]
+
     # ------------------------------------------------------------------
     # Postprocessing: strait corrections + optional plot
     # ------------------------------------------------------------------

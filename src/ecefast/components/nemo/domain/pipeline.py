@@ -7,7 +7,7 @@ ones in ``ecefast.components.nemo.bathymetry.PROCESSORS``, paleo ones under ``ec
 that runs DOMAINcfg (``ecefast.tools.ecearth``).
 
 Usage:
-    ecefast nemo domain -c configs/laptop.yml [--bathymetry NAME [NAME ...]]
+    ecefast nemo domain -c configs/laptop.yml [--bathymetry NAME [NAME ...]] [--dry-run]
 
 The pipeline reads the ``nemo_domain`` section of the configuration file (template: ``configs/laptop.tmpl``).
 """
@@ -18,14 +18,26 @@ import os
 
 from ecefast.core.cdo import cdo_version, get_cdo
 from ecefast.core.config import ConfigError, NemoDomain, Paths, load_config
-from ecefast.tools.ecearth import EcEarthTools, get_backend
+from ecefast.core.steps import PipelineError, missing_inputs_message
+from ecefast.tools.ecearth import EcEarthTools, get_backend, output_files
 from ecefast.components.nemo.common.executor import SubprocessExecutor
-from ecefast.components.nemo.common.util import process_domain_cfg, extract_maskutil, check_files_exist
+from ecefast.components.nemo.common.util import process_domain_cfg, extract_maskutil
 from ecefast.components.nemo.bathymetry.base import BathymetryProcessor
 
 logger = logging.getLogger(__name__)
 
 STAGGERING_OPTIONS = ["T", "F"]
+
+# One line per step of nemo_domain.steps (ecefast.core.config.NEMO_DOMAIN_STEPS), in run order; shown by
+# `ecefast nemo domain -h`
+STEP_DESCRIPTIONS = {
+    "coordinates": "target grid without halo, cell bounds of the target and source grids",
+    "bathymetry": "remap each bathymetry to the target grid, with its processor",
+    "configure_domain": "write one DOMAINcfg namelist per bathymetry",
+    "domain_cfg": "run DOMAINcfg through the backend of tools.backend (HPC only)",
+    "generate_mask": "post-process domain_cfg.nc and extract maskutil.nc, per bathymetry",
+    "generate_subbasins": "write the ocean subbasin masks subbasins.nc, per bathymetry",
+}
 
 
 class NEMOWorkflow:
@@ -285,10 +297,92 @@ class NEMOWorkflow:
             self.executor.run_python_script("domain/subbasins.py", args)
 
     # ------------------------------------------------------------------
+    # Plan and input checks
+    # ------------------------------------------------------------------
+
+    def plan(self) -> list[tuple[str, list[str], list[str]]]:
+        """The enabled steps in run order, each with the files it reads and writes.
+
+        Returns
+        -------
+        list of (str, list of str, list of str)
+            Step name, paths it reads, paths it writes.
+        """
+        coordsdir = self.paths["coordsdir"]
+        namelist_dir = self.paths["namelist_dir"]
+        names = [cfg["name"] for cfg in self.bathymetries]
+        processors = [self._make_processor(cfg) for cfg in self.bathymetries]
+        bathymetry_files = [
+            cfg.get("output_file") or p.expected_output() for cfg, p in zip(self.bathymetries, processors)
+        ]
+        namelists = [os.path.join(namelist_dir, f"namelist_cfg_{name}") for name in names]
+        raw = output_files(namelist_dir, names)
+        raw_files = [str(path) for pair in raw.values() for path in pair]
+        bounds = [
+            os.path.join(coordsdir, grid, f"coords_bounds_{stagg}.nc")
+            for grid in (self.grids["target"], self.grids["source"])
+            for stagg in STAGGERING_OPTIONS
+        ]
+        domaincfg_dir = [self.paths["domaincfg_dir"]] if self.paths["domaincfg_dir"] else []
+
+        steps = {
+            "coordinates": ([self.paths["coords_ori"], self.paths["source_grid"]], [self._target_halo(), *bounds]),
+            "bathymetry": ([path for p in processors for path in p.reads()], bathymetry_files),
+            "configure_domain": ([self._target_halo(), *bathymetry_files], namelists),
+            "domain_cfg": ([*domaincfg_dir, *namelists], raw_files),
+            "generate_mask": (
+                raw_files,
+                [os.path.join(self.domain_dir(n), f) for n in names for f in ("domain_cfg.nc", "maskutil.nc")],
+            ),
+            "generate_subbasins": (
+                [str(mesh_mask) for _, mesh_mask in raw.values()],
+                [os.path.join(self.domain_dir(n), "subbasins.nc") for n in names],
+            ),
+        }
+        return [(name, reads, writes) for name, (reads, writes) in steps.items() if self.steps.get(name)]
+
+    def check(self) -> None:
+        """Check that every file an enabled step reads exists, or is written by an earlier enabled step.
+
+        Raises
+        ------
+        PipelineError
+            Listing every missing input at once.
+        """
+        missing = []
+        written = set()
+        for name, reads, writes in self.plan():
+            missing += [(name, path) for path in reads if path not in written and not os.path.exists(path)]
+            written.update(writes)
+        if missing:
+            raise PipelineError(missing_inputs_message(missing))
+
+    # ------------------------------------------------------------------
     # Orchestrator
     # ------------------------------------------------------------------
 
-    def run(self):
+    def run(self, dry_run: bool = False) -> None:
+        """Check the inputs of the enabled steps, then run them.
+
+        Parameters
+        ----------
+        dry_run : bool
+            Only check the inputs and log the plan; write nothing.
+
+        Raises
+        ------
+        PipelineError
+            If an input is missing (see :meth:`check`).
+        """
+        self.check()
+        if dry_run:
+            logger.info(
+                "Dry run: nothing is written. Bathymetries: %s. Plan:", ", ".join(c["name"] for c in self.bathymetries)
+            )
+            for name, _, writes in self.plan():
+                logger.info("  %-18s  -> %s", name, ", ".join(writes) or "-")
+            return
+
         if self.steps.get("coordinates"):
             logger.info("=== Step: Generate Coordinates ===")
             self.generate_coordinates()
@@ -308,18 +402,10 @@ class NEMOWorkflow:
 
         if self.steps.get("generate_mask"):
             logger.info("=== Step: Generate Mask Util ===")
-            # Check that domain_cfg files exist
-            src_dir = self.paths["namelist_dir"]
-            check_files_exist(
-                src_dir, self.bathymetries, ["domain_cfg_{name}.nc", "mesh_mask_{name}.nc"], "generate_mask"
-            )
             self.generate_mask_util()
 
         if self.steps.get("generate_subbasins"):
             logger.info("=== Step: Generate Subbasin Masks ===")
-            # Check that mesh_mask files exist
-            src_dir = self.paths["namelist_dir"]
-            check_files_exist(src_dir, self.bathymetries, ["mesh_mask_{name}.nc"], "generate_subbasins")
             self.generate_subbasins()
 
         logger.info("Workflow complete.")
@@ -330,6 +416,7 @@ def run(
     processors: dict[str, type[BathymetryProcessor]],
     only: list[str] | None = None,
     log_level: str = "INFO",
+    dry_run: bool = False,
 ) -> None:
     """Run the NEMO domain pipeline of a configuration file, with the backend of ``tools.backend``.
 
@@ -343,15 +430,20 @@ def run(
         Names of the bathymetries to run (default: all enabled ones).
     log_level : str
         Log level of the helper scripts.
+    dry_run : bool
+        Only check the inputs and log the plan; write nothing.
 
     Raises
     ------
     ConfigError
         If the configuration has no ``nemo_domain`` section, or see :class:`NEMOWorkflow`.
+    PipelineError
+        If an input of an enabled step is missing.
     """
     logger.info("CDO version: %s", cdo_version())
     config = load_config(config_file)
     if config.nemo_domain is None:
         raise ConfigError(f"{config_file}: the NEMO domain pipeline needs a 'nemo_domain' section")
     backend = get_backend(config)
-    NEMOWorkflow(config.nemo_domain, config.paths, processors, backend, only=only, log_level=log_level).run()
+    workflow = NEMOWorkflow(config.nemo_domain, config.paths, processors, backend, only=only, log_level=log_level)
+    workflow.run(dry_run=dry_run)

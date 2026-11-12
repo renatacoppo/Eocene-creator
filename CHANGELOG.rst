@@ -15,6 +15,13 @@ Unreleased
 Added
 ~~~~~
 
+- ``ecefast nemo domain --dry-run``: checks the inputs of the enabled steps and logs the plan, writing
+  nothing. A normal run does the same checks first and lists every missing input at once
+  (``NEMOWorkflow.plan`` and ``check``, ``BathymetryProcessor.reads``).
+- Missing-input errors say where to get inputs that are not in the standard trees (``ComponentStep.sources``):
+  the ``nemo`` step points to the EarthByte 55 Ma age grid ``age_depth_bath_55.xyadb``.
+- ``ecefast eocene run -h`` and ``ecefast nemo domain -h`` list the available steps with a one-line
+  description, in run order.
 - ``docs/overview.rst``, the first page of the docs: what the tool does, inputs and outputs, a schematic
   of the Eocene workflow and of the NEMO domain pipeline with what each step changes and writes, and
   where each part runs (pushed to ``refactor``).
@@ -67,6 +74,10 @@ Added
 Changed
 ~~~~~~~
 
+- ``ecefast eocene run`` builds every selected step before the first one runs, also in a dry run: the
+  ``domain`` step then checks all inputs of the NEMO domain pipeline (``atos`` and ``fake`` backends,
+  e.g. ``nemo_domain.coords_ori``), and a missing ``tools.precomputed.domain`` file is a
+  ``PipelineError`` reported before anything is written.
 - WEIGHTS namelists use ``{input}`` and ``{woce_dir}`` placeholders instead of HPC paths;
   ``create_corners.py`` (``--oifs-dir``, ``--tgt-dir``) and ``descriptor_generator.py``
   (``--oifs-bc``) take their paths as arguments; notebook paths are placeholders (#38).

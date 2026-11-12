@@ -158,6 +158,7 @@ section of the configuration (:doc:`configuration`):
    ecefast nemo domain -c configs/laptop.yml                        # every enabled bathymetry
    ecefast nemo domain -c configs/laptop.yml --bathymetry eocene    # only some of them
    ecefast nemo domain -c configs/laptop.yml -l DEBUG               # more logging
+   ecefast nemo domain -c configs/laptop.yml --dry-run              # check all inputs and show the plan; write nothing
 
 Its steps, each switched on or off in ``nemo_domain.steps``: ``coordinates`` (PALEORCA2 without
 halo, cell bounds), ``bathymetry`` (one processor per bathymetry, named by ``processor``),
@@ -166,6 +167,10 @@ the backend of ``tools.backend``, see :doc:`external_tools`), ``generate_mask``
 (``domain_cfg.nc`` and ``maskutil.nc`` per bathymetry) and ``generate_subbasins``
 (``subbasins.nc`` per bathymetry: Atlantic, Pacific, Indian, Indo-Pacific and global masks). On a
 laptop the last three are off.
+
+Before the first step, the pipeline checks that every file an enabled step reads exists or is
+written by an earlier enabled step, and lists all missing ones at once. ``--dry-run`` does only
+this check and logs the enabled steps with the files each writes.
 
 The regional subbasins are fixed lon/lat polygons drawn on present-day geography. On the Eocene
 domain they leave some ocean unassigned and cut some basins in the wrong place
@@ -271,6 +276,12 @@ All missing inputs are reported in one error, and nothing is written:
    Cannot start: 2 input files are missing. Nothing was written.
      nemo   needs  /path/to/ECE4-DATA-V3/nemo/initial/woa13-levitus-L31.nc
      oasis  needs  /path/to/ECE4-DATA-V3/oasis/PALEORCA2/rstos.nc
+
+Then the runner builds every selected step with ``from_context``, before the first one runs. This
+is where a step checks inputs that a class-level ``reads`` list cannot hold because they depend on
+the configuration: the ``domain`` step checks ``tools.precomputed.domain`` (``local`` backend) or
+every input of the NEMO domain pipeline it runs (``atos`` and ``fake``, e.g.
+``nemo_domain.coords_ori``). ``from_context`` must not write anything.
 
 A **dry run** does the same checks, logs each selected step with its description and what it
 writes, and touches nothing. Otherwise the steps run in order, and after each one the runner

@@ -37,12 +37,16 @@ class ComponentStep:
         earlier selected step writes them.
     writes : list of str
         Path templates of the outputs. All must exist after :meth:`run`.
+    sources : dict of str to str
+        Where to get an input of ``reads`` that is not part of the standard input trees, by its path template.
+        Shown in the error when that input is missing.
     """
 
     name: str = ""
     needs: list[str] = []
     reads: list[str] = []
     writes: list[str] = []
+    sources: dict[str, str] = {}
 
     @classmethod
     def from_context(cls, ctx: "Context") -> "ComponentStep":
@@ -112,19 +116,39 @@ def _preflight(selected: list[type[ComponentStep]], ctx) -> None:
             ctx.check_writable(ctx.expand(template), step.name)
 
     missing: list[tuple[str, str]] = []
+    sources: dict[str, str] = {}
     written: list[str] = []
     for step in selected:
         for template in step.reads:
             path = ctx.expand(template)
             if not os.path.exists(path) and not _covered(path, written):
                 missing.append((step.name, path))
+                if template in step.sources:
+                    sources[path] = step.sources[template]
         written.extend(ctx.expand(t) for t in step.writes)
     if missing:
-        n = len(missing)
-        width = max(len(name) for name, _ in missing)
-        lines = [f"Cannot start: {n} input file{'s are' if n > 1 else ' is'} missing. Nothing was written."]
-        lines += [f"  {name:<{width}}  needs  {path}" for name, path in missing]
-        raise PipelineError("\n".join(lines))
+        raise PipelineError(missing_inputs_message(missing, sources))
+
+
+def missing_inputs_message(missing: list[tuple[str, str]], sources: dict[str, str] | None = None) -> str:
+    """Error message listing missing inputs, one line per ``(step name, path)``.
+
+    Parameters
+    ----------
+    missing : list of (str, str)
+        Step name and missing path.
+    sources : dict of str to str, optional
+        Where to get a missing path, by path; shown on the line below it.
+    """
+    sources = sources or {}
+    n = len(missing)
+    width = max(len(name) for name, _ in missing)
+    lines = [f"Cannot start: {n} input file{'s are' if n > 1 else ' is'} missing. Nothing was written."]
+    for name, path in missing:
+        lines.append(f"  {name:<{width}}  needs  {path}")
+        if path in sources:
+            lines.append(f"  {'':<{width}}  get it from {sources[path]}")
+    return "\n".join(lines)
 
 
 def run_pipeline(
@@ -138,7 +162,9 @@ def run_pipeline(
     Before anything runs: the ``needs`` order is checked, needed steps that are not selected must have run
     before (their ``writes`` exist), every ``writes`` path must be writable (not inside ``input`` or
     ``herold``) and every ``reads`` path must exist or be written by an earlier selected step. All missing reads
-    are reported in one error. Then the selected steps run in order, and after each one its ``writes`` must exist.
+    are reported in one error. Then every selected step is built with ``from_context``, which checks what a
+    class-level ``reads`` list cannot (inputs that depend on the configuration or the backend), also in a dry run.
+    Then the selected steps run in order, and after each one its ``writes`` must exist.
 
     Parameters
     ----------
@@ -165,6 +191,7 @@ def run_pipeline(
     selected = _select(steps, select)
     _check_unselected_needs(steps, selected, ctx)
     _preflight(selected, ctx)
+    instances = [step.from_context(ctx) for step in selected]
 
     names = [s.name for s in selected]
     if dry_run:
@@ -175,9 +202,9 @@ def run_pipeline(
             logger.info("  %-*s  %s%s", width, step.name, step_summary(step), f"  → {outputs}" if outputs else "")
         return names
 
-    for step in selected:
+    for step, instance in zip(selected, instances):
         logger.info("Step %s: %s", step.name, step_summary(step))
-        step.from_context(ctx).run()
+        instance.run()
         missing = [p for p in (ctx.expand(t) for t in step.writes) if not os.path.exists(p)]
         if missing:
             raise PipelineError(f"Step '{step.name}' did not write: {', '.join(missing)}")

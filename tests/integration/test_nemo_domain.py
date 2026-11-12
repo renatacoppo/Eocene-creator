@@ -18,10 +18,12 @@ from ecefast.cli import main as cli
 from ecefast.components.nemo.bathymetry import PROCESSORS, PresentDayBathymetry
 from ecefast.components.nemo.domain import pipeline
 from ecefast.components.nemo.domain.pipeline import NEMOWorkflow
-from ecefast.core.config import ConfigError, load_config
-from ecefast.core.workspace import Context
+from ecefast.core.config import NEMO_DOMAIN_STEPS, ConfigError, load_config
+from ecefast.core.steps import PipelineError, run_pipeline
+from ecefast.core.workspace import Context, Stage
 from ecefast.paleo.eocene.bathymetry import EOCENE_PROCESSORS, EoceneBathymetry
 from ecefast.paleo.eocene.nemo.domain import EoceneDomain
+from ecefast.paleo.eocene.pipeline import PIPELINE
 from ecefast.tools.ecearth import FakeBackend, LocalBackend
 from synthetic import STEPS_WITHOUT_GRIDS, nemo_domain_section
 
@@ -137,6 +139,79 @@ def test_subbasins_for_every_bathymetry(tmp_path: Path) -> None:
             np.testing.assert_array_equal(masks["glomsk"].values, m["tmaskutil"].values[0])
 
 
+# --- input checks and dry run ---------------------------------------------------------------------------------------
+
+
+def tree(root: Path) -> list[Path]:
+    return sorted(p for p in root.rglob("*") if p.name != "config.yml")
+
+
+def test_dry_run_writes_nothing(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    config = write_config(tmp_path)
+    before = tree(tmp_path)
+    cli.main(["nemo", "domain", "-c", str(config), "--dry-run"])
+    assert tree(tmp_path) == before
+    log = capsys.readouterr().err
+    assert "Dry run" in log
+    assert str(tmp_path / "domain" / "domain" / "PALEORCA2" / "eocene" / "maskutil.nc") in log
+
+
+def test_plan_follows_enabled_steps(tmp_path: Path) -> None:
+    """Only enabled steps, in run order; a step reads what an earlier one writes."""
+    plan = workflow(write_config(tmp_path)).plan()
+    assert [name for name, _, _ in plan] == ["configure_domain", "domain_cfg", "generate_mask"]
+    (_, _, namelists), (_, domaincfg_reads, raw), (_, mask_reads, _) = plan
+    assert namelists == [str(tmp_path / "domain" / "domain" / "namelist_cfg_eocene")]
+    assert domaincfg_reads == namelists
+    assert mask_reads == raw
+
+
+def test_missing_inputs_listed_at_once(tmp_path: Path) -> None:
+    """With every step on, the inputs from outside the pipeline are checked first and all reported together;
+    files written by earlier steps (coordinates, bathymetries, namelists, DOMAINcfg output) are not missing."""
+    steps = {name: True for name in STEPS_WITHOUT_GRIDS}
+    wf = workflow(write_config(tmp_path, steps=steps))
+    with pytest.raises(PipelineError, match="3 input files are missing") as error:
+        wf.check()
+    message = str(error.value)
+    assert "coordinates  needs  " + str(tmp_path / "coords_ori.nc") in message
+    assert str(tmp_path / "input" / "nemo" / "domain" / "eORCA1" / "domain_cfg.nc") in message
+    assert "bathymetry   needs  " + str(tmp_path / "herold" / "topo.nc") in message
+
+
+def test_cli_missing_input_exits(tmp_path: Path) -> None:
+    config = write_config(tmp_path, steps={**STEPS_WITHOUT_GRIDS, "coordinates": True})
+    before = tree(tmp_path)
+    for extra in ([], ["--dry-run"]):
+        with pytest.raises(SystemExit) as exit_info:
+            cli.main(["nemo", "domain", "-c", str(config), *extra])
+        assert exit_info.value.code == 1
+    assert tree(tmp_path) == before
+
+
+def test_bathymetry_reads(tmp_path: Path) -> None:
+    """Each processor declares its inputs; the present-day one adds its source grid and the optional plot files."""
+    bathymetries = [
+        {
+            "name": "present_day",
+            "processor": "PresentDayBathymetry",
+            "source_file": "{input}/src.nc",
+            "orca2_file": "{input}/orca2.nc",
+        },
+        {"name": "eocene", "processor": "EoceneBathymetry", "source_file": "{herold}/topo.nc"},
+    ]
+    wf = workflow(write_config(tmp_path, bathymetries=bathymetries))
+    present_day, eocene = (wf._make_processor(cfg).reads() for cfg in wf.bathymetries)
+    bounds = tmp_path / "domain" / "coordinates"
+    assert eocene == [str(tmp_path / "herold" / "topo.nc"), str(bounds / "PALEORCA2" / "coords_bounds_T.nc")]
+    assert present_day == [
+        str(tmp_path / "input" / "src.nc"),
+        str(bounds / "PALEORCA2" / "coords_bounds_T.nc"),
+        str(bounds / "eORCA1" / "coords_bounds_T.nc"),
+        str(tmp_path / "input" / "orca2.nc"),
+    ]
+
+
 def test_cli_without_nemo_domain_section(tmp_path: Path) -> None:
     config_file = write_config(tmp_path)
     raw = yaml.safe_load(config_file.read_text())
@@ -154,10 +229,26 @@ def test_cli_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = []
     monkeypatch.setattr(pipeline, "run", lambda *args, **kwargs: calls.append((args, kwargs)))
     cli.main(["nemo", "domain", "-c", "x.yml", "--bathymetry", "present_day", "eocene", "-l", "DEBUG"])
-    assert calls == [(("x.yml", ALL_PROCESSORS), {"only": ["present_day", "eocene"], "log_level": "DEBUG"})]
+    expected = {"only": ["present_day", "eocene"], "log_level": "DEBUG", "dry_run": False}
+    assert calls == [(("x.yml", ALL_PROCESSORS), expected)]
     calls.clear()
-    cli.main(["nemo", "domain", "-c", "x.yml"])
-    assert calls == [(("x.yml", ALL_PROCESSORS), {"only": None, "log_level": "INFO"})]
+    cli.main(["nemo", "domain", "-c", "x.yml", "--dry-run"])
+    assert calls == [(("x.yml", ALL_PROCESSORS), {"only": None, "log_level": "INFO", "dry_run": True})]
+
+
+def test_help_lists_steps(capsys: pytest.CaptureFixture) -> None:
+    """``-h`` lists the steps: the domain pipeline's (``nemo_domain.steps``) and the Eocene ones (``--steps``)."""
+    assert tuple(pipeline.STEP_DESCRIPTIONS) == NEMO_DOMAIN_STEPS
+    for argv, names in (
+        (["nemo", "domain", "-h"], NEMO_DOMAIN_STEPS),
+        (["eocene", "run", "-h"], [step.name for step in PIPELINE]),
+    ):
+        with pytest.raises(SystemExit) as exit_info:
+            cli.main(argv)
+        assert exit_info.value.code == 0
+        lines = capsys.readouterr().out.splitlines()
+        start = next(i for i, line in enumerate(lines) if line.startswith("steps, in run order"))
+        assert [line.split()[0] for line in lines[start + 1 :]] == list(names)
 
 
 @pytest.mark.parametrize(
@@ -226,3 +317,16 @@ def test_eocene_domain_step_needs_eocene_bathymetry(tmp_path: Path) -> None:
     bathymetries = [{"name": "present_day", "processor": "PresentDayBathymetry", "source_file": "x.nc"}]
     with pytest.raises(ConfigError, match="eocene"):
         EoceneDomain.from_context(Context(load_config(write_config(tmp_path, bathymetries=bathymetries))))
+
+
+def test_eocene_dry_run_checks_domain_pipeline_inputs(tmp_path: Path) -> None:
+    """With the fake backend the ``domain`` step runs the NEMO domain pipeline: a dry run of the Eocene pipeline
+    checks its inputs too (here ``nemo_domain.coords_ori``) and writes nothing."""
+    present_day_domain(tmp_path)
+    config = write_config(tmp_path, steps={**STEPS_WITHOUT_GRIDS, "coordinates": True})
+    for read in Stage.reads:  # the input folders that stage copies
+        Path(Context(load_config(config)).expand(read)).mkdir(parents=True, exist_ok=True)
+    before = tree(tmp_path)
+    with pytest.raises(PipelineError, match="(?s)Step 'domain'.*coordinates  needs  .*coords_ori.nc"):
+        run_pipeline([Stage, EoceneDomain], Context(load_config(config)), dry_run=True)
+    assert tree(tmp_path) == before

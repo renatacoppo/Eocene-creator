@@ -16,7 +16,17 @@ Give the source as an argument or in ``ECE4_DATA_SRC``:
    ECE4_DATA_SRC=user@host:/path/to/ECE4-DATA-V3 ./scripts/get_ece4_data.sh
 
 The Herold et al. (2014) datasets and the Eocene PALEORCA2 domain are copied by hand
-(from the HPC or the paper supplement).
+(from the HPC or the paper supplement). The ``herold`` folder also holds one file that is not in
+the supplement: the 55 Ma ocean floor age grid of Müller et al. (2008), read by the ``nemo`` step
+for the geothermal heat flux. Download it from EarthByte and decompress it there:
+
+.. code-block:: bash
+
+   cd /path/to/herold-et-al-2014
+   curl -O https://www.earthbyte.org/webdav/ftp/earthbyte/agegrid/Palaeo/2008/Data/age_depth_bath_55.xyadb.bz2
+   bunzip2 age_depth_bath_55.xyadb.bz2
+
+If an input with a known source is missing, the error of ``ecefast eocene run`` says where to get it.
 
 2. Write a configuration file
 -----------------------------
