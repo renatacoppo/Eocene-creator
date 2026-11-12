@@ -90,13 +90,36 @@ The four paths are also placeholders in ``nemo_domain.bathymetries`` (``{input}`
    * - ``tools.backend``
      - str
      - ``local``
-     - How EC-Earth tools are run. Only ``local`` for now.
+     - How the NEMO DOMAINcfg tool is run (see :doc:`external_tools`): ``atos`` (compile and run it on
+       ECMWF Atos), ``local`` (not available: use ``tools.precomputed.domain``) or ``fake`` (tests: small
+       files with the structure of the DOMAINcfg output).
    * - ``tools.precomputed.domain``
      - str
      - ``null``
      - Directory with the Eocene ``domain_cfg.nc`` and ``maskutil.nc``, built on Atos by the
        NEMO domain pipeline. ``ecefast eocene --run nemo`` (and ``all``) copies them into the
        output tree and stops with an error if the key is not set.
+   * - ``tools.atos.profile``
+     - str
+     - ``atos``
+     - ``atos`` backend: the HPC profile of ``ecefast/tools/hpc_profiles.yaml`` whose modules are loaded
+       before DOMAINcfg is compiled and run.
+   * - ``tools.atos.oasis_lib_dir``
+     - str
+     - ``null``
+     - ``atos`` backend: directory added to ``LD_LIBRARY_PATH`` when DOMAINcfg runs, for the OASIS
+       libraries of the EC-Earth build (e.g. ``<ecearth4>/sources/oasis3-mct-5.2/arch_ecearth/lib``).
+       Not added when ``null``.
+
+Example for Atos:
+
+.. code-block:: yaml
+
+   tools:
+     backend: atos
+     atos:
+       profile: atos
+       oasis_lib_dir: /path/to/ecearth4/sources/oasis3-mct-5.2/arch_ecearth/lib
 
 ``grids``: model resolutions
 ----------------------------

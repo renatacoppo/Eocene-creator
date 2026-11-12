@@ -11,45 +11,6 @@ logger = logging.getLogger(__name__)
 _CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def load_hpc_modules():
-    """Load HPC module configuration from YAML.
-
-    Returns:
-        dict: HPC environment configs organized by environment name
-    """
-    return load_yaml(os.path.join(_CONFIG_DIR, "hpc_modules.yaml"))
-
-
-def get_hpc_modules(environment="default"):
-    """Get HPC modules for a specific environment.
-
-    Args:
-        environment (str): HPC environment name (e.g. 'atos', 'default')
-
-    Returns:
-        list: Module names to load
-
-    Raises:
-        ValueError: If environment not defined in config
-    """
-    modules_cfg = load_hpc_modules()
-
-    if environment not in modules_cfg:
-        available = ", ".join(modules_cfg.keys())
-        raise ValueError(
-            f"HPC environment '{environment}' not found. "
-            f"Available: {available}. "
-            f"Define it in {os.path.basename(_CONFIG_DIR)}/hpc_modules.yaml"
-        )
-
-    env_cfg = modules_cfg[environment]
-    modules = env_cfg.get("modules", []) if isinstance(env_cfg, dict) else env_cfg
-
-    logger.debug("Loaded HPC modules for environment '%s': %d modules", environment, len(modules))
-
-    return modules
-
-
 def load_bathymetry_corrections():
     """Load bathymetry corrections configuration from YAML.
 
