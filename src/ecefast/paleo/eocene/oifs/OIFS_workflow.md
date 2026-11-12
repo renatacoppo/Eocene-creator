@@ -26,9 +26,9 @@ from eocene_creator import EoceneOIFS
 import xarray as xr
 
 eocene = EoceneOIFS(
-    idir="/lus/h2resw01/hpcperm/ccpd/ECE4-DATA",
-    odir="/lus/h2resw01/hpcperm/ccpd/ECE4-DATA-EOCEENE",
-    herold="/lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014",
+    idir="/path/to/ECE4-DATA",
+    odir="/path/to/ECE4-DATA-EOCENE",
+    herold="/path/to/herold-et-al-2014",
 )
 ```
 

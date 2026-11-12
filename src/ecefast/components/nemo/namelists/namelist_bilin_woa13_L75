@@ -1,5 +1,11 @@
 &comments
  -----------------------------------------------------------------------------------
+ - Path placeholders, to be replaced by the user before running the WEIGHTS tools
+   (there is no driver that fills them yet):
+     {input}     EC-Earth4 input tree (ECE4-DATA)
+/
+&comments
+ -----------------------------------------------------------------------------------
  - grid_inputs holds parameters for the scripgrid routine which reformats information 
    about the input grids
  - scripgrid always needs a coordinates.nc file in the
@@ -12,8 +18,8 @@
      nemo_lat: name of latitude variable in the coordinates.nc
 /
 &grid_inputs
-    input_file = '/ec/res4/hpcperm/itas/data/ece-4-database/nemo/initial/woa13-levitus-L75-r360x180.nc'
-    nemo_file = '/ec/res4/hpcperm/itas/data/ece-4-database/nemo/domain/eORCA1/domain_cfg.nc'
+    input_file = '{input}/nemo/initial/woa13-levitus-L75-r360x180.nc'
+    nemo_file = '{input}/nemo/domain/eORCA1/domain_cfg.nc'
     datagrid_file = 'remap_woa13_grid.nc'
     nemogrid_file = 'remap_eorca1_grid.nc'
     method = 'regular'
