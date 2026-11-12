@@ -2,8 +2,8 @@
 # Pull a subset of ECE4-DATA-V3 from a remote: OIFS TL63L31, NEMO PALEORCA2 (+ grid-independent
 # initial files and the ORCA2 domain read by the Eocene workflow, eORCA1 domain read by the present-day
 # bathymetry of the NEMO domain pipeline), OASIS PALEORCA2, runoff-mapper.
-# Usage: ./get_ece4_data.sh user@host:/path/to/ECE4-DATA-V3 [/local/dest] [-n]
-#        ECE4_DATA_SRC=user@host:/path/to/ECE4-DATA-V3 ./get_ece4_data.sh
+# Usage: scripts/get_ece4_data.sh user@host:/path/to/ECE4-DATA-V3 [/local/dest] [-n]
+#        ECE4_DATA_SRC=user@host:/path/to/ECE4-DATA-V3 scripts/get_ece4_data.sh
 #   -n  dry run (list what would be transferred)
 set -euo pipefail
 
