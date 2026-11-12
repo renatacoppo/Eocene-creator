@@ -14,7 +14,7 @@ Design: https://claude.ai/artifact/GHWfP5ho6rG27i4KWTfM9Y (private, share before
 | Topic | Decision |
 |---|---|
 | Package | single `ecefast`, `src/` layout, `eocene` CLI kept as alias |
-| Python | >= 3.11, CI on 3.11 and 3.12 |
+| Python | >= 3.11, CI on 3.14 |
 | Layers | `core` → `tools` → `components/{oifs,nemo,oasis,rnfm}` → `paleo/eocene` → `cli`, enforced by import-linter; components don't import each other |
 | Bathymetry | `EoceneBathymetry` moves to `paleo/eocene`, registered by name in `components.nemo.bathymetry` |
 | Steps | option B: existing classes subclass `ComponentStep` (`name`, `needs`, `reads`, `writes`, `from_context()`, `run()`); `__init__` and `create_*` untouched; `PIPELINE` = ordered class list |
@@ -90,7 +90,7 @@ No code moves, no behaviour change.
 - [ ] `pytest` config in `pyproject.toml` with markers `local_data`, `hpc`; default `-m "not local_data and not hpc"`.
 - [ ] `tests/test_import.py`: import every current module (smoke test).
 - [ ] `tests/local/test_regression.py` (`local_data` marker): runs the Eocene CLI on the real data into a tmp dir and calls `compare_outputs.py` against `EOCENE-BASELINE`. Paths from env `ECEFAST_TEST_DATA`, skip if unset.
-- [ ] `.github/workflows/ci.yml`: micromamba from `environment.yaml` (cached), `ruff check` (lenient rule set to start), `pytest`.
+- [ ] `.github/workflows/ci.yml`: Python 3.14, micromamba from `environment.yaml` (cached), `ruff check` (lenient rule set to start), `pytest`.
 - [ ] Docs skeleton (reStructuredText + Sphinx, ready for Read the Docs): `docs/conf.py` (autodoc, napoleon, viewcode; `exclude_patterns` for the planning `.md` files), `docs/index.rst`, stub pages `installation`, `quickstart`, `configuration`, `workflow`, `external_tools`, `contributing`, `api`; port the README usage into `quickstart.rst`. Add `sphinx` + theme to a `docs` optional-dependency group, `.readthedocs.yaml`, `docs/_build/` to `.gitignore`, and a `sphinx-build -W` job in CI.
 - [ ] `AGENTS.md` + `CLAUDE.md` (rules for humans and agents), `CHANGELOG.rst`.
 - [ ] Notebooks: tutorials go to `notebooks/tutorials/`, the rest to `notebooks/analysis/`; clear outputs.
