@@ -52,6 +52,23 @@ def test_vertical_grid_same_count_different_e3t_fails() -> None:
     assert "nav_lev" not in str(err.value).split("Different:")[1]
 
 
+@pytest.mark.parametrize("variable", ["nav_lev", "e3t_1d"])
+def test_vertical_grid_rounding_difference_passes(variable: str) -> None:
+    present = vertical_grid(31)
+    eocene = present.copy(deep=True)
+    eocene[variable] = eocene[variable].astype("float64") + 1e-9
+    check_vertical_grid(present, eocene, "present.nc", "eocene.nc")
+
+
+@pytest.mark.parametrize("variable", ["nav_lev", "e3t_1d"])
+def test_vertical_grid_millimetre_difference_fails(variable: str) -> None:
+    present = vertical_grid(31)
+    eocene = present.copy(deep=True)
+    eocene[variable] = eocene[variable].astype("float64") + 1e-3
+    with pytest.raises(ValueError, match=f"Different: {variable} \\(max absolute difference 0.001 m"):
+        check_vertical_grid(present, eocene, "present.nc", "eocene.nc")
+
+
 # --- step declarations ---------------------------------------------------------------------------------------------
 
 

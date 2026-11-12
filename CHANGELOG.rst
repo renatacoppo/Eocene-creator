@@ -54,6 +54,10 @@ Added
 Changed
 ~~~~~~~
 
+- The vertical grid check of the ``domain`` step accepts differences up to 1e-6 m in ``nav_lev``
+  and ``e3t_1d`` (floating-point rounding between DOMAINcfg builds and the fake backend, about
+  1e-12 m); a different number of levels or a larger difference is still an error, whose message
+  now shows the maximum absolute difference (#37).
 - ``ecefast nemo domain -c CONFIG [--bathymetry NAME ...]`` replaces ``ecefast nemo-domain`` and
   its ``--only``. The NEMO domain pipeline runs DOMAINcfg through the backend of
   ``tools.backend`` (``run_domain_cfg.sh`` moved to ``tools/``) and stops before its first step

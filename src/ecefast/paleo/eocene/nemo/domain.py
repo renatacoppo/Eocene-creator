@@ -36,12 +36,17 @@ EOCENE_BATHYMETRY = "eocene"
 
 # variables that define the vertical grid; they must be equal in the present-day and Eocene domains
 VERTICAL_GRID_VARIABLES = ["nav_lev", "e3t_1d"]
+# Absolute tolerance (m) of the vertical grid check: floating-point rounding between DOMAINcfg builds and the fake
+# backend (about 1e-12 m observed on PALEORCA2 L31), far below any real change of the vertical grid. Agreed by the
+# authors in task 5.2 (#37).
+VERTICAL_GRID_ATOL = 1e-6
 
 
 def check_vertical_grid(present: xr.Dataset, eocene: xr.Dataset, present_name: str, eocene_name: str) -> None:
     """Check that two NEMO domains have the same vertical grid.
 
-    The vertical grid is ``nav_lev`` and ``e3t_1d``; their values must be equal.
+    The vertical grid is ``nav_lev`` and ``e3t_1d``. Both domains must have the same number of levels, and the
+    values must agree within :data:`VERTICAL_GRID_ATOL` (m), a tolerance for floating-point rounding only.
 
     Parameters
     ----------
@@ -55,10 +60,18 @@ def check_vertical_grid(present: xr.Dataset, eocene: xr.Dataset, present_name: s
     Raises
     ------
     ValueError
-        If the number of levels or the values of a vertical grid variable differ. The message names both files
-        and their number of levels.
+        If the number of levels differs, or a vertical grid variable differs by more than the tolerance. The
+        message names both files, their number of levels, the variables that differ and, for the same number of
+        levels, the maximum absolute difference.
     """
-    differ = [name for name in VERTICAL_GRID_VARIABLES if not np.array_equal(present[name].values, eocene[name].values)]
+    differ = []
+    for name in VERTICAL_GRID_VARIABLES:
+        a, b = present[name].values, eocene[name].values
+        if a.shape != b.shape:
+            differ.append(name)
+        elif not np.allclose(a, b, rtol=0, atol=VERTICAL_GRID_ATOL):
+            diff = np.max(np.abs(a.astype("float64") - b.astype("float64")))
+            differ.append(f"{name} (max absolute difference {diff:.3g} m, tolerance {VERTICAL_GRID_ATOL:g} m)")
     if not differ:
         return
     width = max(len(present_name), len(eocene_name))

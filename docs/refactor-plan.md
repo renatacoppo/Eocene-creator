@@ -263,9 +263,6 @@ Done when: CI runs end to end in a few minutes.
 - WEIGHTS driver (`tools.ecearth.weights()`, templated namelists).
 - OIFS generator: constants → config, pipeline, tests.
 - Finer steps, other HPC profiles, new palaeo periods under `paleo/`.
-- Vertical grid check (`EoceneDomain`) compares exactly: the fake backend's `e3t_1d` differs from the real PALEORCA2
-  L31 one by ~1e-12 m (NumPy vs Fortran), so `ecefast eocene run` with `fake` fails on the real tree; a new DOMAINcfg
-  build on Atos may differ the same way. Decide on a tolerance (scientific choice, both authors) (found in 5.2).
 - `create_ocean_init`/`create_runoff` hardcode `PALEORCA2`: follow `grids.nemo` (found in #33).
 - Dead code to remove or fix: `vegetation.prepare_vegetation` (undefined `NC4`), `EoceneOIFS.create_sic`/`create_sst`
   (undefined `idir_amip`), `fields.modify_grib` (unused) (found in #25, #34).

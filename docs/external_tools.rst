@@ -114,9 +114,8 @@ What it does **not** do, so its numbers are not those of DOMAINcfg:
 
 Its ``e3t_1d`` differs from the one of the real PALEORCA2 L31 domain by rounding (about 1e-12 m:
 NumPy and the Fortran build evaluate the same formula), while ``nav_lev`` is equal. The vertical
-grid check of the Eocene ``domain`` step compares exactly, so ``ecefast eocene run`` with
-``tools.backend: fake`` on the real input tree stops at that check; on synthetic trees, whose
-present-day domain comes from the fake backend too, it passes.
+grid check of the Eocene ``domain`` step allows 1e-6 m for such rounding, so the fake domain
+passes it.
 
 Use it to test the workflow, never to produce a domain for EC-Earth.
 

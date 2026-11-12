@@ -87,8 +87,9 @@ The Eocene steps
    Where they come from depends on ``tools.backend`` (:doc:`external_tools`): with ``local`` they are copied from
    ``tools.precomputed.domain``; with ``atos`` or ``fake`` the step first runs the NEMO domain pipeline (below) for
    the ``eocene`` bathymetry, with the steps of ``nemo_domain.steps``, and copies its output
-   ``{nemo_domain.output_dir}/domain/{nemo_grid}/eocene/``. Then it checks the vertical grid rule: ``nav_lev`` and
-   ``e3t_1d`` of the installed Eocene domain must equal those of the present-day
+   ``{nemo_domain.output_dir}/domain/{nemo_grid}/eocene/``. Then it checks the vertical grid rule: the installed Eocene domain must have the
+   same number of levels as the present-day one, and ``nav_lev`` and ``e3t_1d`` within 1e-6 m (rounding) of the
+   present-day
    ``{input}/nemo/domain/{nemo_grid}/domain_cfg.nc``. On a mismatch the pipeline stops with an error naming both
    files and their number of levels. Why: ``nemo`` builds the ocean initial state on the present-day levels.
    ``reads`` lists only the present-day domain: what else the step reads depends on the backend, which a

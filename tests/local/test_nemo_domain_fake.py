@@ -6,8 +6,8 @@ Opt-in, like ``test_regression.py``: set ``ECEFAST_TEST_DATA`` to a directory ho
 
 All steps but ``generate_subbasins`` run for both bathymetries: coordinates, bathymetries (CDO), namelists, fake
 DOMAINcfg, post-processing. The vertical grid of the result is compared with the present-day PALEORCA2 domain of
-the input tree: ``nav_lev`` is equal, ``e3t_1d`` equal to rounding (the fake evaluates the DOMAINcfg formula with
-NumPy, which differs from the Fortran build by about 1e-12 m), so ``check_vertical_grid`` (exact) is not used here.
+the input tree with ``check_vertical_grid``: ``nav_lev`` is equal, ``e3t_1d`` equal to rounding (the fake evaluates
+the DOMAINcfg formula with NumPy, which differs from the Fortran build by about 1e-12 m).
 """
 
 import os
@@ -19,6 +19,7 @@ import xarray as xr
 import yaml
 
 from ecefast.cli.main import main
+from ecefast.paleo.eocene.nemo.domain import check_vertical_grid
 
 DATA = os.environ.get("ECEFAST_TEST_DATA")
 
@@ -82,6 +83,6 @@ def test_fake_domain_pipeline_on_real_inputs(tmp_path: Path) -> None:
             with xr.open_dataset(domain_dir / "domain_cfg.nc") as domain:
                 assert domain.sizes == present.sizes
                 np.testing.assert_array_equal(domain["nav_lev"].values, present["nav_lev"].values)
-                np.testing.assert_allclose(domain["e3t_1d"].values, present["e3t_1d"].values, rtol=1e-13, atol=0)
+                check_vertical_grid(present, domain, str(present_file), name)
             with xr.open_dataset(domain_dir / "maskutil.nc") as masks:
                 assert list(masks.data_vars) == ["tmaskutil", "umaskutil", "vmaskutil"]
