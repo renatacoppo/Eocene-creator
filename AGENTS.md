@@ -27,8 +27,8 @@ Target layout:
 
 ```
 src/ecefast/
-  core/          config, logging, workspace, io, ComponentStep, runner      (no internal deps)
-  tools/         wrappers for external tools: cdo, ecearth backends          (imports core)
+  core/          config, logging, workspace, io, cdo, grib, ComponentStep, runner  (no internal deps)
+  tools/         EC-Earth binaries and HPC modules: ecearth backends               (imports core)
   components/    oifs/ nemo/ oasis/ rnfm/                                    (imports core, tools)
   paleo/eocene/  Eocene steps, EoceneBathymetry, PIPELINE                    (imports components)
   cli/           argument parsing only                                       (imports everything)
@@ -47,14 +47,15 @@ ECE4_DATA_SRC=user@host:/path/to/ECE4-DATA-V3 ./get_ece4_data.sh   # moves to sc
 
 # run the Eocene workflow
 cp eocene/config.tmpl eocene/config.yml          # then set the paths; config.yml is gitignored
-eocene -c eocene/config.yml --run all --copy     # same as ./eocene/cli_eocene.py
+eocene -c eocene/config.yml --run all --copy     # same as ./eocene/cli_eocene.py (removed in phase 4b)
 eocene -c eocene/config.yml --run nemo -l DEBUG  # one component: oifs, nemo, oasis, rnfm
+ecefast eocene run -c configs/laptop.yml [--steps nemo] [--dry-run]   # (from phase 4b) replaces the above
 
 # checks before pushing
 ruff check --fix . && ruff format .                             # (from phase 1)
 pytest -m "unit or integration"                                 # (from phase 1)
 python scripts/compare_outputs.py EOCENE-BASELINE EOCENE-TEST   # (from phase 0)
-sphinx-build -W -b html docs docs/_build/html                   # (from phase 1)
+sphinx-build -W -b html docs docs/_build/html                   # (from phase 1b)
 ```
 
 ## Local test data
@@ -63,11 +64,12 @@ All of these live at the repo root and are gitignored; never commit them.
 
 | Directory | What | How to get it |
 |---|---|---|
-| `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree | `get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
+| `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree, including the eORCA1 domain used by the present-day bathymetry | `get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
 | `ECE4-DATA-EOCENE/nemo/domain/PALEORCA2/` | Eocene NEMO domain | rsync from the HPC copy of ECE4-DATA-EOCENE |
+| `NEMO-COORDINATES/` | `PALEORCA2/coords_ori.nc` and `eORCA1/mesh_mask.nc`, inputs of the NEMO domain pipeline | copy from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplementary data | copy from the HPC or the paper supplement |
 | `EOCENE-TEST/` | output of your run | `eocene -c eocene/config.yml --run all --copy` |
-| `EOCENE-BASELINE/` | frozen reference output, with `BASELINE.txt` (commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
+| `EOCENE-BASELINE/` | frozen reference output of the Eocene workflow and, in `domain/`, of the laptop part of the NEMO domain pipeline, with `BASELINE.txt` (commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
 
 Tests that need this data use the `local_data` marker and read its location from
 `ECEFAST_TEST_DATA`; they skip when the variable is unset.
@@ -98,9 +100,10 @@ These come first; the more specific rules below follow from them.
   import from layers to its left. Enforced by import-linter **(from phase 5)**.
 - **Components do not import each other.** If OIFS and NEMO need the same helper, it belongs in
   `core` or `tools`.
-- **Steps** are classes that subclass `ComponentStep` **(from phase 4)** and declare `name`, `needs`,
-  `reads`, `writes`, `from_context()` and `run()`. Keep `__init__` and the `create_*` methods as
-  they are; the step is a thin wrapper. A pipeline is an ordered list of step classes. Do not
+- **Steps** are classes that subclass `ComponentStep` **(from phase 4a)** and declare `name`, `needs`,
+  `reads`, `writes`, `from_context()` and `run()`. Keep the signatures and logic of `__init__` and
+  the `create_*` methods; the step is a thin wrapper. The only change inside `create_*` is writing
+  through the atomic-write helper in `core`. A pipeline is an ordered list of step classes. Do not
   introduce decorator- or lambda-based step registration.
 - **`reads` and `writes` are the truth.** A step reads only the paths it declares in `reads` and
   writes only the paths in `writes`. No hidden file access inside `create_*`.
@@ -109,6 +112,8 @@ These come first; the more specific rules below follow from them.
 - **External tools** (DOMAINcfg, OASIS lib, HPC modules) are reached only through
   `tools.ecearth` and its backends `atos`, `local`, `fake`. No direct `subprocess` calls to
   EC-Earth binaries elsewhere.
+- **CDO** is used through the one shared wrapper in `core` **(from phase 3)**. No module-level
+  `Cdo()` instances.
 - **CLI code only parses arguments** and calls the runner. No science in `cli/`.
 
 ## Naming
@@ -160,7 +165,8 @@ the docs.
 
 - **Output must not change by accident.** Every refactor must reproduce the frozen baseline
   (`EOCENE-BASELINE`), checked with `scripts/compare_outputs.py` **(from phase 0)**: same file
-  list, NetCDF data variables equal within `rtol=1e-6`, GRIB fields identical (`cdo diffn`);
+  list, NetCDF data variables equal within `rtol=1e-6` with the same names, order, dtypes and
+  attributes, GRIB files identical in values, keys and message order (`grib_compare`);
   `history` and date attributes are ignored. A refactor PR that changes numbers is a bug.
 - **Output-changing PRs are allowed, but must say so.** The PR description lists which files
   change and why, the change needs explicit approval from a reviewer, and it gets an *Output*
@@ -171,7 +177,7 @@ the docs.
 - **Scientific values have a source.** They live in config or in a named constant with a comment
   citing where they come from (paper, dataset, namelist). No magic numbers inline.
 - **Hardcoded choices become config options with today's value as default** (e.g.
-  `eocene.oifs.aerosols: false`, `eocene.nemo.ocean_init_profile: woa_pi`). Do not delete
+  `eocene.oifs.aerosols: false`, `eocene.oasis.constant_sst: 290.0`). Do not delete
   disabled code paths such as aerosols; switch them off in config.
 - **Vertical grid rule.** The present-day and Eocene PALEORCA2 domains must share the vertical
   grid (`nav_lev`, `e3t_1d`). `EoceneNEMO` reads the present-day domain from the input tree on
@@ -195,7 +201,9 @@ EC-Earth. Preserve, whenever possible:
 - **GRIB:** message order and all metadata (`paramId`, `shortName`, grid definition, level,
   dates, packing type, `bitsPerValue`). Change values with ecCodes on a clone of the original
   message; avoid GRIB → NetCDF → GRIB round trips. If a round trip cannot be avoided, restore the
-  metadata and message order afterwards.
+  metadata and message order afterwards. Existing code that already changes the message order
+  (`repack_grib_file` groups GRIB2 before GRIB1) is frozen in the baseline; do not copy that
+  pattern into new code.
 - When preserving something is not possible, say why in a code comment and in the PR.
 - Files created from scratch use CF-style `units`, `long_name` and, where one exists,
   `standard_name`.
@@ -220,7 +228,8 @@ EC-Earth. Preserve, whenever possible:
   `ruff check --fix . && ruff format .` before pushing.
 - NumPy-style docstrings on public functions and classes.
 - Type hints on every new or changed public signature.
-- Match the surrounding code; do not reformat files you are not otherwise changing.
+- Match the surrounding code; do not reformat files you are not otherwise changing. The one-off
+  repository-wide `ruff format` is a single commit listed in `.git-blame-ignore-revs`.
 
 ## Runtime conventions
 
@@ -228,10 +237,11 @@ EC-Earth. Preserve, whenever possible:
   code.
 - **Fail early with clear errors.** Check inputs before running (preflight). Error messages name
   the step and the missing or bad path. No bare `except`, no silent fallbacks to defaults.
-- **Atomic writes.** Write to a temporary file, then rename. Never leave half-written outputs.
-  Each run records what it did in `provenance.yml` **(from phase 4)**.
+- **Atomic writes.** Every output file is written through the `core` helper **(from phase 4a)**:
+  temporary file in the same directory, then rename. Never leave half-written outputs.
+  Each run records what it did in `provenance.yml` **(from phase 4b)**.
 - **`create_*` methods are pure with respect to files**: they read only declared inputs and either
-  return data or write one declared output.
+  return data or write their declared outputs.
 
 ## Tests
 
@@ -240,7 +250,7 @@ Test groups (pytest markers **from phase 1**):
 | Marker | Data | Where it runs |
 |---|---|---|
 | `unit` | synthetic, in memory | CI (3.14) |
-| `integration` | synthetic tree, `fake` backend | CI |
+| `integration` | synthetic tree, `fake` backend; runner, NEMO, OASIS, RNFM, domain pipeline (OIFS: unit tests and `local_data` only) | CI |
 | `local_data` | real subset, `ECEFAST_TEST_DATA=<dir>` | your machine, opt-in |
 | `hpc` | real data and DOMAINcfg | ECMWF Atos, manual |
 
@@ -288,7 +298,7 @@ published on Read the Docs.
 - **Examples over prose.** Each user page shows a command or a config snippet that works as
   written.
 - The docs must build without warnings: `sphinx-build -W -b html docs docs/_build/html`
-  **(from phase 1)**.
+  **(from phase 1b)**.
 
 ## Changelog
 

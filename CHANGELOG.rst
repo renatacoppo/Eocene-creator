@@ -25,6 +25,9 @@ Changed
 ~~~~~~~
 
 - ``.gitignore`` ignores local test data and outputs (#17).
+- Refactor plan and ``AGENTS.md`` revised after a feasibility review: domain-pipeline baseline,
+  shared CDO wrapper in ``core``, per-file atomic writes, old ``eocene`` CLI and ``dirs:`` config
+  dropped, phases 1 and 4 split, Eocene subbasins as the one planned output change (#18).
 
 0.0.2
 -----
