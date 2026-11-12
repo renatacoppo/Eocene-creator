@@ -1,21 +1,22 @@
-#!/usr/bin/env python3
-"""Self-test of compare_outputs.py on tiny synthetic files.
+"""Self-test of scripts/compare_outputs.py on tiny synthetic files.
 
-Run with ``python scripts/test_compare_outputs.py`` (or ``pytest scripts/test_compare_outputs.py``).
+Run with ``pytest tests/unit/test_compare_outputs.py``.
 The GRIB case is skipped when ``cdo`` or ``grib_compare`` is not on PATH.
 """
 
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 import xarray as xr
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parents[2] / "scripts"))
 import compare_outputs  # noqa: E402
+
+pytestmark = pytest.mark.unit
 
 HAS_GRIB_TOOLS = shutil.which("cdo") is not None and shutil.which("grib_compare") is not None
 
@@ -109,32 +110,9 @@ def test_exit_code(tmp_path: Path) -> None:
     assert compare_outputs.main([str(base), str(new)]) == 1
 
 
+@pytest.mark.skipif(not HAS_GRIB_TOOLS, reason="cdo or grib_compare not on PATH")
 def test_grib(tmp_path: Path) -> None:
-    if not HAS_GRIB_TOOLS:
-        print("SKIP test_grib: cdo or grib_compare not on PATH")
-        return
     base = make_tree(tmp_path / "base", grib_value=1.0)
     assert ndiff(base, make_tree(tmp_path / "same", grib_value=1.0)) == 0
     assert ndiff(base, make_tree(tmp_path / "new", grib_value=2.0)) == 1
 
-
-def main() -> int:
-    import logging
-
-    logging.basicConfig(level="INFO", format="  %(message)s")
-    tests = [obj for name, obj in globals().items() if name.startswith("test_") and callable(obj)]
-    failed = 0
-    for test in tests:
-        print(test.__name__)
-        with tempfile.TemporaryDirectory() as tmp:
-            try:
-                test(Path(tmp))
-            except AssertionError:
-                failed += 1
-                print(f"FAIL {test.__name__}")
-    print(f"{len(tests) - failed}/{len(tests)} tests passed")
-    return 1 if failed else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

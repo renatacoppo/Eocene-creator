@@ -1,16 +1,33 @@
 # Create the eocene environment:
-# mamba env create -f environment.yml 
-# or 
-# conda env create -f environment.yml
+# mamba env create -f environment.yaml
+# or
+# conda env create -f environment.yaml
+#
+# All runtime dependencies come from conda-forge; pip only installs the package itself.
+# CDO is pinned to the version that produced EOCENE-BASELINE (see AGENTS.md, Scientific integrity).
 
-name : eocene
+name: eocene
 channels:
   - conda-forge
 dependencies:
-  - python>=3.9,<3.15
+  - python>=3.11
+  - cdo=2.5.0
   - eccodes
-  - cdo
+  - python-cdo
+  - numpy
+  - xarray
   - xesmf
+  - pandas
+  - netcdf4
+  - scipy
+  - dask-core
+  - matplotlib
+  - cartopy
+  - pyyaml
+  - sparse
+  - ipykernel
+  - jinja2
+  - shapely
   - pip
   - pip:
     - -e .

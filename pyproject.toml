@@ -12,7 +12,7 @@ authors = [
 description = "Tool to generate EC-Earth4 DeepMIP boundary conditions"
 readme = "README.md"
 license = {text = "Apache-2.0"}
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Intended Audience :: Science/Research",
@@ -32,7 +32,21 @@ dependencies = [
     "pyyaml",
     "scipy",
     "dask",
-    "cartopy"
+    "cartopy",
+    "jinja2",
+    "shapely"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "import-linter"
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme"
 ]
 
 [project.scripts]
@@ -41,10 +55,19 @@ eocene = "eocene.cli_eocene:main"
 [project.urls]
 "Homepage" = "https://github.com/renatacoppo/Eocene-creator"
 "Bug Tracker" = "https://github.com/renatacoppo/Eocene-creator/issues"
-"Repository" = "hhttps://github.com/renatacoppo/Eocene-creator"
+"Repository" = "https://github.com/renatacoppo/Eocene-creator"
 
 [tool.setuptools]
 packages = ["eocene"]
 
 [tool.setuptools.dynamic]
 version = {attr = "eocene.__version__"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast tests on synthetic in-memory data (CI)",
+    "integration: synthetic input tree and fake backend (CI)",
+    "local_data: needs the real data subset, set ECEFAST_TEST_DATA (opt-in, your machine)",
+    "hpc: needs real data and DOMAINcfg on ECMWF Atos (manual)",
+]
