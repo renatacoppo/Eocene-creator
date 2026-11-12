@@ -31,13 +31,13 @@ Changed
 - Refactor work moves to the ``refactor`` branch; ``docs/refactor-plan.md`` gets the task and wave
   table; ``data/`` is ignored (#16).
 - ``EoceneNEMO.create_ocean_init`` defaults to ``profile=None``, which builds both ocean initial
-  files (``deepmip_cold`` and ``woa_pi``); the ``eocene`` CLI calls it without arguments (#PR).
+  files (``deepmip_cold`` and ``woa_pi``); the ``eocene`` CLI calls it without arguments (#19).
 
 Output
 ~~~~~~
 
 - ``nemo/initial/woa13-levitus-L31_deepmip-30.nc`` is now built alongside
-  ``nemo/initial/woa13-levitus-L31_woa-pi.nc`` (#PR).
+  ``nemo/initial/woa13-levitus-L31_woa-pi.nc`` (#19).
 
 0.0.2
 -----
