@@ -9,6 +9,7 @@ import xarray as xr
 import xesmf as xe
 import subprocess
 from ecefast.core.cdo import get_cdo
+from ecefast.core.io import atomic_write
 from ecefast.core.grib import GRIB1, GRIB2, NC4
 from ecefast.core.grib import count_grib_messages, detect_grib_version, repack_grib_file, unpack_grib_file
 
@@ -211,7 +212,8 @@ def truncate_grib_file(inputfile, outputfile, variables, orig=63, trunc=1):
     with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
         temp_path = tmpfile.name
     subprocess.run(["grib_copy", "-w", where_expr, inputfile, temp_path], check=True)
-    subprocess.run(["grib_copy", compact, temp_path, outputfile], check=True)
+    with atomic_write(outputfile) as tmp:
+        subprocess.run(["grib_copy", compact, temp_path, tmp], check=True)
 
 
 def replace_field(
@@ -230,6 +232,7 @@ def replace_field(
     replacement field(s)) to produce ``outputfile``. If nothing remains
     after filtering (e.g. ``inputfile`` contained only the target
     variable(s)), ``singlefile`` is copied directly to ``outputfile``.
+    ``outputfile`` is written atomically, so it may be ``inputfile``.
 
     Args:
         inputfile: Path to the source GRIB file whose field(s) will be
@@ -243,8 +246,8 @@ def replace_field(
         filter_method: How to match ``variable`` against GRIB messages,
             either "shortName" or "paramId" (expects "codeNNN"-style
             values). Defaults to "shortName".
-        debug: If True, keep the intermediate filtered and moved-input
-            files instead of deleting them. Defaults to False.
+        debug: If True, keep the intermediate filtered file and
+            ``singlefile`` instead of deleting them. Defaults to False.
 
     Returns:
         None. The combined output is written to ``outputfile``.
@@ -257,17 +260,6 @@ def replace_field(
     # Unique, self-describing temp filenames instead of fixed shared names
     with tempfile.NamedTemporaryFile(prefix="replace_field_filtered_", suffix=".grib", delete=False) as f:
         filtered_path = f.name
-    moved_input_path = None
-
-    # Allow inputfile == outputfile by working from a moved copy
-    if inputfile == outputfile:
-        with tempfile.NamedTemporaryFile(prefix="replace_field_movedinput_", suffix=".grib", delete=False) as f:
-            moved_input_path = f.name
-        shutil.move(inputfile, moved_input_path)
-        inputfile = moved_input_path
-
-    if os.path.exists(outputfile):
-        os.remove(outputfile)
 
     if isinstance(variable, str):
         variable = [variable]
@@ -283,22 +275,19 @@ def replace_field(
 
     subprocess.run(["grib_copy", "-w", where_expr, inputfile, filtered_path], check=True)
 
-    if os.path.getsize(filtered_path) > 0:
-        subprocess.run(["grib_copy", filtered_path, singlefile, outputfile], check=True)
-    else:
-        shutil.copyfile(singlefile, outputfile)
+    # the temporary file of atomic_write differs from inputfile, so inputfile == outputfile is safe
+    with atomic_write(outputfile) as tmp:
+        if os.path.getsize(filtered_path) > 0:
+            subprocess.run(["grib_copy", filtered_path, singlefile, tmp], check=True)
+        else:
+            shutil.copyfile(singlefile, tmp)
 
     if not debug:
         if os.path.exists(filtered_path):
             os.remove(filtered_path)
         os.remove(singlefile)
-        if moved_input_path and os.path.exists(moved_input_path):
-            os.remove(moved_input_path)
     else:
-        logger.debug(
-            f"Keeping intermediate files for inspection (debug=True): "
-            f"{filtered_path}, {singlefile}" + (f", {moved_input_path}" if moved_input_path else "")
-        )
+        logger.debug(f"Keeping intermediate files for inspection (debug=True): {filtered_path}, {singlefile}")
 
 
 def modify_value(field, var, newvalue):
@@ -390,13 +379,11 @@ def flatten_grib_steps(inputfile, n_messages=None):
 
     logger.info(f"Flattening {n_messages} messages in {inputfile}")
 
-    tmp_in = "tmp_input.grb"
+    with tempfile.NamedTemporaryFile(suffix=".grb", delete=False) as in_f:
+        tmp_in = in_f.name
     shutil.copyfile(inputfile, tmp_in)
 
-    with tempfile.NamedTemporaryFile(suffix=".grb", delete=False) as out_f:
-        outputfile_tmp = out_f.name
-
-    with open(outputfile_tmp, "wb") as out_stream:
+    with atomic_write(inputfile) as outputfile_tmp, open(outputfile_tmp, "wb") as out_stream:
         for i in range(1, n_messages + 1):
             with tempfile.NamedTemporaryFile(suffix=".grb", delete=False) as msg_f:
                 msg_file = msg_f.name
@@ -427,5 +414,4 @@ def flatten_grib_steps(inputfile, n_messages=None):
             os.remove(msg_file)
             os.remove(flat_file)
 
-    shutil.move(outputfile_tmp, inputfile)
     os.remove(tmp_in)

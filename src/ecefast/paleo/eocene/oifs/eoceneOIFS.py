@@ -1,4 +1,4 @@
-"""Class to generate Eocene OIFS data."""
+"""Class to generate Eocene OIFS data, and the ``oifs`` pipeline step."""
 
 import os
 import logging
@@ -6,9 +6,12 @@ import xarray as xr
 import numpy as np
 import shutil
 import tempfile
-from ecefast.core.cdo import get_cdo
+from typing import TYPE_CHECKING
 
+from ecefast.core.cdo import get_cdo
 from ecefast.core.grib import extract_grid_info, spectral2gaussian
+from ecefast.core.io import atomic_write
+from ecefast.core.steps import ComponentStep
 from .fields import modify_single_grib, nullify_grib
 from .fields import modify_value, replace_value, regrid_dataset, truncate_grib_file, flatten_grib_steps
 from .albedo import albedo
@@ -16,11 +19,48 @@ from .lsmgrd import lsmgrd
 from .subgrid_orog import compute_slope
 from .vegetation import vegetation_zhang
 
+if TYPE_CHECKING:
+    from ecefast.core.workspace import Context
+
 logger = logging.getLogger(__name__)
 
 
-class EoceneOIFS:
-    def __init__(self, idir, odir, herold, startdate, resolution="TL63L31"):
+class EoceneOIFS(ComponentStep):
+    """Modify the OIFS initial and climate files for the Eocene (Herold et al. 2014).
+
+    ``reads`` lists the files opened from the input tree and the Herold folder; ``writes`` the files replaced in
+    the output tree (copied there before by ``stage``). Intermediate files (Herold fields remapped to the model
+    grid) go to ``tmpdir``, never into the Herold folder.
+
+    The optional aerosol climatology (``eocene.oifs.aerosols``, off by default) is not declared in ``reads`` and
+    ``writes``, because they cannot depend on the config: with it on, the step also reads
+    ``{herold}/herold_etal_eocene_CAM4_BAM_aerosols.nc`` and ``{input}/oifs/ifsdata/IFS_aerosol_climatology_PI.nc``
+    and writes ``{output}/oifs/ifsdata/IFS_aerosol_climatology_PI.nc``.
+    """
+
+    name = "oifs"
+    needs = ["stage"]
+    # initial-condition date of the ECE4-DATA tree (directory name under oifs/<resolution>/)
+    STARTDATE = "19900101"
+    reads = [
+        "{input}/oifs/{oifs_grid}/19900101/ICMGGECE4INIT",
+        "{input}/oifs/{oifs_grid}/19900101/ICMGGECE4INIUA",
+        "{input}/oifs/{oifs_grid}/19900101/ICMSHECE4INIT",
+        "{input}/oifs/{oifs_grid}/climate.v020/ICMCLECE4",
+        "{input}/oifs/{oifs_grid}/climate.v020/bare_soil_albedos.grb",
+        "{herold}/herold_etal_eocene_topo_1x1.nc",
+        "{herold}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc",
+        "{herold}/herold_etal_eocene_biome_1x1.nc",
+    ]
+    writes = [
+        "{output}/oifs/{oifs_grid}/19900101/ICMGGECE4INIT",
+        "{output}/oifs/{oifs_grid}/19900101/ICMGGECE4INIUA",
+        "{output}/oifs/{oifs_grid}/19900101/ICMSHECE4INIT",
+        "{output}/oifs/{oifs_grid}/climate.v020/ICMCLECE4",
+        "{output}/oifs/{oifs_grid}/climate.v020/bare_soil_albedos.grb",
+    ]
+
+    def __init__(self, idir, odir, herold, startdate, resolution="TL63L31", tmpdir=None, build_aerosols=False):
         """
         Initialize the EoceneOIFS class.
 
@@ -28,6 +68,9 @@ class EoceneOIFS:
             indir (str): Input directory for OIFS data.
             outdir (str): Output directory for processed data.
             herold (str): Path to the Herold data.
+            tmpdir (str, optional): Directory for intermediate files (created if missing). If None, a new
+                temporary directory is created; :meth:`run` removes it at the end.
+            build_aerosols (bool): Whether :meth:`run` also builds the aerosol climatology (:meth:`aerosols`).
         """
 
         # main dirs
@@ -43,6 +86,12 @@ class EoceneOIFS:
         # options
         self.resolution = resolution
         self.startdate = startdate
+        self.build_aerosols = build_aerosols
+
+        # intermediate files: never next to the (read-only) Herold data
+        self.own_tmpdir = tmpdir is None
+        self.tmpdir = tempfile.mkdtemp(prefix="ecefast-oifs-") if tmpdir is None else tmpdir
+        os.makedirs(self.tmpdir, exist_ok=True)
 
         # interpolate toward oifs
         kind, spectral, _ = extract_grid_info(self.resolution)
@@ -62,6 +111,48 @@ class EoceneOIFS:
         for d in [self.odir_init, self.odir_climate]:  # self.odir_amip]:
             if not os.path.exists(d):
                 os.makedirs(d)
+
+    @classmethod
+    def from_context(cls, ctx: "Context") -> "EoceneOIFS":
+        """Build the step from the run context: intermediate files go to ``{tmpdir}/oifs``."""
+        tmpdir = None
+        if ctx.paths.tmpdir is not None:
+            tmpdir = os.path.join(ctx.paths.tmpdir, "oifs")
+            ctx.check_writable(tmpdir, cls.name)
+        return cls(
+            idir=ctx.paths.input,
+            odir=ctx.paths.output,
+            herold=ctx.paths.herold,
+            startdate=cls.STARTDATE,
+            resolution=ctx.grids.oifs,
+            tmpdir=tmpdir,
+            build_aerosols=ctx.config.eocene.oifs.aerosols,
+        )
+
+    def run(self) -> None:
+        """Prepare the Herold fields and the present-day land-sea mask, then call the ``create_*`` methods."""
+        try:
+            # Load Herold datasets (land sea mask, orography, sd_orography)
+            lsm_eocene = xr.open_dataset(self.prepare_herold(flag="landsea_mask"))
+            orog = xr.open_dataset(self.prepare_herold(flag="orography"))
+            sd_orog = xr.open_dataset(self.prepare_herold(flag="sd_orography"))
+
+            # Prepare land-sea mask for present-day
+            lsm_present = self.prepare_landsea_mask_present()
+
+            # Create OIFS modifications
+            self.create_climate(lsm_present=lsm_present, landsea=lsm_eocene)
+            self.create_bare_soil(lsm_present=lsm_present, landsea=lsm_eocene)
+            self.create_sh(orog=orog["orography"])
+            self.create_init(
+                lsm_present=lsm_present, landsea=lsm_eocene["landsea_mask"], sd_orog=sd_orog["sd_orography"]
+            )
+            self.create_iniua()
+            if self.build_aerosols:
+                self.aerosols()
+        finally:
+            if self.own_tmpdir:
+                shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def prepare_herold(self, flag=None):
         """
@@ -117,7 +208,7 @@ class EoceneOIFS:
             else:
                 raise ValueError(f"Unknown flag: {flag}")
 
-        filename = os.path.join(self.herold, f"{flag}.nc")
+        filename = os.path.join(self.tmpdir, f"{flag}.nc")
 
         # Delete 'topo' from the dataset
         if "topo" in ds:
@@ -131,12 +222,12 @@ class EoceneOIFS:
 
         # Remap where needed
         if flag in ["landsea_mask", "orography", "sd_orography"]:
-            if os.path.exists(os.path.join(self.herold, f"{flag}_remap.nc")):
-                os.remove(os.path.join(self.herold, f"{flag}_remap.nc"))
+            if os.path.exists(os.path.join(self.tmpdir, f"{flag}_remap.nc")):
+                os.remove(os.path.join(self.tmpdir, f"{flag}_remap.nc"))
             get_cdo().remapcon(
-                f"F{self.gaussian}", input=filename, output=os.path.join(self.herold, f"{flag}_remap.nc")
+                f"F{self.gaussian}", input=filename, output=os.path.join(self.tmpdir, f"{flag}_remap.nc")
             )
-            return os.path.join(self.herold, f"{flag}_remap.nc")
+            return os.path.join(self.tmpdir, f"{flag}_remap.nc")
         else:
             return filename
 
@@ -340,7 +431,8 @@ class EoceneOIFS:
         VARS_TO_ZERO = ["sdfor", "anor", "chnk", "cl", "dl", "licd"]
 
         # Start by copying the base surface file
-        shutil.copy(input_surface, output_surface)
+        with atomic_write(output_surface) as tmp:
+            shutil.copy(input_surface, tmp)
 
         # Each step after the first reads/writes output_surface in place.
         # 'input' overrides the default source file only for the first step.
@@ -448,7 +540,7 @@ class EoceneOIFS:
         aer_paleo_newbin["SSLT03"] = aer_paleo["SSLT04"]
 
         # Check or generate US Standard Atmosphere
-        ua_file = os.path.join(self.herold, "us_standard_atmosphere_newlevs.nc")
+        ua_file = os.path.join(self.tmpdir, "us_standard_atmosphere_newlevs.nc")
         if not os.path.exists(ua_file):
             logger.info("Generating US Standard Atmosphere data")
             # US Standard Atmosphere data (alt, temp, g, pressure, density, mu)
@@ -550,9 +642,8 @@ class EoceneOIFS:
 
         # Save Eocene aerosol climatology
         output_path = os.path.join(self.odir, "oifs", "ifsdata", "IFS_aerosol_climatology_PI.nc")
-        if os.path.exists(output_path):
-            os.remove(output_path)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        aer_ifs_paleo.to_netcdf(output_path)
+        with atomic_write(output_path) as tmp:
+            aer_ifs_paleo.to_netcdf(tmp)
         logger.info("Eocene aerosol data saved at %s", output_path)
         return output_path
