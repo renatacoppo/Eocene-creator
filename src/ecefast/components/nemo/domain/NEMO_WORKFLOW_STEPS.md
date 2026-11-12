@@ -190,12 +190,13 @@ These two functions are the only writer of `domain_cfg.nc` and `maskutil.nc` (th
 
 ---
 
-## Step 8: Generate Ocean Subbasin Masks (Present-Day Only)
+## Step 8: Generate Ocean Subbasin Masks
 **YAML Key**: `steps.generate_subbasins`
 **Method**: `NEMOWorkflow.generate_subbasins()`
 **Script**: `domain/subbasins.py`
 
-- Only runs for `PresentDayBathymetry` processor (skips Eocene)
+- Runs for every bathymetry; the polygons follow present-day geography, so check paleo results by eye
+  (`notebooks/analysis/eocene-subbasins.ipynb`)
 - Read `mesh_mask_{name}.nc` from `{namelist_dir}`
 - Extract surface mask (`tmask[0,0,:,:]`) and coordinates (`glamt`, `gphit`)
 - Classify ocean points into basins using shapely polygons:
@@ -251,6 +252,6 @@ These two functions are the only writer of `domain_cfg.nc` and `maskutil.nc` (th
 - `{output_dir}/domain/PALEORCA2/{name}/maskutil.nc`
   - Binary masks: tmaskutil, umaskutil, vmaskutil
   - Purpose: Used throughout NEMO simulation for masking operations
-- `{output_dir}/domain/PALEORCA2/{name}/subbasins.nc` (present-day only)
+- `{output_dir}/domain/PALEORCA2/{name}/subbasins.nc`
   - Ocean basin masks: Atlantic, Pacific, Indian, Indo-Pacific, Global
   - Purpose: Regional diagnostics and analysis

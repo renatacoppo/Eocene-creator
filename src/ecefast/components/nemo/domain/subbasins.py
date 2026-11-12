@@ -4,14 +4,22 @@
 Generate ocean subbasin masks for NEMO simulations.
 
 Creates masks for Atlantic, Pacific, Indian, Indo-Pacific, and Global basins
-using polygon definitions. Only applicable to present-day ocean configurations.
+using fixed lon/lat polygons drawn on present-day geography; ocean points outside all polygons stay
+unassigned. The pipeline runs it for every bathymetry; for paleo bathymetries check the result by eye
+(``notebooks/analysis/eocene-subbasins.ipynb``).
 """
 
 import argparse
+import logging
 import os
 import numpy as np
 import xarray as xr
 from shapely.geometry import Point, Polygon, MultiPolygon
+
+from ecefast.core.logger import setup_logger
+
+# explicit name: this file runs as a script (pipeline subprocess), where __name__ is "__main__"
+logger = logging.getLogger("ecefast.components.nemo.domain.subbasins")
 
 
 def generate_subbasin_masks(src_dir, tgt_dir, name):
@@ -23,14 +31,14 @@ def generate_subbasin_masks(src_dir, tgt_dir, name):
         name: Bathymetry name to identify the correct mesh_mask_{name}.nc file
     """
     mesh_file = f"mesh_mask_{name}.nc"
-    print(f"Generating subbasins from {mesh_file}")
+    logger.info("Generating subbasins from %s", mesh_file)
 
     # Load mesh_mask
     mesh = xr.open_dataset(os.path.join(src_dir, mesh_file))
 
     # Debug: show available variables and dimensions
-    print(f"\nAvailable variables: {list(mesh.data_vars.keys())}")
-    print(f"Dimensions: {dict(mesh.dims)}")
+    logger.debug("Available variables: %s", list(mesh.data_vars.keys()))
+    logger.debug("Dimensions: %s", dict(mesh.sizes))
 
     # Extract surface mask and coordinates
     # mesh_mask typically has dimensions (time_counter, z, y, x) or (t, z, y, x)
@@ -55,10 +63,10 @@ def generate_subbasin_masks(src_dir, tgt_dir, name):
     else:
         raise ValueError(f"Cannot find longitude/latitude coordinates. Available vars: {list(mesh.data_vars.keys())}")
 
-    print(f"Grid shape: {tmask.shape}")
-    print(f"Longitude range: [{navlon.min():.2f}, {navlon.max():.2f}]")
-    print(f"Latitude range: [{navlat.min():.2f}, {navlat.max():.2f}]")
-    print(f"Ocean points: {np.sum(tmask == 1)}")
+    logger.info("Grid shape: %s", tmask.shape)
+    logger.info("Longitude range: [%.2f, %.2f]", navlon.min(), navlon.max())
+    logger.info("Latitude range: [%.2f, %.2f]", navlat.min(), navlat.max())
+    logger.info("Ocean points: %d", np.sum(tmask == 1))
 
     # Initialize mask arrays
     atlmsk = np.zeros_like(tmask, dtype=int)
@@ -158,7 +166,7 @@ def generate_subbasin_masks(src_dir, tgt_dir, name):
     )
 
     # Validate polygons
-    print("\\nValidating polygons...")
+    logger.debug("Validating polygons...")
     for poly_name, poly in [
         ("Atlantic", atlantic_poly),
         ("Pacific_East", pacific_east),
@@ -166,12 +174,12 @@ def generate_subbasin_masks(src_dir, tgt_dir, name):
         ("Indian", indian_poly),
     ]:
         if not poly.is_valid:
-            print(f"  WARNING: {poly_name} polygon is INVALID!")
+            logger.warning("%s polygon is INVALID!", poly_name)
         else:
-            print(f"  {poly_name}: valid (area={poly.area:.2f})")
+            logger.debug("  %s: valid (area=%.2f)", poly_name, poly.area)
 
     # Build masks by checking each ocean point
-    print("\\nClassifying ocean points into basins...")
+    logger.debug("Classifying ocean points into basins...")
     for j in range(navlon.shape[0]):
         for i in range(navlon.shape[1]):
             if tmask[j, i] == 1:  # only ocean cells
@@ -189,12 +197,12 @@ def generate_subbasin_masks(src_dir, tgt_dir, name):
                 # If none match, point remains unassigned (0)
 
     # Statistics
-    print(f"\\nBasin statistics:")
-    print(f"  Atlantic points: {np.sum(atlmsk)} ({100 * np.sum(atlmsk) / np.sum(tmask):.1f}%)")
-    print(f"  Pacific points: {np.sum(pacmsk)} ({100 * np.sum(pacmsk) / np.sum(tmask):.1f}%)")
-    print(f"  Indian points: {np.sum(indmsk)} ({100 * np.sum(indmsk) / np.sum(tmask):.1f}%)")
+    logger.info("Basin statistics:")
+    logger.info("  Atlantic points: %d (%.1f%%)", np.sum(atlmsk), 100 * np.sum(atlmsk) / np.sum(tmask))
+    logger.info("  Pacific points: %d (%.1f%%)", np.sum(pacmsk), 100 * np.sum(pacmsk) / np.sum(tmask))
+    logger.info("  Indian points: %d (%.1f%%)", np.sum(indmsk), 100 * np.sum(indmsk) / np.sum(tmask))
     unassigned = np.sum(tmask) - np.sum(atlmsk) - np.sum(pacmsk) - np.sum(indmsk)
-    print(f"  Unassigned points: {unassigned} ({100 * unassigned / np.sum(tmask):.1f}%)")
+    logger.info("  Unassigned points: %d (%.1f%%)", unassigned, 100 * unassigned / np.sum(tmask))
 
     # Derived masks
     indpacmsk = ((pacmsk == 1) | (indmsk == 1)).astype(int)
@@ -223,7 +231,7 @@ def generate_subbasin_masks(src_dir, tgt_dir, name):
     os.makedirs(tgt_dir, exist_ok=True)
     output_path = os.path.join(tgt_dir, "subbasins.nc")
     ds.to_netcdf(output_path)
-    print(f"\\nWritten subbasin masks to {output_path}")
+    logger.info("Written subbasin masks to %s", output_path)
 
 
 if __name__ == "__main__":
@@ -234,7 +242,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--tgt_dir", type=str, required=True, help="Path to target directory for output subbasins.nc")
     parser.add_argument("--name", type=str, required=True, help="Bathymetry name (identifies mesh_mask_{name}.nc)")
+    parser.add_argument("--log-level", type=str, default="INFO", help="Log level (DEBUG, INFO, WARNING, ...)")
 
     args = parser.parse_args()
+    setup_logger(args.log_level)
 
     generate_subbasin_masks(args.src_dir, args.tgt_dir, args.name)

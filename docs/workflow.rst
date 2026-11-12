@@ -145,8 +145,14 @@ Its steps, each switched on or off in ``nemo_domain.steps``: ``coordinates`` (PA
 halo, cell bounds), ``bathymetry`` (one processor per bathymetry, named by ``processor``),
 ``configure_domain`` (one DOMAINcfg namelist per bathymetry), ``domain_cfg`` (DOMAINcfg, through
 the backend of ``tools.backend``, see :doc:`external_tools`), ``generate_mask``
-(``domain_cfg.nc`` and ``maskutil.nc`` per bathymetry) and ``generate_subbasins`` (present-day
-only). On a laptop the last three are off. Details of each step are in
+(``domain_cfg.nc`` and ``maskutil.nc`` per bathymetry) and ``generate_subbasins``
+(``subbasins.nc`` per bathymetry: Atlantic, Pacific, Indian, Indo-Pacific and global masks). On a
+laptop the last three are off.
+
+The subbasins are fixed lon/lat polygons drawn on present-day geography. On the Eocene domain they
+leave some ocean unassigned and cut some basins in the wrong place;
+``notebooks/analysis/eocene-subbasins.ipynb`` plots them and lists the problems. Only ``glomsk`` is
+independent of the geography. Details of each step are in
 ``src/ecefast/components/nemo/domain/NEMO_WORKFLOW_STEPS.md``.
 
 Bathymetry processors are found by name in a plain mapping: the generic ones in

@@ -261,31 +261,25 @@ class NEMOWorkflow:
             extract_maskutil(src_dir, tgt_dir, name)
 
     # ------------------------------------------------------------------
-    # Step 6: Generate subbasin masks (present-day only)
+    # Step 6: Generate subbasin masks
     # ------------------------------------------------------------------
 
     def generate_subbasins(self):
-        """Generate ocean subbasin masks for present-day bathymetry only.
+        """Generate ocean subbasin masks (``subbasins.nc``) for each bathymetry, with domain/subbasins.py.
 
-        Calls the domain/subbasins.py script for each bathymetry.
-        Only applicable to PresentDayBathymetry processor.
+        The basins are fixed lon/lat polygons drawn on present-day geography: for paleo bathymetries check the
+        result by eye (``notebooks/analysis/eocene-subbasins.ipynb``).
         """
         src_dir = self.paths["namelist_dir"]
 
         for cfg in self.bathymetries:
             name = cfg["name"]
-            processor_name = cfg["processor"]
-
-            # Only generate subbasins for present-day bathymetry
-            if processor_name != "PresentDayBathymetry":
-                logger.info("Skipping subbasins for %s (only applicable to present-day)", name)
-                continue
-
             tgt_dir = self.domain_dir(name)
             logger.info("Generating subbasin masks for %s -> %s", name, tgt_dir)
 
             self.executor.run_python_script(
-                "domain/subbasins.py", ["--src_dir", src_dir, "--tgt_dir", tgt_dir, "--name", name]
+                "domain/subbasins.py",
+                ["--src_dir", src_dir, "--tgt_dir", tgt_dir, "--name", name, "--log-level", self.log_level],
             )
 
     # ------------------------------------------------------------------
