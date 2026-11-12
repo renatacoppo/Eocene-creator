@@ -8,3 +8,10 @@ eocene/*.yml
 *.grib
 *.nc
 .ipynb_checkpoints/
+# local test data and outputs
+/ECE4-DATA-V3/
+/ECE4-DATA-EOCENE/
+/herold-et-al-2014/
+/EOCENE-TEST/
+/eocene_tmp/
+/EOCENE-BASELINE/
