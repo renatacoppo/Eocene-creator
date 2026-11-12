@@ -10,13 +10,22 @@ import os
 import logging
 import xarray as xr
 
+from ecefast.core.io import atomic_write
+from ecefast.core.steps import ComponentStep
+from ecefast.core.workspace import Context
+
 logger = logging.getLogger(__name__)
 
 
-class EoceneOASIS:
-    """Class to create OASIS boundary conditions for EOCENE"""
+class EoceneOASIS(ComponentStep):
+    """Write the OASIS restart rstos.nc: no sea ice, constant SST."""
 
-    def __init__(self, idir, odir, nemo_resolution="PALEORCA2"):
+    name = "oasis"
+    needs = ["stage"]
+    reads = ["{input}/oasis/{nemo_grid}/rstos.nc"]
+    writes = ["{output}/oasis/{nemo_grid}/rstos.nc"]
+
+    def __init__(self, idir, odir, nemo_resolution="PALEORCA2", constant_sst=290.0):
 
         self.idir = idir
         self.odir = odir
@@ -25,6 +34,21 @@ class EoceneOASIS:
             raise FileNotFoundError(f"Input data not found at {self.idir}")
 
         self.nemo_resolution = nemo_resolution
+        self.constant_sst = constant_sst
+
+    @classmethod
+    def from_context(cls, ctx: Context) -> "EoceneOASIS":
+        return cls(
+            idir=ctx.paths.input,
+            odir=ctx.paths.output,
+            nemo_resolution=ctx.grids.nemo,
+            constant_sst=ctx.config.eocene.oasis.constant_sst,
+        )
+
+    def run(self) -> None:
+        """Create the OASIS modifications (was ``cli/eocene.py:run_oasis``)."""
+        logger.info("Starting OASIS modifications")
+        self.create_rstos(constant_sst=self.constant_sst)
 
     def create_rstos(self, constant_sst=290.0):
         """
@@ -39,4 +63,5 @@ class EoceneOASIS:
             xfield[var].data[:] = 0.0
         xfield["O_SSTSST"].data[:] = constant_sst
         os.makedirs(os.path.join(self.odir, "oasis", self.nemo_resolution), exist_ok=True)
-        xfield.to_netcdf(os.path.join(self.odir, "oasis", self.nemo_resolution, "rstos.nc"))
+        with atomic_write(os.path.join(self.odir, "oasis", self.nemo_resolution, "rstos.nc")) as tmp:
+            xfield.to_netcdf(tmp)

@@ -3,11 +3,16 @@
 
 # ### Script to compute paleo runoff maps for ece4 starting from orographic slope
 
+import os
 import xarray as xr
 from matplotlib import pyplot as plt
 import numpy as np
 import xesmf as xe
 import logging
+
+from ecefast.core.io import atomic_write
+from ecefast.core.steps import ComponentStep
+from ecefast.core.workspace import Context
 
 logger = logging.getLogger(__name__)
 
@@ -463,9 +468,69 @@ def create_basin_data(
     )
 
     # Save to NetCDF
-    result.to_netcdf(output_file)
+    with atomic_write(output_file) as tmp:
+        result.to_netcdf(tmp)
 
     return result
+
+
+class EoceneRNFM(ComponentStep):
+    """Write the runoff-mapper basins from the Herold et al. (2014) river flow direction."""
+
+    name = "rnfm"
+    needs = ["stage"]
+    reads = ["{herold}/herold_etal_eocene_runoff_1x1.nc", "{input}/runoff-mapper/runoff_maps.nc"]
+    writes = ["{output}/runoff-mapper/runoff_maps.nc"]
+
+    def __init__(self, idir: str, odir: str, herold: str):
+        self.idir = idir
+        self.odir = odir
+        self.herold = herold
+
+    @classmethod
+    def from_context(cls, ctx: Context) -> "EoceneRNFM":
+        return cls(idir=ctx.paths.input, odir=ctx.paths.output, herold=ctx.paths.herold)
+
+    def run(self) -> None:
+        """Track the river basins and regrid them to the runoff-mapper grid (was ``cli/eocene.py:run_runoff``)."""
+
+        logger.info("Reading oroslope file...")
+        oroslopefile = os.path.join(self.herold, "herold_etal_eocene_runoff_1x1.nc")
+        runoff_file = os.path.join(self.idir, "runoff-mapper/runoff_maps.nc")
+        final_file = os.path.join(self.odir, "runoff-mapper/runoff_maps.nc")
+        oroslope = xr.load_dataset(oroslopefile)
+        oroslope = oroslope.rename({"xc": "longitude", "yc": "latitude"})
+        oroslope = oroslope.assign_coords(longitude=oroslope.longitude[0], latitude=oroslope.latitude[:, 0])
+        flowdir = oroslope["RTM_FLOW_DIRECTION"].values
+
+        logger.info("Launching calc!")
+        rnf_map_merged_final, rivers_merged_final, rivers_end_point, not_assigned = iter_track(
+            flowdir, lat=oroslope.latitude
+        )
+
+        if len(not_assigned) > 0:
+            logger.warning("Some points have not been assigned:")
+            logger.warning(not_assigned)
+
+        # Building arrival point id
+        arrival_id = np.zeros(rnf_map_merged_final.shape) - 2
+        for num in rivers_merged_final:
+            for po in rivers_merged_final[num]:
+                arrival_id[po[0], po[1]] = num
+
+        logger.info("Check!")
+        logger.info(f"{rnf_map_merged_final.min()} {rnf_map_merged_final.max()}")
+        logger.info(f"{arrival_id.min()} {arrival_id.max()}")
+
+        ## Setting calving equal to runoff
+        logger.warning("WARNING!! Setting calving_id equal to arrival_id! To be changed if ice sheets are present")
+        calving_id = arrival_id.copy()
+
+        rnf_pd = xr.load_dataset(runoff_file)
+        os.makedirs(os.path.dirname(final_file), exist_ok=True)
+        create_basin_data(
+            final_file, rnf_pd, rnf_map_merged_final, arrival_id, calving_id, oroslope.longitude, oroslope.latitude
+        )
 
 
 # run with: python epochal_ece4_runoff.py -s /abs-path-to-dir/herold_etal_eocene_runoff_1x1.nc -r /abs-path-to-dir/runoff_maps.nc
