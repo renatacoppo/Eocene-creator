@@ -15,6 +15,9 @@ Unreleased
 Added
 ~~~~~
 
+- ``ecefast.tools.ecearth`` with the ``atos``, ``local`` and ``fake`` backends for NEMO DOMAINcfg;
+  config keys ``tools.atos.profile`` and ``tools.atos.oasis_lib_dir``; ``tools.backend`` accepts
+  ``atos`` and ``fake`` (#35).
 - Step runner: ``ComponentStep`` and ``run_pipeline`` (``needs`` order, preflight on ``reads``
   that lists every missing input at once, dry run, step selection, check of ``writes``) in
   ``core/steps.py``; run ``Context`` with path placeholders and read-only guards, and the
@@ -77,6 +80,9 @@ Changed
   (``nav_lev``, ``e3t_1d``) differs from the present-day one; outputs written atomically (#33).
 - ``EoceneOIFS`` is the ``oifs`` step with declared reads and writes; outputs written
   atomically (#34).
+- HPC modules moved to ``tools/hpc_profiles.yaml``; ``run_domain_cfg.sh`` reads them with the
+  running Python and adds the OASIS library to ``LD_LIBRARY_PATH`` only if
+  ``tools.atos.oasis_lib_dir`` is set (it was a hardcoded path) (#35).
 
 Fixed
 ~~~~~
@@ -86,6 +92,7 @@ Fixed
 - OIFS: intermediate files (``landsea_mask.nc``, ``orography.nc``, ``sd_orography.nc``, their
   ``_remap`` versions, the aerosol standard atmosphere) go to ``tmpdir`` instead of the read-only
   Herold folder (#34).
+- ``run_domain_cfg.sh`` could not import its module list after the ``src/`` move (#35).
 
 Removed
 ~~~~~~~
