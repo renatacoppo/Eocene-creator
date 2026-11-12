@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, refactor]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Set up the environment from environment.yaml (Python 3.14, CDO from conda-forge)
+        uses: mamba-org/setup-micromamba@v3.2.1
+        with:
+          environment-file: environment.yaml
+          create-args: >-
+            python=3.14
+            cdo
+            pytest
+            pytest-cov
+            ruff
+            import-linter
+          cache-environment: true
+
+      - name: Install the package with the dev extras
+        run: pip install -e '.[dev]' --no-deps
+
+      - name: Versions
+        run: |
+          python --version
+          cdo --version 2>&1 | head -1
+          codes_info -v
+
+      - name: Unit and integration tests
+        run: pytest -m "unit or integration"

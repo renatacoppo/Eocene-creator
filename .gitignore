@@ -1,6 +1,6 @@
 eocene.egg-info
 dist
-__pycache__
+__pycache__/
 *.idx
 .vscode/
 eocene/*.yml
@@ -17,3 +17,6 @@ eocene/*.yml
 /EOCENE-BASELINE/
 /data/
 /EOCENE-DOMAIN-TEST/
+
+# build outputs
+docs/_build/

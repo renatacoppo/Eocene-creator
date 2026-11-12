@@ -37,6 +37,14 @@ Changed
 - ``get_ece4_data.sh`` also fetches ``nemo/domain/eORCA1/domain_cfg.nc`` (#20).
 - Frozen baseline layout ``EOCENE-BASELINE/{eocene,domain}`` documented; the Eocene domain is read
   from ``data/``; pre-existing issues found while building the baseline added to the plan (#21).
+- Notebooks moved to ``notebooks/analysis/`` with outputs cleared; ``get_ece4_data.sh`` and
+  ``add_lonlat.py`` moved to ``scripts/``; placeholder paths in ``eocene/config.tmpl`` (#22).
+
+Removed
+~~~~~~~
+
+- Tracked ``__pycache__`` files; ``modify_oifs.ipynb`` and ``modify_nemo.ipynb``, replaced by
+  ``notebooks/analysis/plots.ipynb`` (#22).
 
 Output
 ~~~~~~
