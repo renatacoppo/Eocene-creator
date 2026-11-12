@@ -9,49 +9,12 @@ import numpy as np
 
 from ecefast.core import Config, ConfigError, load_config, setup_logger
 from ecefast.core.cdo import cdo_version
+from ecefast.core.steps import run_pipeline
+from ecefast.core.workspace import Context, Stage
 from ecefast.paleo.eocene.oifs.eoceneOIFS import EoceneOIFS
 from ecefast.paleo.eocene.nemo.eoceneNEMO import EoceneNEMO
 from ecefast.paleo.eocene.oasis.eoceneOASIS import EoceneOASIS
 from ecefast.paleo.eocene.rnfm.eoceneRNFM import iter_track, create_basin_data
-
-
-def run_copy(input_dir, output_dir, logger, oifs_reso, nemo_reso):
-    """Copy the input folder to the output folder to preserve original data."""
-
-    logger.info(f"Copying input data from {input_dir} to {output_dir}")
-    # refuse to delete the input directory or one of its parents
-    input_real = os.path.realpath(input_dir)
-    output_real = os.path.realpath(output_dir)
-    if input_real == output_real or input_real.startswith(output_real + os.sep):
-        raise ValueError(
-            f"Output directory {output_dir} is or contains the input directory {input_dir}. Refusing to overwrite it."
-        )
-    if os.path.exists(output_dir):
-        logger.info(f"Output directory {output_dir} already exists. It will be overwritten.")
-        shutil.rmtree(output_dir)
-    os.makedirs(output_dir)
-
-    # loop through input directory and copy relevant subdirectories
-    for item in os.listdir(input_dir):
-        if item in ["oifs", "nemo", "oasis"]:
-            for subitem in os.listdir(os.path.join(input_dir, item)):
-                if item == "oasis" and subitem not in [nemo_reso]:
-                    continue
-                if item == "oifs" and subitem not in ["composition", "ifsdata", "vtables", "rtables", oifs_reso]:
-                    continue
-                if item == "nemo" and subitem not in ["cfc", "climatology", "initial", "weights"]:
-                    continue
-                src = os.path.join(input_dir, item, subitem)
-                dst = os.path.join(output_dir, item, subitem)
-                logger.info(f"Copying {src} to {dst}")
-                shutil.copytree(src, dst, symlinks=True)
-        elif item in ["cmip6-data"]:
-            src = os.path.join(input_dir, item)
-            dst = os.path.join(output_dir, item)
-            logger.info(f"Copying {src} to {dst}")
-            os.symlink(src, dst)  # use symlink for large CMIP6 data
-        else:
-            logger.info(f"Skipping {item}!")
 
 
 def run_oifs(config: Config, logger):
@@ -193,7 +156,7 @@ def main(argv: list[str] | None = None) -> None:
         raise ConfigError(f"{args.config}: '--run {args.run}' needs 'tools.precomputed.domain' (the Eocene domain)")
 
     if args.copy:
-        run_copy(config.paths.input, config.paths.output, logger, config.grids.oifs, config.grids.nemo)
+        run_pipeline([Stage], Context(config))
 
     logger.info(f"Loaded configuration: {config}")
     if args.run in ["oasis", "all"]:

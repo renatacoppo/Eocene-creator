@@ -15,6 +15,11 @@ Unreleased
 Added
 ~~~~~
 
+- Step runner: ``ComponentStep`` and ``run_pipeline`` (``needs`` order, preflight on ``reads``
+  that lists every missing input at once, dry run, step selection, check of ``writes``) in
+  ``core/steps.py``; run ``Context`` with path placeholders and read-only guards, and the
+  ``Stage`` step (the former ``run_copy``, used by ``eocene --copy``) in ``core/workspace.py``;
+  ``atomic_write`` in ``core/io.py``; ``docs/workflow.rst`` (#PR).
 - Config options ``eocene.oifs.aerosols`` (default ``false``) and ``eocene.oasis.constant_sst``
   (default ``290.0``) (#30).
 - ``AGENTS.md``: rules for contributors and coding agents; ``CLAUDE.md`` imports it (#17).
