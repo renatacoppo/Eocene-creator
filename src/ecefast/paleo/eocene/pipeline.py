@@ -13,6 +13,7 @@ from ecefast.paleo.eocene.nemo.eoceneNEMO import EoceneNEMO
 from ecefast.paleo.eocene.oasis.eoceneOASIS import EoceneOASIS
 from ecefast.paleo.eocene.oifs.eoceneOIFS import EoceneOIFS
 from ecefast.paleo.eocene.rnfm.eoceneRNFM import EoceneRNFM
+from ecefast.paleo.eocene.verify import verify
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,8 @@ def run(
     """Run the Eocene pipeline from a configuration file.
 
     Checks all inputs first (see :func:`ecefast.core.steps.run_pipeline`), runs the selected steps and, unless it
-    is a dry run, writes ``provenance.yml`` into the output directory.
+    is a dry run, writes ``provenance.yml`` into the output directory and checks the outputs of the steps that ran
+    (:func:`ecefast.paleo.eocene.verify.verify`).
 
     Parameters
     ----------
@@ -45,13 +47,20 @@ def run(
     -------
     list of str
         Names of the steps that ran (or would run, for a dry run).
+
+    Raises
+    ------
+    PipelineError
+        If the pipeline cannot start, a step did not write a declared output, or the outputs fail the checks.
     """
     start = datetime.now().astimezone()
     cdo = cdo_version()
     logger.info("CDO version: %s", cdo)
     config = load_config(config_file)
-    names = run_pipeline(PIPELINE, Context(config, overwrite=overwrite), select=select, dry_run=dry_run)
+    ctx = Context(config, overwrite=overwrite)
+    names = run_pipeline(PIPELINE, ctx, select=select, dry_run=dry_run)
     if not dry_run:
         path = write_provenance(config.paths.output, names, config_file, cdo, start, datetime.now().astimezone())
         logger.info("Provenance written to %s", path)
+        verify([s for s in PIPELINE if s.name in names], ctx)
     return names
