@@ -6,7 +6,6 @@ are off, and their outputs (``coords_halo.nc``, the remapped bathymetry) are sma
 pipeline expects them. ``configure_domain``, ``domain_cfg`` (fake DOMAINcfg) and ``generate_mask`` run for real.
 """
 
-import logging
 import shutil
 from pathlib import Path
 
@@ -37,15 +36,6 @@ STEPS_WITHOUT_GRIDS = {
     "generate_mask": True,
     "generate_subbasins": False,
 }
-
-
-@pytest.fixture(autouse=True)
-def restore_logger():
-    """``ecefast nemo domain`` sets up the ``ecefast`` logger; restore its handlers for the other tests."""
-    logger = logging.getLogger("ecefast")
-    handlers, level, propagate = logger.handlers[:], logger.level, logger.propagate
-    yield
-    logger.handlers[:], logger.level, logger.propagate = handlers, level, propagate
 
 
 def write_config(tmp_path: Path, backend: str = "fake", steps: dict | None = None, bathymetries=None) -> Path:
