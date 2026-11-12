@@ -18,8 +18,6 @@ MODULES = sorted(
 
 NOT_IMPORTABLE = {
     "ecefast.components.oifs.convert_aka_bika": "script: converts grids/*.csv relative to the cwd at import time",
-    "ecefast.components.oifs.create_corners": "script: runs CDO on hardcoded HPC paths at import time",
-    "ecefast.components.oifs.descriptor_generator": "script: runs CDO on hardcoded HPC paths at import time",
 }
 
 

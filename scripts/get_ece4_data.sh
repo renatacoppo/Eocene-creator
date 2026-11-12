@@ -21,7 +21,7 @@ if [[ -z $DST ]]; then
   echo "No destination specified, defaulting to $DST"
 fi
 
-# -L: top-level dirs are symlinks to /lus/.../gdjk, copy their contents
+# -L: top-level dirs of the source tree may be symlinks, copy their contents
 # -m: drop empty dirs left by the directory-walking includes
 rsync -avhL -m --partial --progress ${DRY:+--dry-run} \
   --include='/oifs/' \
