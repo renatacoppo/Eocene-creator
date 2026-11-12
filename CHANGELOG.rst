@@ -18,6 +18,8 @@ Added
 - ``AGENTS.md``: rules for contributors and coding agents; ``CLAUDE.md`` imports it (#17).
 - ``scripts/compare_outputs.py``: compares a run with the frozen baseline (NetCDF within
   ``rtol=1e-6``, GRIB with ``grib_compare``), with a self-test (#20).
+- pytest markers (``unit``, ``integration``, ``local_data``, ``hpc``), first unit tests, a local
+  regression test against the baseline and a CI workflow on Python 3.14 (#24).
 - ``CHANGELOG.rst`` (#17).
 - ``get_ece4_data.sh``: fetches the OIFS TL63L31, NEMO PALEORCA2, OASIS PALEORCA2 and
   runoff-mapper subset of ECE4-DATA-V3 for local runs (#17).
@@ -39,6 +41,9 @@ Changed
   from ``data/``; pre-existing issues found while building the baseline added to the plan (#21).
 - Notebooks moved to ``notebooks/analysis/`` with outputs cleared; ``get_ece4_data.sh`` and
   ``add_lonlat.py`` moved to ``scripts/``; placeholder paths in ``eocene/config.tmpl`` (#22).
+- ``environment.yaml``: Python >= 3.11, all Python dependencies from conda-forge, ``jinja2`` and
+  ``shapely`` declared; CDO is no longer part of the environment (system CDO, not pinned; the
+  baseline records its version) (#24).
 
 Removed
 ~~~~~~~
