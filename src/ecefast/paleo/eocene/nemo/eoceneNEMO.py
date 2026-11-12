@@ -13,6 +13,9 @@ import xarray as xr
 import pandas as pd
 from scipy.spatial import cKDTree
 from ecefast.core.cdo import get_cdo
+from ecefast.core.io import atomic_write
+from ecefast.core.steps import ComponentStep
+from ecefast.core.workspace import Context
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +52,32 @@ def woa_zonal_mean(thetao, ocean_mask):
     return zm.broadcast_like(thetao)
 
 
-class EoceneNEMO:
+class EoceneNEMO(ComponentStep):
+    """Modify NEMO input files for the Eocene: tidal mixing, geothermal flux, ocean initial state, runoff."""
+
+    name = "nemo"
+    # reads only present-day domains from the input tree, on purpose: not the Eocene domain of the 'domain' step
+    needs = ["stage"]
+    # the PALEORCA2 grid name is hardcoded in create_ocean_init and create_runoff
+    reads = [
+        "{herold}/Green_Huber_eocene_tidal_dissipation_1x1.nc",
+        "{herold}/herold_etal_eocene_topo_1x1.nc",
+        "{herold}/age_depth_bath_55.xyadb",
+        "{input}/nemo/initial/zdfiwm_forcing_r720x360.nc",
+        "{input}/nemo/initial/Goutorbe_ghflux.nc",
+        "{input}/nemo/initial/woa13-levitus-L31.nc",
+        "{input}/nemo/domain/PALEORCA2/domain_cfg.nc",
+        "{input}/nemo/domain/ORCA2/domain_cfg.nc",
+        "{input}/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc",
+    ]
+    writes = [
+        "{output}/nemo/initial/zdfiwm_forcing_r720x360.nc",
+        "{output}/nemo/initial/Goutorbe_ghflux.nc",
+        "{output}/nemo/initial/woa13-levitus-L31_deepmip-30.nc",
+        "{output}/nemo/initial/woa13-levitus-L31_woa-pi.nc",
+        "{output}/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc",
+    ]
+
     def __init__(self, herold_folder, input_folder, output_folder, grid="r720x360"):
         self.herold_folder = herold_folder
         self.input_folder = input_folder
@@ -57,6 +85,17 @@ class EoceneNEMO:
         self.cdo = get_cdo()
 
         self.grid = grid
+
+    @classmethod
+    def from_context(cls, ctx: Context) -> "EoceneNEMO":
+        return cls(herold_folder=ctx.paths.herold, input_folder=ctx.paths.input, output_folder=ctx.paths.output)
+
+    def run(self) -> None:
+        """Create the Eocene NEMO files."""
+        self.create_tidal_mixing()
+        self.create_geothermal_flux()
+        self.create_ocean_init()
+        self.create_runoff()
 
     def create_tidal_mixing(self, hcri_value=500.0, cleanup=True):
 
@@ -110,7 +149,8 @@ class EoceneNEMO:
 
         # write output file
         os.makedirs(os.path.join(self.output_folder, "nemo/initial"), exist_ok=True)
-        ds_out.to_netcdf(output_file)
+        with atomic_write(output_file) as tmp:
+            ds_out.to_netcdf(tmp)
         logger.info("Written NEMO 4.2 tidal file: %s", output_file)
 
         ds_m2.close()
@@ -167,7 +207,8 @@ class EoceneNEMO:
         # Assign into Goutorbe_ghflux.nc
         ds_gh["gh_flux"][0, :, :] = q_interp
 
-        ds_gh.to_netcdf(gh_file_out)
+        with atomic_write(gh_file_out) as tmp:
+            ds_gh.to_netcdf(tmp)
         logger.info("Written NEMO 4.2 tidal file: %s", gh_file_out)
         ds_gh.close()
 
@@ -277,7 +318,8 @@ class EoceneNEMO:
         if os.path.exists(output_file):
             os.remove(output_file)
 
-        woa.to_netcdf(output_file, mode="w")
+        with atomic_write(output_file) as tmp:
+            woa.to_netcdf(tmp, mode="w")
 
         logger.info("Ocean initial conditions written to %s", output_file)
 
@@ -299,7 +341,8 @@ class EoceneNEMO:
 
         # write output file
         os.makedirs(os.path.join(self.output_folder, "nemo/climatology"), exist_ok=True)
-        ds_out.to_netcdf(runoff_output)
+        with atomic_write(runoff_output) as tmp:
+            ds_out.to_netcdf(tmp)
         logger.info("Written NEMO 4.2 runoff file: %s", runoff_output)
 
         ds_rnf.close()
