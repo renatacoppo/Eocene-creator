@@ -1,14 +1,14 @@
 hp_dict = {
-    '1': 'tropical forest',
-    '2': 'warm temperate forest',
-    '3': 'temperate forest',
-    '4': 'boreal forest',
-    '5': 'savana',
-    '6': 'grassland',
-    '7': 'desert',
-    '8': 'dry tundra',
-    '9': 'tundra',
-    '10': 'ice',
+    "1": "tropical forest",
+    "2": "warm temperate forest",
+    "3": "temperate forest",
+    "4": "boreal forest",
+    "5": "savana",
+    "6": "grassland",
+    "7": "desert",
+    "8": "dry tundra",
+    "9": "tundra",
+    "10": "ice",
 }
 
 land_cover_types = {
@@ -32,5 +32,5 @@ land_cover_types = {
     17: "Deciduous shrubs",
     18: "Mixed forest/woodland",
     19: "Interrupted forest",
-    20: "Water and land mixtures"
+    20: "Water and land mixtures",
 }

@@ -71,3 +71,15 @@ markers = [
     "local_data: needs the real data subset, set ECEFAST_TEST_DATA (opt-in, your machine)",
     "hpc: needs real data and DOMAINcfg on ECMWF Atos (manual)",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# Lenient start (task 1.4): syntax errors and undefined names only. Rules are tightened in later tasks.
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.ruff.lint.per-file-ignores]
+# prepare_vegetation() is unused and refers to an undefined name NC4; to be removed or fixed in a later task.
+"eocene/oifs/vegetation.py" = ["F821"]

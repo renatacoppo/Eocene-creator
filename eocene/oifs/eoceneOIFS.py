@@ -1,4 +1,5 @@
 """Class to generate Eocene OIFS data."""
+
 import os
 import logging
 import xarray as xr
@@ -10,27 +11,26 @@ from cdo import Cdo
 from .utils import modify_single_grib, nullify_grib
 from .utils import modify_value, replace_value, regrid_dataset, truncate_grib_file, flatten_grib_steps
 from .utils import extract_grid_info, spectral2gaussian
-from .albedo import albedo 
+from .albedo import albedo
 from .lsmgrd import lsmgrd
-from .subgrid_orog import compute_slope 
+from .subgrid_orog import compute_slope
 from .vegetation import vegetation_zhang
 
 cdo = Cdo()
 loggy = logging.getLogger(__name__)
 
-class EoceneOIFS():
 
-    def __init__(self, idir, odir, herold, startdate, 
-                 resolution="TL63L31"):
+class EoceneOIFS:
+    def __init__(self, idir, odir, herold, startdate, resolution="TL63L31"):
         """
         Initialize the EoceneOIFS class.
-        
+
         Args:
             indir (str): Input directory for OIFS data.
             outdir (str): Output directory for processed data.
             herold (str): Path to the Herold data.
         """
-        
+
         # main dirs
         self.idir = idir
         self.odir = odir
@@ -40,7 +40,7 @@ class EoceneOIFS():
             raise FileNotFoundError(f"Herold data not found at {self.herold}")
         if not os.path.exists(self.idir):
             raise FileNotFoundError(f"Input data not found at {self.idir}")
-        
+
         # options
         self.resolution = resolution
         self.startdate = startdate
@@ -50,20 +50,19 @@ class EoceneOIFS():
         self.gaussian = spectral2gaussian(spectral, kind)
 
         # defining directories
-        self.idir_init = os.path.join(self.idir, 'oifs', resolution, startdate)
-        self.odir_init = os.path.join(self.odir, 'oifs', resolution, startdate)
+        self.idir_init = os.path.join(self.idir, "oifs", resolution, startdate)
+        self.odir_init = os.path.join(self.odir, "oifs", resolution, startdate)
 
-        self.idir_climate = os.path.join(self.idir, 'oifs', resolution, "climate.v020")
-        self.odir_climate = os.path.join(self.odir, 'oifs', resolution, "climate.v020")
+        self.idir_climate = os.path.join(self.idir, "oifs", resolution, "climate.v020")
+        self.odir_climate = os.path.join(self.odir, "oifs", resolution, "climate.v020")
 
-        #self.idir_amip = os.path.join(self.idir, 'amip-forcing')
-        #self.odir_amip = os.path.join(self.odir, 'amip-forcing')
+        # self.idir_amip = os.path.join(self.idir, 'amip-forcing')
+        # self.odir_amip = os.path.join(self.odir, 'amip-forcing')
 
         # create directories
-        for d in [self.odir_init, self.odir_climate]: #self.odir_amip]:
+        for d in [self.odir_init, self.odir_climate]:  # self.odir_amip]:
             if not os.path.exists(d):
                 os.makedirs(d)
-
 
     def prepare_herold(self, flag=None):
         """
@@ -78,15 +77,17 @@ class EoceneOIFS():
         """
 
         if not flag:
-            raise ValueError("Flag must be specified. Options are: landsea_mask, mask_opensea, bathymetry, orography, sd_orography")
+            raise ValueError(
+                "Flag must be specified. Options are: landsea_mask, mask_opensea, bathymetry, orography, sd_orography"
+            )
 
         # Paths for topography and sd_topography data
-        herold_topo = os.path.join(self.herold, 'herold_etal_eocene_topo_1x1.nc')
-        herold_sd_topo = os.path.join(self.herold, 'herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc')
+        herold_topo = os.path.join(self.herold, "herold_etal_eocene_topo_1x1.nc")
+        herold_sd_topo = os.path.join(self.herold, "herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc")
 
         if flag == "sd_orography":
             if not os.path.exists(herold_sd_topo):
-                 raise FileNotFoundError(f"Herold data not found at {self.herold}")
+                raise FileNotFoundError(f"Herold data not found at {self.herold}")
             ds = xr.open_dataset(herold_sd_topo)
             ds = ds[["paleo_stddev_subgrid_topo"]].rename({"paleo_stddev_subgrid_topo": "sd_orography"})
             # Fill NaNs with 0 — safest for GRIB encoding
@@ -94,51 +95,46 @@ class EoceneOIFS():
             # Add missing attributes
             ds["sd_orography"].attrs["units"] = "m"
             ds["sd_orography"].attrs["long_name"] = "Standard deviation of subgrid-scale paleotopography"
-            
-        
+
         else:
-             
             # Load datasets
             if not os.path.exists(herold_topo):
                 raise FileNotFoundError(f"Herold data not found at {self.herold}")
-        
+
             ds = xr.open_dataset(herold_topo)
 
             if flag == "landsea_mask":
-                 ds["landsea_mask"] = (ds["topo"] > 0).astype(int)
+                ds["landsea_mask"] = (ds["topo"] > 0).astype(int)
 
             elif flag == "mask_opensea":
-                 ds["mask_opensea"] = (ds["topo"] < 0).astype(int)
+                ds["mask_opensea"] = (ds["topo"] < 0).astype(int)
 
             elif flag == "bathymetry":
-                 ds["bathymetry"] = -ds["topo"].where(ds["topo"] < 0, 0)
+                ds["bathymetry"] = -ds["topo"].where(ds["topo"] < 0, 0)
 
             elif flag == "orography":
-                 ds["orography"] = ds["topo"].where(ds["topo"] > 0, 0)
+                ds["orography"] = ds["topo"].where(ds["topo"] > 0, 0)
 
             else:
-                 raise ValueError(f"Unknown flag: {flag}")
+                raise ValueError(f"Unknown flag: {flag}")
 
         filename = os.path.join(self.herold, f"{flag}.nc")
 
         # Delete 'topo' from the dataset
         if "topo" in ds:
             del ds["topo"]
-        
+
         if os.path.exists(filename):
             os.remove(filename)
-        
+
         # Save to NetCDF
         ds.to_netcdf(filename)
 
-        #Remap where needed
+        # Remap where needed
         if flag in ["landsea_mask", "orography", "sd_orography"]:
             if os.path.exists(os.path.join(self.herold, f"{flag}_remap.nc")):
                 os.remove(os.path.join(self.herold, f"{flag}_remap.nc"))
-            cdo.remapcon(
-                f"F{self.gaussian}",
-                input=filename,
-                output=os.path.join(self.herold, f"{flag}_remap.nc"))
+            cdo.remapcon(f"F{self.gaussian}", input=filename, output=os.path.join(self.herold, f"{flag}_remap.nc"))
             return os.path.join(self.herold, f"{flag}_remap.nc")
         else:
             return filename
@@ -148,61 +144,58 @@ class EoceneOIFS():
         Prepare the present-day land-sea mask from the ICMGGECE4INIT GRIB file.
         Converts to regular Gaussian grid and extracts 'lsm' as an xarray.DataArray.
         """
-    
+
         icmgg_file = os.path.join(self.idir_init, "ICMGGECE4INIT")
-    
+
         # Define temporary NetCDF path
         with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
             icmgg_remap = tmp.name
 
         loggy.info("Reading land-sea mask from %s", icmgg_file)
-    
+
         # Convert GRIB to regular Gaussian NetCDF
         cdo.remapnn(
-            f"F{self.gaussian}",
-            input=f"-setgridtype,regular {icmgg_file}",
-            output=icmgg_remap,
-            options="-f nc4"
+            f"F{self.gaussian}", input=f"-setgridtype,regular {icmgg_file}", output=icmgg_remap, options="-f nc4"
         )
-    
+
         # Open the converted file and extract lsm
         ds = xr.open_dataset(icmgg_remap)
-    
+
         if "lsm" not in ds:
             raise KeyError("Variable 'lsm' not found in the ICMGGECE4INIT file.")
-    
-        
+
         # Extract single snapshot of lsm (remove time if exists)
         lsm = ds["lsm"].isel(time=0).squeeze()
         if lsm.dims != ("lat", "lon"):
             lsm = lsm.transpose("lat", "lon")
-    
+
         loggy.info("Land-sea mask prepared with shape %s and dims %s", lsm.shape, lsm.dims)
-    
+
         # Clean up temporary file
         os.remove(icmgg_remap)
-    
+
         return lsm
 
     def create_sic(self, value=0.0):
         """
         Create sea ice data for the Eocene OIFS.
-        
+
         Args:
             value (float): Value to set for sea ice data.
         """
         # Create sea ice data
         icefield = xr.open_dataset(
-            os.path.join(self.idir_amip, 'siconcbcs_input4MIPs_SSTsAndSeaIce_CMIP_PCMDI-AMIP-1-1-3_gn_187001-201706.nc'))
-        icefield['siconcbcs'] = icefield['siconcbcs']*value
+            os.path.join(self.idir_amip, "siconcbcs_input4MIPs_SSTsAndSeaIce_CMIP_PCMDI-AMIP-1-1-3_gn_187001-201706.nc")
+        )
+        icefield["siconcbcs"] = icefield["siconcbcs"] * value
         outfile = os.path.join(
-            self.odir_amip, 'siconcbcs_input4MIPs_SSTsAndSeaIce_CMIP_PCMDI-AMIP-1-1-3_gn_187001-201706.nc')
+            self.odir_amip, "siconcbcs_input4MIPs_SSTsAndSeaIce_CMIP_PCMDI-AMIP-1-1-3_gn_187001-201706.nc"
+        )
         if os.path.exists(outfile):
             os.remove(outfile)
         icefield.to_netcdf(outfile)
 
     def create_sst(self, A=25, OFFSET=20, T0=5):
-
         """
         Generate a seasonal SST latitudinal pattern and save it to a netCDF file.
         Broadcasts the pattern to match the original SST data shape.
@@ -213,38 +206,38 @@ class EoceneOIFS():
         - T0: Mean temperature in Celcius.
         """
         inputfile = os.path.join(
-            self.idir_amip, 
-            'tosbcs_input4MIPs_SSTsAndSeaIce_CMIP_PCMDI-AMIP-1-1-3_gn_187001-201706.nc'
+            self.idir_amip, "tosbcs_input4MIPs_SSTsAndSeaIce_CMIP_PCMDI-AMIP-1-1-3_gn_187001-201706.nc"
         )
         outputfile = os.path.join(
-            self.odir_amip, 
-            'tosbcs_input4MIPs_SSTsAndSeaIce_CMIP_PCMDI-AMIP-1-1-3_gn_187001-201706.nc'
+            self.odir_amip, "tosbcs_input4MIPs_SSTsAndSeaIce_CMIP_PCMDI-AMIP-1-1-3_gn_187001-201706.nc"
         )
         sstfield = xr.open_dataset(inputfile)
-        sstfield['tosbcs'].shape
-        lons = sstfield['lon'].values
-        lats = sstfield['lat'].values
+        sstfield["tosbcs"].shape
+        lons = sstfield["lon"].values
+        lats = sstfield["lat"].values
         lon2d, lat2d = np.meshgrid(lons, lats)
 
         # Sinusoidal parameters
-        A = 25        # Amplitude in degrees Celsius
-        #B = 5      # Amplitude in degrees Celsius
-        #beta = 45    # Phase shift in degrees
-        k_lat = np.pi / 180    # frequency in lat direction
-        #k_lon = np.pi / 180 * 4    # frequency in lon direction
-        T0 = 5       # Mean temperature
+        A = 25  # Amplitude in degrees Celsius
+        # B = 5      # Amplitude in degrees Celsius
+        # beta = 45    # Phase shift in degrees
+        k_lat = np.pi / 180  # frequency in lat direction
+        # k_lon = np.pi / 180 * 4    # frequency in lon direction
+        T0 = 5  # Mean temperature
         OFFSET = 20
 
-        seasonal = np.cos(np.linspace(0,2*np.pi,num=13))[:-1]* OFFSET
+        seasonal = np.cos(np.linspace(0, 2 * np.pi, num=13))[:-1] * OFFSET
 
         # Create sinusoidal SST pattern
         sst_pattern = []
         for phasing in seasonal:
-            sst_pattern.append(A * np.pow(np.cos(k_lat * lat2d + np.pi/180* phasing), 2) + T0) #+ B * np.sin(k_lon * lon2d + np.pi/180*beta) + T0
+            sst_pattern.append(
+                A * np.pow(np.cos(k_lat * lat2d + np.pi / 180 * phasing), 2) + T0
+            )  # + B * np.sin(k_lon * lon2d + np.pi/180*beta) + T0
         sst_stack = np.stack(sst_pattern, axis=0)
-        stacksize = sstfield['tosbcs'].shape[0]
-        sst_broadcast = np.tile(sst_stack, ((stacksize+11)//12, 1, 1))[:stacksize]
-        sstfield['tosbcs'].data = sst_broadcast
+        stacksize = sstfield["tosbcs"].shape[0]
+        sst_broadcast = np.tile(sst_stack, ((stacksize + 11) // 12, 1, 1))[:stacksize]
+        sstfield["tosbcs"].data = sst_broadcast
         if os.path.exists(outputfile):
             os.remove(outputfile)
         sstfield.to_netcdf(outputfile)
@@ -254,49 +247,47 @@ class EoceneOIFS():
         Create the ICMCL data for the Eocene OIFS.
         Set the albedo and the LAI to constant values.
         """
-        input_climate = os.path.join(self.idir_climate, 'ICMCLECE4')
-        output_climate = os.path.join(self.odir_climate, 'ICMCLECE4')
-        variables = ['al', 'aluvp', 'aluvd', 'alnip', 'alnid', 'lai_lv', 'lai_hv']
+        input_climate = os.path.join(self.idir_climate, "ICMCLECE4")
+        output_climate = os.path.join(self.odir_climate, "ICMCLECE4")
+        variables = ["al", "aluvp", "aluvd", "alnip", "alnid", "lai_lv", "lai_hv"]
 
         modify_single_grib(
-           inputfile=input_climate,
-           outputfile=output_climate,
-           variables=variables,
-           spectral=False,
-           debug=False,
-           myfunction=albedo,
-           lsm_present=lsm_present,
-           landsea=landsea  
-           ) 
+            inputfile=input_climate,
+            outputfile=output_climate,
+            variables=variables,
+            spectral=False,
+            debug=False,
+            myfunction=albedo,
+            lsm_present=lsm_present,
+            landsea=landsea,
+        )
 
         # rearrange the time axis to be compliant with OIFS
         flatten_grib_steps(inputfile=output_climate)
 
     def create_bare_soil(self, lsm_present, landsea):
-
         """
         Create the bare_soil_albedos.grb data for the Eocene OIFS.
         Set the bare soil albedo to constant values.
         """
-        input_climate = os.path.join(self.idir_climate, 'bare_soil_albedos.grb')
-        output_climate = os.path.join(self.odir_climate, 'bare_soil_albedos.grb')
-        variables = ['code117', 'code118', 'code119', 'code120']
-        #variables = ["var117", "var118", "var119", "var120"]
-        #param_ids=[117,118,119,120]
+        input_climate = os.path.join(self.idir_climate, "bare_soil_albedos.grb")
+        output_climate = os.path.join(self.odir_climate, "bare_soil_albedos.grb")
+        variables = ["code117", "code118", "code119", "code120"]
+        # variables = ["var117", "var118", "var119", "var120"]
+        # param_ids=[117,118,119,120]
 
         # filtering has to be done with param ids
         modify_single_grib(
-           inputfile=input_climate,
-           outputfile=output_climate,
-           variables=variables,
-           filter_method="paramId",
-           spectral=False,
-           debug=False,
-           myfunction=albedo,
-           lsm_present=lsm_present,
-           landsea=landsea  
-           )
-
+            inputfile=input_climate,
+            outputfile=output_climate,
+            variables=variables,
+            filter_method="paramId",
+            spectral=False,
+            debug=False,
+            myfunction=albedo,
+            lsm_present=lsm_present,
+            landsea=landsea,
+        )
 
     def create_sh(self, orog):
         """
@@ -309,24 +300,24 @@ class EoceneOIFS():
             sd_orog (xarray.DataArray, optional): Standard deviation of orography.
         """
 
-        input_spectral = os.path.join(self.idir_init, 'ICMSHECE4INIT')
-        output_spectral = os.path.join(self.odir_init, 'ICMSHECE4INIT')
-         
+        input_spectral = os.path.join(self.idir_init, "ICMSHECE4INIT")
+        output_spectral = os.path.join(self.odir_init, "ICMSHECE4INIT")
+
         # erase all orography
         modify_single_grib(
             inputfile=input_spectral,
             outputfile=output_spectral,
-            variables='z',
+            variables="z",
             spectral=True,
             debug=False,
             myfunction=replace_value,
-            newfield=orog*9.81 #converted to geopotential
+            newfield=orog * 9.81,  # converted to geopotential
         )
 
-        #truncate spectral variables to first harmonic (mean value)
+        # truncate spectral variables to first harmonic (mean value)
         truncate_grib_file(
             inputfile=output_spectral,
-            variables=['t','d','vo','lnsp'],
+            variables=["t", "d", "vo", "lnsp"],
             outputfile=output_spectral,
         )
 
@@ -342,10 +333,10 @@ class EoceneOIFS():
             sd_orog (xarray.DataArray): Standard deviation of subgrid-scale orography.
         """
 
-        input_surface = os.path.join(self.idir_init, 'ICMGGECE4INIT')
-        output_surface = os.path.join(self.odir_init, 'ICMGGECE4INIT')
+        input_surface = os.path.join(self.idir_init, "ICMGGECE4INIT")
+        output_surface = os.path.join(self.odir_init, "ICMGGECE4INIT")
 
-        VARS_TO_ZERO = ['sdfor', 'anor', 'chnk', 'cl', 'dl', 'licd']
+        VARS_TO_ZERO = ["sdfor", "anor", "chnk", "cl", "dl", "licd"]
 
         # Start by copying the base surface file
         shutil.copy(input_surface, output_surface)
@@ -353,68 +344,63 @@ class EoceneOIFS():
         # Each step after the first reads/writes output_surface in place.
         # 'input' overrides the default source file only for the first step.
         steps = {
-            'land_sea_mask': {
-                'variables': ['lsm'],
-                'myfunction': replace_value,
-                'kwargs': {'newfield': landsea}, 'input': input_surface},
-            'land_sea_mask_gradient': {
-                'variables': ['lsmgrd'],
-                'myfunction': lsmgrd,
-                'kwargs': {'landsea': landsea}},
-            'vegetation': {
-                'variables': ['tvh', 'tvl', 'cvh', 'cvl'], 
-                'myfunction': vegetation_zhang,
-                'kwargs': {'herold_path': self.herold, 'gaussian': self.gaussian}},
-            'subgrid_orography': {
-                'variables': ['sdor'], 
-                'myfunction': replace_value,
-                'kwargs': {'newfield': sd_orog}},
-            'slope': {
-                'variables': ['slor'], 
-                'myfunction': compute_slope,
-                'kwargs': {'sd_eoc': sd_orog}},
-            'anisotropy': {
-                'variables': ['isor'],
-                'myfunction': modify_value,
-                'kwargs': {'newvalue': 1.}},
-            'soiltype': {
-                'variables': ['slt'],
-                'myfunction': modify_value,
-                'kwargs': {'newvalue': 2.}},
-            'albedo': {
-                'variables': ['al', 'aluvp', 'aluvd', 'alnip', 'alnid', 'aluvpi', 'aluvpv', 'aluvpg', 'alnipi', 'alnipv', 'alnipg'], 
-                'myfunction': albedo,
-                'kwargs': {'lsm_present': lsm_present, 'landsea': landsea}},
-            'zero_variables': {
-                'variables': VARS_TO_ZERO,
-                'myfunction': modify_value,
-                'kwargs': {'newvalue': 0.}
-            }
+            "land_sea_mask": {
+                "variables": ["lsm"],
+                "myfunction": replace_value,
+                "kwargs": {"newfield": landsea},
+                "input": input_surface,
+            },
+            "land_sea_mask_gradient": {"variables": ["lsmgrd"], "myfunction": lsmgrd, "kwargs": {"landsea": landsea}},
+            "vegetation": {
+                "variables": ["tvh", "tvl", "cvh", "cvl"],
+                "myfunction": vegetation_zhang,
+                "kwargs": {"herold_path": self.herold, "gaussian": self.gaussian},
+            },
+            "subgrid_orography": {"variables": ["sdor"], "myfunction": replace_value, "kwargs": {"newfield": sd_orog}},
+            "slope": {"variables": ["slor"], "myfunction": compute_slope, "kwargs": {"sd_eoc": sd_orog}},
+            "anisotropy": {"variables": ["isor"], "myfunction": modify_value, "kwargs": {"newvalue": 1.0}},
+            "soiltype": {"variables": ["slt"], "myfunction": modify_value, "kwargs": {"newvalue": 2.0}},
+            "albedo": {
+                "variables": [
+                    "al",
+                    "aluvp",
+                    "aluvd",
+                    "alnip",
+                    "alnid",
+                    "aluvpi",
+                    "aluvpv",
+                    "aluvpg",
+                    "alnipi",
+                    "alnipv",
+                    "alnipg",
+                ],
+                "myfunction": albedo,
+                "kwargs": {"lsm_present": lsm_present, "landsea": landsea},
+            },
+            "zero_variables": {"variables": VARS_TO_ZERO, "myfunction": modify_value, "kwargs": {"newvalue": 0.0}},
         }
 
         for name, step in steps.items():
             loggy.debug(
                 "Step '%s': variables=%s myfunction=%s kwargs=%s",
-                name, step['variables'], step['myfunction'].__name__, step['kwargs']
+                name,
+                step["variables"],
+                step["myfunction"].__name__,
+                step["kwargs"],
             )
             modify_single_grib(
-                inputfile=step.get('input', output_surface),
+                inputfile=step.get("input", output_surface),
                 outputfile=output_surface,
-                variables=step['variables'],
+                variables=step["variables"],
                 spectral=False,
                 debug=False,
-                myfunction=step['myfunction'],
-                **step['kwargs']
+                myfunction=step["myfunction"],
+                **step["kwargs"],
             )
 
         # Zero out snow depth / related fields (different function signature)
-        loggy.debug("Modifying': variables=%s", 'sd')
-        nullify_grib(
-            inputfile=output_surface,
-            outputfile=output_surface,
-            variables=['sd']
-        )
-        
+        loggy.debug("Modifying': variables=%s", "sd")
+        nullify_grib(inputfile=output_surface, outputfile=output_surface, variables=["sd"])
 
     def create_iniua(self):
         """
@@ -422,18 +408,18 @@ class EoceneOIFS():
         Set the humidity to 0.
         """
 
-        input_levels = os.path.join(self.idir_init, 'ICMGGECE4INIUA')
-        output_levels = os.path.join(self.odir_init, 'ICMGGECE4INIUA')
+        input_levels = os.path.join(self.idir_init, "ICMGGECE4INIUA")
+        output_levels = os.path.join(self.odir_init, "ICMGGECE4INIUA")
 
         # Modify humidity and cloud-related variables
         modify_single_grib(
             inputfile=input_levels,
             outputfile=output_levels,
-            variables=['q', 'crwc', 'cswc', 'clwc', 'ciwc', 'cc'],
+            variables=["q", "crwc", "cswc", "clwc", "ciwc", "cc"],
             spectral=False,
             debug=False,
             myfunction=modify_value,
-            newvalue=0.  
+            newvalue=0.0,
         )
 
     def aerosols(self):
@@ -447,18 +433,18 @@ class EoceneOIFS():
         aer_paleo = xr.open_dataset(paleoaerfile)
 
         # Load IFS reference aerosol climatology
-        aerfile_ifs_pd = os.path.join(self.idir, 'oifs', 'ifsdata/IFS_aerosol_climatology_PI.nc')
+        aerfile_ifs_pd = os.path.join(self.idir, "oifs", "ifsdata/IFS_aerosol_climatology_PI.nc")
         aer_ifs_pd = xr.open_dataset(aerfile_ifs_pd)
         aer_ifs_paleo = aer_ifs_pd.copy()
 
         # Re-bin the Herold aerosol bins
         aer_paleo_newbin = aer_paleo.copy()
-        aer_paleo_newbin['DST01'] = aer_paleo['DST01']*0.57
-        aer_paleo_newbin['DST02'] = aer_paleo['DST01']*0.39
-        aer_paleo_newbin['DST03'] = aer_paleo['DST02'] + aer_paleo['DST03'] + aer_paleo['DST04']
-        aer_paleo_newbin['SSLT01'] = aer_paleo['SSLT01']*0.57
-        aer_paleo_newbin['SSLT02'] = aer_paleo['SSLT01']*0.39 + aer_paleo['SSLT02'] + aer_paleo['SSLT03']
-        aer_paleo_newbin['SSLT03'] = aer_paleo['SSLT04']
+        aer_paleo_newbin["DST01"] = aer_paleo["DST01"] * 0.57
+        aer_paleo_newbin["DST02"] = aer_paleo["DST01"] * 0.39
+        aer_paleo_newbin["DST03"] = aer_paleo["DST02"] + aer_paleo["DST03"] + aer_paleo["DST04"]
+        aer_paleo_newbin["SSLT01"] = aer_paleo["SSLT01"] * 0.57
+        aer_paleo_newbin["SSLT02"] = aer_paleo["SSLT01"] * 0.39 + aer_paleo["SSLT02"] + aer_paleo["SSLT03"]
+        aer_paleo_newbin["SSLT03"] = aer_paleo["SSLT04"]
 
         # Check or generate US Standard Atmosphere
         ua_file = os.path.join(self.herold, "us_standard_atmosphere_newlevs.nc")
@@ -488,33 +474,33 @@ class EoceneOIFS():
             70000   -53.57  9.594   0.00052  0.00008283 1.438
             80000   -74.51  9.564   0.00011  0.00001846 1.321
             """
-            lines = data.strip().split('\n')
+            lines = data.strip().split("\n")
             parsed_data = [list(map(float, line.split())) for line in lines]
             arr = np.array(parsed_data)
-            altitude = arr[:,0]
-            temperature = 273.15 + arr[:,1]
-            g = arr[:,2]
-            pressure = 1e2*arr[:,3]
-            density = arr[:,4]
-            mu = arr[:,5]
+            altitude = arr[:, 0]
+            temperature = 273.15 + arr[:, 1]
+            g = arr[:, 2]
+            pressure = 1e2 * arr[:, 3]
+            density = arr[:, 4]
+            mu = arr[:, 5]
 
             ds = xr.Dataset(
                 {
-                    'temperature': (['altitude'], temperature),
-                    'gravity': (['altitude'], g),
-                    'pressure': (['altitude'], pressure),
-                    'density': (['altitude'], density),
-                    'viscosity': (['altitude'], mu)
+                    "temperature": (["altitude"], temperature),
+                    "gravity": (["altitude"], g),
+                    "pressure": (["altitude"], pressure),
+                    "density": (["altitude"], density),
+                    "viscosity": (["altitude"], mu),
                 },
-                coords={'altitude': (['altitude'], altitude)}
+                coords={"altitude": (["altitude"], altitude)},
             )
 
             # log-pressure coordinate & interpolate to Herold levels
             log_pressure = np.log(ds.pressure)
             ds = ds.assign_coords(log_pressure=log_pressure)
-            ds_new = ds.swap_dims({'altitude':'log_pressure'})
+            ds_new = ds.swap_dims({"altitude": "log_pressure"})
             new_log_pressure = np.log(aer_paleo.lev)
-            ds_interp = ds_new.interp(log_pressure=new_log_pressure, method='linear')
+            ds_interp = ds_new.interp(log_pressure=new_log_pressure, method="linear")
             ds_interp.to_netcdf(ua_file)
             loggy.info("US Standard Atmosphere saved at %s", ua_file)
         else:
@@ -523,16 +509,16 @@ class EoceneOIFS():
         # Map Herold -> IFS variable names
         var_dict = {
             #'Sulfates': "SO4",
-            'Black_Carbon_hydrophilic': "CB1",
-            'Black_Carbon_hydrophobic': "CB2",
-            'Mineral_Dust_bin1': "DST01",
-            'Mineral_Dust_bin2': "DST02",
-            'Mineral_Dust_bin3': "DST03",
-            'Organic_Matter_hydrophilic': "OC1",
-            'Organic_Matter_hydrophobic': "OC2",
-            'Sea_Salt_bin1': "SSLT01",
-            'Sea_Salt_bin2': "SSLT02",
-            'Sea_Salt_bin3': "SSLT03"
+            "Black_Carbon_hydrophilic": "CB1",
+            "Black_Carbon_hydrophobic": "CB2",
+            "Mineral_Dust_bin1": "DST01",
+            "Mineral_Dust_bin2": "DST02",
+            "Mineral_Dust_bin3": "DST03",
+            "Organic_Matter_hydrophilic": "OC1",
+            "Organic_Matter_hydrophobic": "OC2",
+            "Sea_Salt_bin1": "SSLT01",
+            "Sea_Salt_bin2": "SSLT02",
+            "Sea_Salt_bin3": "SSLT03",
         }
 
         # Convert mixing ratio (kg/kg) -> mass concentration (kg/m3)
@@ -541,9 +527,7 @@ class EoceneOIFS():
         aer_mass = xr.Dataset()
 
         for ifs_name, herold_name in var_dict.items():
-            aer_mass[ifs_name] = (
-                aer_paleo_newbin[herold_name] * ds_interp.density
-            )
+            aer_mass[ifs_name] = aer_paleo_newbin[herold_name] * ds_interp.density
 
         # Regrid all variables simultaneously
         loggy.info("Regridding aerosol fields")
@@ -553,40 +537,21 @@ class EoceneOIFS():
             regrid_to_reference=aer_ifs_paleo,
         )
 
-        aer_mass_rg = aer_mass_rg.assign_coords(
-            altitude=("lev", ds_interp.altitude.values)
-        )
+        aer_mass_rg = aer_mass_rg.assign_coords(altitude=("lev", ds_interp.altitude.values))
 
         # Vertical integration
         loggy.info("Computing column-integrated aerosol mass")
 
         for var in var_dict.keys():
-
             colmass = -aer_mass_rg[var].integrate(coord="altitude")
 
             aer_ifs_paleo[var].data = colmass.astype("float32").data
 
         # Save Eocene aerosol climatology
-        output_path = os.path.join(self.odir, 'oifs', 'ifsdata', 'IFS_aerosol_climatology_PI.nc')
+        output_path = os.path.join(self.odir, "oifs", "ifsdata", "IFS_aerosol_climatology_PI.nc")
         if os.path.exists(output_path):
             os.remove(output_path)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         aer_ifs_paleo.to_netcdf(output_path)
         loggy.info("Eocene aerosol data saved at %s", output_path)
         return output_path
-    
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-

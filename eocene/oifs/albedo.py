@@ -12,8 +12,10 @@ import numpy as np
 import logging
 import xarray as xr
 from cdo import Cdo
+
 cdo = Cdo()
 loggy = logging.getLogger(__name__)
+
 
 def albedo(field: xr.Dataset, lsm_present=None, landsea=None, var=None) -> xr.Dataset:
     """
@@ -32,12 +34,12 @@ def albedo(field: xr.Dataset, lsm_present=None, landsea=None, var=None) -> xr.Da
 
     # PREPROCESS MASKS
     # Ensure ascending latitude
-    if not np.all(np.diff(lsm_present['lat']) > 0):
+    if not np.all(np.diff(lsm_present["lat"]) > 0):
         loggy.debug("Sorting lsm_present latitude to ascending order")
-        lsm_present = lsm_present.sortby('lat')
-    if not np.all(np.diff(landsea['lat']) > 0):
+        lsm_present = lsm_present.sortby("lat")
+    if not np.all(np.diff(landsea["lat"]) > 0):
         loggy.debug("Sorting landsea latitude to ascending order")
-        landsea = landsea.sortby('lat')
+        landsea = landsea.sortby("lat")
 
     # Extract variable if landsea is a dataset
     if isinstance(landsea, xr.Dataset):
@@ -90,11 +92,15 @@ def albedo(field: xr.Dataset, lsm_present=None, landsea=None, var=None) -> xr.Da
         lat = da["lat"]
         if (lat < -52).any():
             loggy.debug(f"Applying southern polar filling for {v}")
-            mean_s = da_recon.sel(lat=lat.where((lat >= -52) & (lat <= -46), drop=True)).mean(dim=("lat", "lon"), skipna=True)
+            mean_s = da_recon.sel(lat=lat.where((lat >= -52) & (lat <= -46), drop=True)).mean(
+                dim=("lat", "lon"), skipna=True
+            )
             da_recon = da_recon.where(~(lat < -52), other=mean_s)
         if (lat > 75).any():
             loggy.debug(f"Applying northern polar filling for {v}")
-            mean_n = da_recon.sel(lat=lat.where((lat >= 70) & (lat <= 75), drop=True)).mean(dim=("lat", "lon"), skipna=True)
+            mean_n = da_recon.sel(lat=lat.where((lat >= 70) & (lat <= 75), drop=True)).mean(
+                dim=("lat", "lon"), skipna=True
+            )
             da_recon = da_recon.where(~(lat > 75), other=mean_n)
 
         if flip:
@@ -122,7 +128,7 @@ def albedo(field: xr.Dataset, lsm_present=None, landsea=None, var=None) -> xr.Da
         if v in field:
             loggy.debug(f"Setting diffuse albedo over ocean for {v}")
             field[v].data = np.where(eocene_mask, field[v].data, 0.05)
-    
+
     for v in albedo_direct_vars:
         if v in field:
             loggy.debug(f"Zeroing direct albedo over ocean for {v}")
@@ -140,7 +146,7 @@ def albedo(field: xr.Dataset, lsm_present=None, landsea=None, var=None) -> xr.Da
             da = field[v]
 
             # align mask explicitly to this variable
-            mask = (landsea_interp > 0.5)
+            mask = landsea_interp > 0.5
 
             if set(mask.dims) != set(da.dims):
                 mask = mask.broadcast_like(da)
@@ -148,7 +154,6 @@ def albedo(field: xr.Dataset, lsm_present=None, landsea=None, var=None) -> xr.Da
             mask = mask.transpose(*da.dims)
 
             field[v] = xr.where(mask, da, 0)
-            
 
     loggy.info("Eocene land-sea mask applied successfully.")
     loggy.info("Combined modification complete, GRIB structure preserved.")

@@ -60,11 +60,7 @@ def lsmgrd(field: xr.Dataset, var=None, landsea=None, **kwargs):
 
     # Interpolate mask to target grid
     loggy.debug("Interpolating Eocene mask to field grid")
-    landsea_interp = landsea.interp(
-        lat=field["lat"],
-        lon=field["lon"],
-        method="nearest"
-    )
+    landsea_interp = landsea.interp(lat=field["lat"], lon=field["lon"], method="nearest")
 
     # Preserve original latitude ordering
     landsea_interp = landsea_interp.reindex(lat=field["lat"])
@@ -79,16 +75,12 @@ def lsmgrd(field: xr.Dataset, var=None, landsea=None, **kwargs):
 
         if "time" not in landsea_interp.dims:
             loggy.debug("Broadcasting mask across time dimension")
-            landsea_interp = (
-                landsea_interp
-                .expand_dims(time=da.time)
-                .broadcast_like(da)
-            )
+            landsea_interp = landsea_interp.expand_dims(time=da.time).broadcast_like(da)
 
     # -------------------
     # ALIGN DIMENSIONS
     # -------------------
-    mask = (landsea_interp > 0.5)
+    mask = landsea_interp > 0.5
 
     if set(mask.dims) != set(da.dims):
         mask = mask.broadcast_like(da)

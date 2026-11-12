@@ -22,6 +22,8 @@ Added
   regression test against the baseline and a CI workflow on Python 3.14 (#24).
 - Documentation skeleton (Sphinx, reStructuredText, Read the Docs config) and a docs build
   workflow (#23).
+- ruff configuration (line length 120, lenient rule set) and a lint/format check in CI;
+  ``.git-blame-ignore-revs`` (#25).
 - ``CHANGELOG.rst`` (#17).
 - ``get_ece4_data.sh``: fetches the OIFS TL63L31, NEMO PALEORCA2, OASIS PALEORCA2 and
   runoff-mapper subset of ECE4-DATA-V3 for local runs (#17).
@@ -46,6 +48,7 @@ Changed
 - ``environment.yaml``: Python >= 3.11, all Python dependencies from conda-forge, ``jinja2`` and
   ``shapely`` declared; CDO is no longer part of the environment (system CDO, not pinned; the
   baseline records its version) (#24).
+- Whole repository formatted with ``ruff format`` in one formatting-only commit (#25).
 
 Removed
 ~~~~~~~

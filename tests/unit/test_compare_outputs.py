@@ -115,4 +115,3 @@ def test_grib(tmp_path: Path) -> None:
     base = make_tree(tmp_path / "base", grib_value=1.0)
     assert ndiff(base, make_tree(tmp_path / "same", grib_value=1.0)) == 0
     assert ndiff(base, make_tree(tmp_path / "new", grib_value=2.0)) == 1
-
