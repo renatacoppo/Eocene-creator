@@ -51,8 +51,6 @@ docs = [
 
 [project.scripts]
 ecefast = "ecefast.cli.main:main"
-# old command, removed in task 4b
-eocene = "ecefast.cli.eocene:main"
 
 [project.urls]
 "Homepage" = "https://github.com/renatacoppo/Eocene-creator"

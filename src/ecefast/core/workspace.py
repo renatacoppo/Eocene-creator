@@ -25,9 +25,12 @@ class Context:
     ----------
     config : Config
         The validated configuration.
+    overwrite : bool
+        Allow ``stage`` to replace an output directory that is not empty.
     """
 
     config: Config
+    overwrite: bool = False
 
     @property
     def paths(self) -> Paths:
@@ -119,20 +122,22 @@ class Stage(ComponentStep):
     OIFS_SUBDIRS = ["composition", "ifsdata", "vtables", "rtables"]
     NEMO_SUBDIRS = ["cfc", "climatology", "initial", "weights"]
 
-    def __init__(self, input_dir: str, output_dir: str, oifs_reso: str, nemo_reso: str):
+    def __init__(self, input_dir: str, output_dir: str, oifs_reso: str, nemo_reso: str, overwrite: bool = False):
         self.input_dir = input_dir
         self.output_dir = output_dir
         self.oifs_reso = oifs_reso
         self.nemo_reso = nemo_reso
+        self.overwrite = overwrite
 
     @classmethod
     def from_context(cls, ctx: Context) -> "Stage":
-        return cls(ctx.paths.input, ctx.paths.output, ctx.grids.oifs, ctx.grids.nemo)
+        return cls(ctx.paths.input, ctx.paths.output, ctx.grids.oifs, ctx.grids.nemo, overwrite=ctx.overwrite)
 
     def run(self) -> None:
         """Copy the input folder to the output folder to preserve original data.
 
-        The output folder is removed first if it exists. ``cmip6-data`` is symlinked, not copied.
+        An output folder that is not empty is refused, unless ``overwrite`` is set: then it is removed first.
+        ``cmip6-data`` is symlinked, not copied.
         """
         input_dir, output_dir = self.input_dir, self.output_dir
         logger.info(f"Copying input data from {input_dir} to {output_dir}")
@@ -143,6 +148,11 @@ class Stage(ComponentStep):
             raise ValueError(
                 f"Output directory {output_dir} is or contains the input directory {input_dir}. "
                 "Refusing to overwrite it."
+            )
+        if os.path.isdir(output_dir) and os.listdir(output_dir) and not self.overwrite:
+            raise PipelineError(
+                f"Step 'stage': output directory {output_dir} is not empty. Nothing was written. "
+                "Use --overwrite to replace it, or select steps without 'stage' to rerun them on it."
             )
         if os.path.exists(output_dir):
             logger.info(f"Output directory {output_dir} already exists. It will be overwritten.")

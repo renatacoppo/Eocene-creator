@@ -7,7 +7,8 @@ Opt-in. Set ``ECEFAST_TEST_DATA`` to a directory holding::
     data/domain/PALEORCA2/eocene/         Eocene domain_cfg.nc and maskutil.nc
     EOCENE-BASELINE/eocene/               frozen reference output
 
-then run ``pytest -m local_data``. Takes about a minute.
+then run ``pytest -m local_data``. Takes about a minute and a half: ``ecefast eocene run --overwrite``, then
+``--steps nemo`` on the same output, each compared with the baseline.
 
 The workflow uses the ``cdo`` found first on ``PATH``. A different CDO version legitimately changes the
 results (e.g. remapped bathymetries), so the test is skipped unless ``cdo --version`` matches the
@@ -67,11 +68,32 @@ def test_eocene_workflow_matches_baseline(tmp_path: Path) -> None:
     config_file = tmp_path / "config.yml"
     config_file.write_text(yaml.safe_dump(config))
 
-    subprocess.run(
-        [sys.executable, "-m", "ecefast.cli.eocene", "-c", str(config_file), "--run", "all", "--copy"],
-        check=True,
-        cwd=tmp_path,
-    )
-    compare = subprocess.run([sys.executable, str(REPO / "scripts" / "compare_outputs.py"), str(baseline), str(output)])
+    def ecefast_eocene_run(*args: str) -> None:
+        subprocess.run(
+            [sys.executable, "-m", "ecefast.cli.main", "eocene", "run", "-c", str(config_file), *args],
+            check=True,
+            cwd=tmp_path,
+        )
 
-    assert compare.returncode == 0, "output differs from EOCENE-BASELINE/eocene, see the report above"
+    def differences() -> int:
+        compare = subprocess.run(
+            [sys.executable, str(REPO / "scripts" / "compare_outputs.py"), str(baseline), str(output)]
+        )
+        return compare.returncode
+
+    # full run
+    ecefast_eocene_run("--overwrite")
+    assert differences() == 0, "output differs from EOCENE-BASELINE/eocene, see the report above"
+    assert yaml.safe_load((output / "provenance.yml").read_text())["steps"] == [
+        "stage",
+        "domain",
+        "oasis",
+        "oifs",
+        "nemo",
+        "rnfm",
+    ]
+
+    # rerun one step on the existing output, without stage
+    ecefast_eocene_run("--steps", "nemo")
+    assert differences() == 0, "output differs from EOCENE-BASELINE/eocene after '--steps nemo', see the report above"
+    assert yaml.safe_load((output / "provenance.yml").read_text())["steps"] == ["nemo"]

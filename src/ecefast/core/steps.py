@@ -54,8 +54,8 @@ class ComponentStep:
         raise NotImplementedError(f"{type(self).__name__} does not implement run()")
 
 
-def _summary(step: type[ComponentStep]) -> str:
-    """First line of the step docstring."""
+def step_summary(step: type[ComponentStep]) -> str:
+    """First line of the step docstring (shown by the dry run and ``ecefast eocene steps``)."""
     doc = step.__doc__ or ""
     return doc.strip().splitlines()[0] if doc.strip() else ""
 
@@ -172,11 +172,11 @@ def run_pipeline(
         logger.info("Dry run: nothing is written. Plan:")
         for step in selected:
             outputs = ", ".join(ctx.expand(t) for t in step.writes)
-            logger.info("  %-*s  %s%s", width, step.name, _summary(step), f"  → {outputs}" if outputs else "")
+            logger.info("  %-*s  %s%s", width, step.name, step_summary(step), f"  → {outputs}" if outputs else "")
         return names
 
     for step in selected:
-        logger.info("Step %s: %s", step.name, _summary(step))
+        logger.info("Step %s: %s", step.name, step_summary(step))
         step.from_context(ctx).run()
         missing = [p for p in (ctx.expand(t) for t in step.writes) if not os.path.exists(p)]
         if missing:

@@ -48,7 +48,7 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 | 4.1 ✅ | `EoceneOIFS` step, atomic writes, `aerosols` option; `prepare_herold` writes to `tmpdir`, not into the herold folder | `paleo/eocene/oifs/` | 4.0, 3.2 | ‖ 4.2, 4.3, 5.1 |
 | 4.2 ✅ | `EoceneNEMO`, `EoceneDomain` with vertical-grid check | `paleo/eocene/nemo.py`, `domain.py` | 4.0 | ‖ 4.1, 4.3, 5.1 |
 | 4.3 ✅ | `EoceneOASIS`, new `EoceneRNFM` | `paleo/eocene/oasis.py`, `rnfm.py` | 4.0 | ‖ 4.1, 4.2, 5.1 |
-| 4.4 | `pipeline.py`, `ecefast eocene run`, provenance, remove `cli/eocene.py`, `workflow.rst` | `cli/`, `paleo/eocene/pipeline.py` | 4.1–4.3 | serial |
+| 4.4 ✅ | `pipeline.py`, `ecefast eocene run`, provenance, remove `cli/eocene.py`, `workflow.rst` | `cli/`, `paleo/eocene/pipeline.py` | 4.1–4.3 | serial |
 | 5.1 ✅ | `tools/ecearth.py` (atos, local, fake), `hpc_profiles.yaml`, `run_domain_cfg.sh` without paths | `tools/` | 3.0 | ‖ wave 4 |
 | 5.2 | Bathymetry registry, backend in the domain pipeline, `ecefast nemo domain`, `EoceneDomain` uses the backend, import-linter | `components/nemo/domain/`, `cli/` | 5.1, 4.4 | serial |
 | 5.3 | Subbasins for every bathymetry, check notebook (**output change**) | subbasins code, `notebooks/analysis/` | 5.2 | ‖ 5.4, 6.2 |
@@ -216,17 +216,17 @@ Done when: `pip install -e .` works; both baselines match; CI green.
 - [ ] Wrap `EoceneOIFS`, `EoceneNEMO`, `EoceneOASIS`; new thin `EoceneRNFM` around `run_runoff`; `EoceneDomain`
       (install precomputed domain + vertical grid check).
 - [ ] `eocene.oifs.aerosols: false` option.
-- [ ] `paleo/eocene/pipeline.py`: `PIPELINE = [Stage, EoceneDomain, EoceneOASIS, EoceneOIFS, EoceneNEMO, EoceneRNFM]`.
+- [x] `paleo/eocene/pipeline.py`: `PIPELINE = [Stage, EoceneDomain, EoceneOASIS, EoceneOIFS, EoceneNEMO, EoceneRNFM]`.
 - [ ] Tests: runner with dummy steps (order, missing read, dry-run writes nothing, `--steps` subset), atomic helper
       (no partial file on exception), workspace guards.
-- [ ] `docs/workflow.rst`.
+- [x] `docs/workflow.rst`.
 
 ## Phase 4b: CLI and provenance (PR)
 
-- [ ] `ecefast eocene run -c ... [--steps] [--dry-run] [--overwrite]`.
-- [ ] Remove the `eocene` entry point and `cli/eocene.py`.
-- [ ] `provenance.yml` per run: steps, config hash, git commit, tool versions, time.
-- [ ] Tests: CLI via `main(argv)`.
+- [x] `ecefast eocene run -c ... [--steps] [--dry-run] [--overwrite]`.
+- [x] Remove the `eocene` entry point and `cli/eocene.py`.
+- [x] `provenance.yml` per run: steps, config hash, git commit, tool versions, time.
+- [x] Tests: CLI via `main(argv)`.
 
 ## Phase 5: external tools and domain pipeline (PR, output change)
 

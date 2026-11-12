@@ -7,7 +7,7 @@ schema: 1                       # configuration schema version (required)
 # Root directories (required section)
 paths:
   input: /path/to/ECE4-DATA-V3            # EC-Earth4 input tree, read-only (required, must exist)
-  output: /path/to/EOCENE-TEST            # output tree of `ecefast eocene`; --copy overwrites it (required)
+  output: /path/to/EOCENE-TEST            # output tree of `ecefast eocene run`; --overwrite replaces it (required)
   herold: /path/to/herold-et-al-2014/Supp # Herold et al. (2014) supplementary data, read-only (required, must exist)
   # tmpdir: null                          # temporary directory; reserved, not read yet
 
@@ -15,7 +15,7 @@ paths:
 tools:
   # backend: local                        # how DOMAINcfg is run: local (not available on a laptop), atos (HPC) or fake (tests)
   precomputed:
-    domain: /path/to/domain/PALEORCA2/eocene  # Eocene domain_cfg.nc + maskutil.nc, copied by `--run nemo` (needed by nemo)
+    domain: /path/to/domain/PALEORCA2/eocene  # Eocene domain_cfg.nc + maskutil.nc, copied by the `domain` step (needed by it)
 
 # Model resolutions, named as in ECE4-DATA
 # grids:
@@ -85,7 +85,7 @@ nemo_domain:
     #   processor: CretaceousBathymetry           # define in ecefast/paleo/cretaceous/bathymetry.py
     #   source_file: "/path/to/cretaceous_topo.nc"
 
-# Eocene (DeepMIP) options of `ecefast eocene`
+# Eocene (DeepMIP) options of `ecefast eocene run`
 # eocene:
 #   oifs:
 #     aerosols: false        # build the Herold Eocene aerosol climatology (EoceneOIFS.aerosols); off

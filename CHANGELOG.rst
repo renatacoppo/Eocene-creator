@@ -15,6 +15,12 @@ Unreleased
 Added
 ~~~~~
 
+- ``ecefast eocene run -c CONFIG [--steps a,b] [--dry-run] [--overwrite] [-l LEVEL]`` runs the
+  Eocene pipeline (``paleo/eocene/pipeline.py``: ``stage``, ``domain``, ``oasis``, ``oifs``,
+  ``nemo``, ``rnfm``); ``ecefast eocene steps`` lists the steps with what they need, read and
+  write. A successful run writes ``provenance.yml`` into the output directory (steps, config file
+  and its SHA-256, ``ecefast`` version and git commit, Python, CDO and ecCodes versions, start and
+  end time); ``docs/workflow.rst`` describes the pipeline and each step (#36).
 - ``ecefast.tools.ecearth`` with the ``atos``, ``local`` and ``fake`` backends for NEMO DOMAINcfg;
   config keys ``tools.atos.profile`` and ``tools.atos.oasis_lib_dir``; ``tools.backend`` accepts
   ``atos`` and ``fake`` (#35).
@@ -42,6 +48,9 @@ Added
 Changed
 ~~~~~~~
 
+- ``stage`` refuses an output directory that is not empty unless ``--overwrite`` is given (the old
+  ``--copy`` always replaced it); configuration errors and preflight failures exit with code 1
+  after one log line (#36).
 - ``.gitignore`` ignores local test data and outputs (#17).
 - Refactor plan and ``AGENTS.md`` revised after a feasibility review: domain-pipeline baseline,
   shared CDO wrapper in ``core``, per-file atomic writes, old ``eocene`` CLI and ``dirs:`` config
@@ -97,6 +106,8 @@ Fixed
 Removed
 ~~~~~~~
 
+- The old ``eocene`` command and ``cli/eocene.py`` (``-r/--run``, ``--copy``), replaced by
+  ``ecefast eocene run`` (#36).
 - Tracked ``__pycache__`` files; ``modify_oifs.ipynb`` and ``modify_nemo.ipynb``, replaced by
   ``notebooks/analysis/plots.ipynb`` (#22).
 - ``nemo-workflow.sh``, superseded by the NEMO domain pipeline (#26).

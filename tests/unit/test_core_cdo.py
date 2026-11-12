@@ -24,7 +24,8 @@ def test_get_cdo_returns_one_shared_instance(monkeypatch: pytest.MonkeyPatch) ->
 
 # Modules that used to create a Cdo() at import time.
 CDO_MODULES = [
-    "ecefast.cli.eocene",
+    "ecefast.cli.main",
+    "ecefast.paleo.eocene.pipeline",
     "ecefast.components.nemo.domain.pipeline",
     "ecefast.components.oifs.generator",
     "ecefast.paleo.eocene.oifs.albedo",

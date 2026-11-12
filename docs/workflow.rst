@@ -1,13 +1,130 @@
 Workflow
 ========
 
-Today the Eocene workflow has one part per component (``oasis``, ``oifs``, ``nemo``, ``rnfm``),
-selected with ``--run`` (see :doc:`quickstart`). The refactor turns each part into a *step*,
-and a workflow into an ordered list of steps (a *pipeline*) run by one runner. The runner and
-the ``stage`` step exist already; the Eocene steps follow.
+The Eocene workflow is a *pipeline*: an ordered list of *steps*, run by one runner.
 
-Steps
------
+.. code-block:: python
+
+   # src/ecefast/paleo/eocene/pipeline.py
+   PIPELINE = [Stage, EoceneDomain, EoceneOASIS, EoceneOIFS, EoceneNEMO, EoceneRNFM]
+
+Running it
+----------
+
+.. code-block:: bash
+
+   ecefast eocene run -c configs/laptop.yml                  # every step, into an empty output directory
+   ecefast eocene run -c configs/laptop.yml --overwrite      # every step, replacing an existing output directory
+   ecefast eocene run -c configs/laptop.yml --steps nemo     # rerun one step on an existing output directory
+   ecefast eocene run -c configs/laptop.yml --dry-run        # check all inputs and show the plan; write nothing
+   ecefast eocene steps                                      # list the steps: what each needs, reads and writes
+
+Options of ``ecefast eocene run``:
+
+.. code-block:: text
+
+   -c, --config      Configuration file (schema 1, see the configuration page). Required.
+   --steps a,b       Comma-separated step names; they run in pipeline order. Default: all steps.
+   --dry-run         Check all inputs and show the plan; write nothing.
+   --overwrite       Let 'stage' replace an output directory that is not empty.
+   -l, --loglevel    Log level (DEBUG, INFO, WARNING, ...). Default: INFO.
+
+``stage`` copies the base files into ``paths.output``. If that directory exists and is not
+empty, ``stage`` stops with an error unless ``--overwrite`` is given, which removes and
+recreates it. ``--steps`` without ``stage`` runs on an existing output directory: a needed step
+that is not selected (here ``stage``) must have run before, i.e. all its ``writes`` exist.
+
+The run logs the CDO version first. On a usage error (bad configuration, missing input, unknown
+step, non-empty output) the command logs one error and exits with code 1.
+
+A dry run checks everything and logs the plan, one line per step with what it writes
+(paths shortened here):
+
+.. code-block:: text
+
+   $ ecefast eocene run -c configs/laptop.yml --dry-run
+   INFO -> CDO version: 2.6.4
+   INFO -> Dry run: nothing is written. Plan:
+   INFO ->   stage   Copy base files from the input tree to the output tree.  → EOCENE-TEST/oifs, EOCENE-TEST/nemo, EOCENE-TEST/oasis/PALEORCA2
+   INFO ->   domain  Install the precomputed Eocene NEMO domain and check its vertical grid.  → EOCENE-TEST/nemo/domain/PALEORCA2/domain_cfg.nc, ...
+   INFO ->   oasis   Write the OASIS restart rstos.nc: no sea ice, constant SST.  → EOCENE-TEST/oasis/PALEORCA2/rstos.nc
+   INFO ->   oifs    Modify the OIFS initial and climate files for the Eocene (Herold et al. 2014).  → EOCENE-TEST/oifs/TL63L31/19900101/ICMGGECE4INIT, ...
+   INFO ->   nemo    Modify NEMO input files for the Eocene: tidal mixing, geothermal flux, ocean initial state, runoff.  → EOCENE-TEST/nemo/initial/zdfiwm_forcing_r720x360.nc, ...
+   INFO ->   rnfm    Write the runoff-mapper basins from the Herold et al. (2014) river flow direction.  → EOCENE-TEST/runoff-mapper/runoff_maps.nc
+
+Provenance
+~~~~~~~~~~
+
+At the end of a successful run (not a dry run) the runner writes ``provenance.yml`` into the
+output directory, atomically. It replaces the one of an earlier run.
+
+.. code-block:: yaml
+
+   steps: [stage, domain, oasis, oifs, nemo, rnfm]
+   config:
+     file: /path/to/configs/laptop.yml
+     sha256: 3f1c...                 # of the configuration file
+   ecefast:
+     version: 0.0.2
+     git_commit: 821b4e4...          # "unknown" if the package is not in a git checkout
+   versions:
+     python: 3.14.10
+     cdo: 2.6.4                      # the CDO binary used by the run
+     eccodes: 2.47.0                 # 'codes_info -v' of the ecCodes tools on PATH
+   start: '2026-11-12T12:20:01+01:00'
+   end: '2026-11-12T12:20:49+01:00'
+
+``scripts/compare_outputs.py`` ignores ``provenance.yml``.
+
+The Eocene steps
+----------------
+
+``stage`` (``Stage``)
+   Copies the base files from the input tree to the output tree; see :ref:`stage-step`.
+
+``domain`` (``EoceneDomain``)
+   Needs ``stage``. Copies ``domain_cfg.nc`` and ``maskutil.nc`` from ``tools.precomputed.domain`` to
+   ``{output}/nemo/domain/{nemo_grid}/``, then checks the vertical grid rule: ``nav_lev`` and ``e3t_1d`` of the
+   installed Eocene domain must equal those of the present-day ``{input}/nemo/domain/{nemo_grid}/domain_cfg.nc``.
+   On a mismatch the pipeline stops with an error naming both files and their number of levels.
+   Why: ``nemo`` builds the ocean initial state on the present-day levels. The files in
+   ``tools.precomputed.domain`` are checked when the step starts, not in the preflight.
+
+``oasis`` (``EoceneOASIS``)
+   Needs ``stage``. Reads ``{input}/oasis/{nemo_grid}/rstos.nc``, writes ``{output}/oasis/{nemo_grid}/rstos.nc``:
+   the present-day OASIS restart with sea ice removed (``OIceFrc``, ``OIceTck``, ``OSnwTck``, ``O_AlbIce``,
+   ``O_TepIce`` set to 0) and a constant SST (``eocene.oasis.constant_sst``, default 290 K) in ``O_SSTSST``.
+
+``oifs`` (``EoceneOIFS``)
+   Needs ``stage``. Reads the OIFS initial and climate GRIB files of the input tree
+   (``oifs/{oifs_grid}/19900101/ICMGGECE4INIT``, ``ICMGGECE4INIUA``, ``ICMSHECE4INIT``;
+   ``oifs/{oifs_grid}/climate.v020/ICMCLECE4``, ``bare_soil_albedos.grb``) and the Herold et al. (2014)
+   topography, subgrid orography and biomes. Remaps the Herold fields to the model grid (intermediate files in
+   ``{tmpdir}/oifs``), then writes Eocene versions of the same five files in the output tree: land-sea mask,
+   orography, subgrid orography and slope, vegetation, soil type, albedos and LAI, dry atmosphere (humidity and
+   clouds set to zero), spectral fields truncated to the mean. With ``eocene.oifs.aerosols: true`` it also
+   writes ``oifs/ifsdata/IFS_aerosol_climatology_PI.nc`` from the Herold aerosols.
+
+``nemo`` (``EoceneNEMO``)
+   Needs ``stage`` (not ``domain``: it reads only present-day domains, on purpose).
+   Reads the present-day tidal mixing, geothermal flux, WOA13 and runoff files from ``{input}/nemo``, the
+   PALEORCA2 and ORCA2 present-day domains, and the Herold tidal dissipation, topography and ocean-age files.
+   Writes ``nemo/initial/zdfiwm_forcing_r720x360.nc`` (Eocene M2 tidal dissipation and bathymetry),
+   ``nemo/initial/Goutorbe_ghflux.nc`` (geothermal flux from Eocene ocean-floor age),
+   ``nemo/initial/woa13-levitus-L31_deepmip-30.nc`` and ``_woa-pi.nc`` (two ocean initial states) and
+   ``nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc`` (runoff set to zero; the runoff mapper handles rivers).
+
+``rnfm`` (``EoceneRNFM``)
+   Needs ``stage``. Reads ``{herold}/herold_etal_eocene_runoff_1x1.nc`` and ``{input}/runoff-mapper/runoff_maps.nc``,
+   writes ``{output}/runoff-mapper/runoff_maps.nc``. Tracks river basins on the Herold et al. (2014) 1x1 river
+   flow direction, merges small basins, and regrids ``drainage_basin_id``, ``arrival_point_id`` and
+   ``calving_point_id`` (nearest neighbour, xESMF) to the runoff-mapper grid. ``calving_point_id`` equals
+   ``arrival_point_id`` (no ice sheets in the Eocene).
+
+``ecefast eocene steps`` prints the exact ``needs``, ``reads`` and ``writes`` of each step.
+
+Writing a step
+--------------
 
 A step is a class that subclasses :class:`ecefast.core.steps.ComponentStep`. It declares:
 
@@ -65,8 +182,8 @@ Placeholder        Value
 
 An unknown placeholder is an error.
 
-Running a pipeline
-------------------
+Running a pipeline from Python
+------------------------------
 
 .. code-block:: python
 
@@ -98,15 +215,17 @@ A **dry run** does the same checks, logs each selected step with its description
 writes, and touches nothing. Otherwise the steps run in order, and after each one the runner
 checks that all its ``writes`` exist.
 
+.. _stage-step:
+
 The ``stage`` step
 ------------------
 
 :class:`ecefast.core.workspace.Stage` copies the base files from the input tree to the output
-tree, so the later steps modify copies, never the input. It removes the output directory if it
-exists, then copies ``oifs/`` (``composition``, ``ifsdata``, ``vtables``, ``rtables`` and the
-OIFS grid), ``nemo/`` (``cfc``, ``climatology``, ``initial``, ``weights``) and
+tree, so the later steps modify copies, never the input. It refuses an output directory that
+is not empty, unless ``--overwrite`` is given: then it removes it first. It copies ``oifs/``
+(``composition``, ``ifsdata``, ``vtables``, ``rtables`` and the OIFS grid), ``nemo/`` (``cfc``, ``climatology``, ``initial``, ``weights``) and
 ``oasis/<nemo grid>``, and symlinks ``cmip6-data``. It refuses an output directory that is or
-contains the input directory. Today it runs with ``eocene --copy``.
+contains the input directory.
 
 Atomic writes
 -------------
