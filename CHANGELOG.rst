@@ -16,10 +16,10 @@ Added
 ~~~~~
 
 - import-linter contracts in ``pyproject.toml`` (layers ``cli > paleo > components > tools >
-  core``; OIFS, NEMO, OASIS and RNFM independent), checked by ``lint-imports`` in CI (#PR).
+  core``; OIFS, NEMO, OASIS and RNFM independent), checked by ``lint-imports`` in CI (#37).
 - The Eocene ``domain`` step builds the Eocene domain with the NEMO domain pipeline when
   ``tools.backend`` is ``atos`` or ``fake`` (``local`` still installs ``tools.precomputed.domain``);
-  the vertical grid check runs in both cases (#PR).
+  the vertical grid check runs in both cases (#37).
 
 - ``ecefast eocene run -c CONFIG [--steps a,b] [--dry-run] [--overwrite] [-l LEVEL]`` runs the
   Eocene pipeline (``paleo/eocene/pipeline.py``: ``stage``, ``domain``, ``oasis``, ``oifs``,
@@ -60,7 +60,7 @@ Changed
   if ``domain_cfg`` is on and the backend is not available. Bathymetry processors come from plain
   mappings passed by the caller (``components/nemo/bathymetry.PROCESSORS``,
   ``paleo/eocene/bathymetry.EOCENE_PROCESSORS``), so ``components`` no longer imports ``paleo``;
-  an unknown ``processor`` name lists the known ones (#PR).
+  an unknown ``processor`` name lists the known ones (#37).
 
 - ``stage`` refuses an output directory that is not empty unless ``--overwrite`` is given (the old
   ``--copy`` always replaced it); configuration errors and preflight failures exit with code 1
@@ -112,7 +112,7 @@ Fixed
 
 - NEMO domain pipeline: with ``domaincfg_dir: null`` the ``generate_mask`` and
   ``generate_subbasins`` steps looked for the DOMAINcfg output in a relative ``DOMAINcfg/``
-  folder instead of next to the namelists (``output_dir/domain``) (#PR).
+  folder instead of next to the namelists (``output_dir/domain``) (#37).
 
 - NEMO domain pipeline: helper scripts run with the current Python interpreter, not ``python3``
   from ``PATH``, and are found from the package directory (#26).
