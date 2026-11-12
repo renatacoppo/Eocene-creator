@@ -267,8 +267,8 @@ class NEMOWorkflow:
     def generate_subbasins(self):
         """Generate ocean subbasin masks (``subbasins.nc``) for each bathymetry, with domain/subbasins.py.
 
-        The basins are fixed lon/lat polygons drawn on present-day geography: for paleo bathymetries check the
-        result by eye (``notebooks/analysis/eocene-subbasins.ipynb``).
+        The regional basins are fixed lon/lat polygons drawn on present-day geography. A bathymetry whose processor
+        sets ``regional_subbasins = False`` gets the global mask only.
         """
         src_dir = self.paths["namelist_dir"]
 
@@ -277,10 +277,10 @@ class NEMOWorkflow:
             tgt_dir = self.domain_dir(name)
             logger.info("Generating subbasin masks for %s -> %s", name, tgt_dir)
 
-            self.executor.run_python_script(
-                "domain/subbasins.py",
-                ["--src_dir", src_dir, "--tgt_dir", tgt_dir, "--name", name, "--log-level", self.log_level],
-            )
+            args = ["--src_dir", src_dir, "--tgt_dir", tgt_dir, "--name", name, "--log-level", self.log_level]
+            if not self.processors[cfg["processor"]].regional_subbasins:
+                args.append("--global-only")
+            self.executor.run_python_script("domain/subbasins.py", args)
 
     # ------------------------------------------------------------------
     # Orchestrator

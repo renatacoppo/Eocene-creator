@@ -50,6 +50,8 @@ class BathymetryProcessor:
     mask_type     : str   — key in MASK_PRESETS
     remap_method  : str   — CDO remap operator (e.g. remapnn, remapbil)
     output_prefix : str | None — prefix for output filename; defaults to cfg['name']
+    regional_subbasins : bool — subbasins.nc gets the Atlantic, Pacific, Indian and Indo-Pacific masks
+                    (present-day polygons); False: the global mask only
     """
 
     variable = None
@@ -58,6 +60,7 @@ class BathymetryProcessor:
     mask_type = None
     remap_method = None
     output_prefix = None
+    regional_subbasins: bool = True
 
     def __init__(self, cfg, paths, grids, params, cdo):
         """

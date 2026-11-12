@@ -149,10 +149,13 @@ the backend of ``tools.backend``, see :doc:`external_tools`), ``generate_mask``
 (``subbasins.nc`` per bathymetry: Atlantic, Pacific, Indian, Indo-Pacific and global masks). On a
 laptop the last three are off.
 
-The subbasins are fixed lon/lat polygons drawn on present-day geography. On the Eocene domain they
-leave some ocean unassigned and cut some basins in the wrong place;
-``notebooks/analysis/eocene-subbasins.ipynb`` plots them and lists the problems. Only ``glomsk`` is
-independent of the geography. Details of each step are in
+The regional subbasins are fixed lon/lat polygons drawn on present-day geography. On the Eocene
+domain they leave some ocean unassigned and cut some basins in the wrong place
+(``notebooks/analysis/eocene-subbasins.ipynb`` plots them and lists the problems and the options).
+So a bathymetry processor decides with the class attribute ``regional_subbasins``: ``True`` for
+``PresentDayBathymetry`` (all five masks), ``False`` for ``EoceneBathymetry``, whose
+``subbasins.nc`` has the global mask ``glomsk`` only, until Eocene basins are defined in a separate
+task. Details of each step are in
 ``src/ecefast/components/nemo/domain/NEMO_WORKFLOW_STEPS.md``.
 
 Bathymetry processors are found by name in a plain mapping: the generic ones in

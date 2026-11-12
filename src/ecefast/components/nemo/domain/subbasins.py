@@ -5,8 +5,9 @@ Generate ocean subbasin masks for NEMO simulations.
 
 Creates masks for Atlantic, Pacific, Indian, Indo-Pacific, and Global basins
 using fixed lon/lat polygons drawn on present-day geography; ocean points outside all polygons stay
-unassigned. The pipeline runs it for every bathymetry; for paleo bathymetries check the result by eye
-(``notebooks/analysis/eocene-subbasins.ipynb``).
+unassigned. The pipeline runs it for every bathymetry. Bathymetries whose processor sets
+``regional_subbasins = False`` (paleo ones) get the global mask only: the present-day polygons do not fit their
+geography (``notebooks/analysis/eocene-subbasins.ipynb``).
 """
 
 import argparse
@@ -22,13 +23,15 @@ from ecefast.core.logger import setup_logger
 logger = logging.getLogger("ecefast.components.nemo.domain.subbasins")
 
 
-def generate_subbasin_masks(src_dir, tgt_dir, name):
+def generate_subbasin_masks(src_dir: str, tgt_dir: str, name: str, regional: bool = True) -> None:
     """Generate subbasin masks from mesh_mask file.
 
     Args:
         src_dir: Path to directory containing mesh_mask_{name}.nc
         tgt_dir: Path to target directory for output
         name: Bathymetry name to identify the correct mesh_mask_{name}.nc file
+        regional: If False, write the global mask (glomsk) only, without the Atlantic, Pacific, Indian and
+            Indo-Pacific masks (whose polygons follow present-day geography)
     """
     mesh_file = f"mesh_mask_{name}.nc"
     logger.info("Generating subbasins from %s", mesh_file)
@@ -67,6 +70,22 @@ def generate_subbasin_masks(src_dir, tgt_dir, name):
     logger.info("Longitude range: [%.2f, %.2f]", navlon.min(), navlon.max())
     logger.info("Latitude range: [%.2f, %.2f]", navlat.min(), navlat.max())
     logger.info("Ocean points: %d", np.sum(tmask == 1))
+
+    if not regional:
+        logger.info(
+            "Global mask only for %s: the regional basin polygons follow present-day geography "
+            "(see notebooks/analysis/eocene-subbasins.ipynb)",
+            name,
+        )
+        glomsk = np.zeros_like(tmask, dtype=int)
+        glomsk[tmask == 1] = 1
+        ds = xr.Dataset(
+            data_vars={"glomsk": (("y", "x"), glomsk)},
+            coords={"navlon": (("y", "x"), navlon), "navlat": (("y", "x"), navlat)},
+        )
+        ds["glomsk"].attrs = {"long_name": "Global ocean mask", "units": "1"}
+        write_subbasins(ds, tgt_dir)
+        return
 
     # Initialize mask arrays
     atlmsk = np.zeros_like(tmask, dtype=int)
@@ -227,7 +246,11 @@ def generate_subbasin_masks(src_dir, tgt_dir, name):
     ds["indpacmsk"].attrs = {"long_name": "Indo-Pacific Ocean mask", "units": "1"}
     ds["glomsk"].attrs = {"long_name": "Global ocean mask", "units": "1"}
 
-    # Write to file
+    write_subbasins(ds, tgt_dir)
+
+
+def write_subbasins(ds: xr.Dataset, tgt_dir: str) -> None:
+    """Write the masks to ``tgt_dir/subbasins.nc``."""
     os.makedirs(tgt_dir, exist_ok=True)
     output_path = os.path.join(tgt_dir, "subbasins.nc")
     ds.to_netcdf(output_path)
@@ -242,9 +265,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--tgt_dir", type=str, required=True, help="Path to target directory for output subbasins.nc")
     parser.add_argument("--name", type=str, required=True, help="Bathymetry name (identifies mesh_mask_{name}.nc)")
+    parser.add_argument(
+        "--global-only", action="store_true", help="Write the global mask only (no regional basin masks)"
+    )
     parser.add_argument("--log-level", type=str, default="INFO", help="Log level (DEBUG, INFO, WARNING, ...)")
 
     args = parser.parse_args()
     setup_logger(args.log_level)
 
-    generate_subbasin_masks(args.src_dir, args.tgt_dir, args.name)
+    generate_subbasin_masks(args.src_dir, args.tgt_dir, args.name, regional=not args.global_only)

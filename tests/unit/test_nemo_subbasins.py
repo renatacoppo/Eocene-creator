@@ -87,3 +87,18 @@ def test_logs_statistics(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> No
     with caplog.at_level(logging.INFO, logger="ecefast"):
         generate_subbasin_masks(str(tmp_path), str(tmp_path / "out"), "test")
     assert "Unassigned points" in caplog.text
+
+
+def test_global_only(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """``regional=False`` (paleo bathymetries): only ``glomsk``, equal to the ocean mask, same coordinates."""
+    ocean = write_mesh_mask(tmp_path / "mesh_mask_test.nc")
+    with caplog.at_level(logging.INFO, logger="ecefast"):
+        generate_subbasin_masks(str(tmp_path), str(tmp_path / "out"), "test", regional=False)
+    assert "Global mask only for test" in caplog.text
+    with xr.open_dataset(tmp_path / "out" / "subbasins.nc") as ds:
+        assert list(ds.data_vars) == ["glomsk"]
+        assert ds["glomsk"].dims == ("y", "x")
+        assert ds["glomsk"].attrs == {"long_name": "Global ocean mask", "units": "1"}
+        assert ds["glomsk"].dtype == np.int64
+        np.testing.assert_array_equal(ds["glomsk"].values, ocean)
+        np.testing.assert_array_equal(ds["navlon"].values[0], LON)
