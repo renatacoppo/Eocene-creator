@@ -139,7 +139,7 @@ Workflow steps controlled via `steps` flags in YAML:
 **Method**: `NEMOWorkflow.run_domain_cfg()`
 **Script**: `domain/run_domain_cfg.sh`
 
-- Load HPC modules from `config/hpc_modules.yaml` (environment: atos)
+- Load HPC modules from `ecefast/tools/hpc_profiles.yaml` (profile: atos)
   - Modules: prgenv/intel, intel/2021.4.0, hdf5-parallel/1.12.2, netcdf4-parallel/4.9.1, etc.
 - Compile DOMAINcfg tool: `maketools -m ecearth -n DOMAINcfg`
   - Skips compilation if executable already exists

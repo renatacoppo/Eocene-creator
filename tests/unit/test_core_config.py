@@ -173,7 +173,7 @@ def test_read_only_directory_must_exist(tmp_path: Path, key: str) -> None:
 @pytest.mark.parametrize(
     "section, value, key",
     [
-        ("tools", {"backend": "atos"}, "tools.backend"),
+        ("tools", {"backend": "hpc"}, "tools.backend"),
         ("eocene", {"oifs": {"aerosols": "no"}}, "eocene.oifs.aerosols"),
         ("eocene", {"oasis": {"constant_sst": "warm"}}, "eocene.oasis.constant_sst"),
     ],

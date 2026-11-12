@@ -2,47 +2,35 @@
 # run_domain_cfg.sh <domaincfg_dir> <name1> [name2 ...]
 #
 # HPC-only block: module loading, compilation, and execution of the NEMO
-# DOMAINcfg tool. Called from ecefast/components/nemo/domain/pipeline.py via subprocess.
+# DOMAINcfg tool. Called by ecefast.tools.ecearth.AtosBackend (and, until task 5.2, directly by
+# ecefast/components/nemo/domain/pipeline.py).
 # Module loading must live here — it cannot propagate back to a Python parent process.
 
 set -euo pipefail
-
-# Resolve directory of this script so helper scripts are found regardless of cwd
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DOMAINCFG_DIR=$1
 shift 1
 NAMES=("$@")
 
-# --- Load HPC modules from config ---
+# --- Load HPC modules ---
+# Module list of the HPC profile (ecefast/tools/hpc_profiles.yaml), read with the Python running ecefast.
+# AtosBackend (ecefast.tools.ecearth) sets ECEFAST_PYTHON to its interpreter and ECEFAST_HPC_PROFILE to
+# tools.atos.profile; the defaults serve direct calls from an activated environment.
+MODULES=$("${ECEFAST_PYTHON:-python3}" -m ecefast.tools.ecearth "${ECEFAST_HPC_PROFILE:-atos}")
+
 module reset
-
-# Get modules from config/hpc_modules.yaml using Python
-NEMO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-MODULES=$(python3 <<PYTHON_EOF
-import sys
-sys.path.insert(0, "$NEMO_DIR")
-from config import get_hpc_modules
-try:
-    modules = get_hpc_modules('atos')
-    print(' '.join(modules))
-except Exception as e:
-    print(f"ERROR: {e}", file=sys.stderr)
-    sys.exit(1)
-PYTHON_EOF
-)
-
 for module in $MODULES; do
     module load "$module" || {
         echo "WARNING: Failed to load module '$module'" >&2
     }
 done
 
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:\
-$NETCDF4_PARALLEL_DIR/lib:\
-$ECCODES_DIR/lib:\
-$HDF5_DIR/lib:\
-$HPCPERM/ecearth4/revisions/main/sources/oasis3-mct-5.2/arch_ecearth/lib
+# Library directories set by the modules, plus the OASIS libraries of the EC-Earth build if given
+# (ECEFAST_OASIS_LIB_DIR, from tools.atos.oasis_lib_dir).
+export LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}:$NETCDF4_PARALLEL_DIR/lib:$ECCODES_DIR/lib:$HDF5_DIR/lib
+if [[ -n "${ECEFAST_OASIS_LIB_DIR:-}" ]]; then
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ECEFAST_OASIS_LIB_DIR
+fi
 
 # --- Compile DOMAINcfg tool ---
 cd "$DOMAINCFG_DIR"

@@ -13,9 +13,12 @@ paths:
 
 # External tools and files built elsewhere
 tools:
-  # backend: local                        # how EC-Earth tools are run; only 'local' for now
+  backend: atos                           # how DOMAINcfg is run: atos (here), local (laptop, not available) or fake (tests)
   precomputed:
     domain: /path/to/domain/PALEORCA2/eocene  # Eocene domain_cfg.nc + maskutil.nc, copied by `--run nemo` (needed by nemo)
+  atos:                                   # options of the atos backend
+    profile: atos                         # HPC modules to load: a profile of ecefast/tools/hpc_profiles.yaml (default atos)
+    oasis_lib_dir: /path/to/ecearth4/sources/oasis3-mct-5.2/arch_ecearth/lib  # added to LD_LIBRARY_PATH (default null)
 
 # Model resolutions, named as in ECE4-DATA
 # grids:

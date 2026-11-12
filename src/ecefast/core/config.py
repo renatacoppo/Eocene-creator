@@ -38,11 +38,20 @@ class Precomputed:
 
 
 @dataclass
+class Atos:
+    """Options of the ``atos`` backend (DOMAINcfg on ECMWF Atos)."""
+
+    profile: str = "atos"
+    oasis_lib_dir: str | None = None
+
+
+@dataclass
 class Tools:
     """How external tools are reached."""
 
     backend: str = "local"
     precomputed: Precomputed = field(default_factory=Precomputed)
+    atos: Atos = field(default_factory=Atos)
 
 
 @dataclass
@@ -104,7 +113,7 @@ class Config:
     eocene: Eocene = field(default_factory=Eocene)
 
 
-BACKENDS = ("local",)
+BACKENDS = ("atos", "local", "fake")
 NEMO_DOMAIN_STEPS = (
     "coordinates",
     "bathymetry",
@@ -114,7 +123,7 @@ NEMO_DOMAIN_STEPS = (
     "generate_subbasins",
 )
 # sections whose values are themselves sections
-NESTED = {"tools": {"precomputed": Precomputed}, "eocene": {"oifs": EoceneOIFS, "oasis": EoceneOASIS}}
+NESTED = {"tools": {"precomputed": Precomputed, "atos": Atos}, "eocene": {"oifs": EoceneOIFS, "oasis": EoceneOASIS}}
 
 
 def load_yaml(path: str | Path) -> Any:
@@ -186,6 +195,8 @@ def _validate(config: Config) -> None:
     if config.tools.backend not in BACKENDS:
         raise ConfigError(f"{file}: 'tools.backend' must be one of {', '.join(BACKENDS)}, got {config.tools.backend!r}")
     _check_type(config.tools.precomputed.domain, (str, type(None)), "tools.precomputed.domain", file)
+    _check_type(config.tools.atos.profile, str, "tools.atos.profile", file)
+    _check_type(config.tools.atos.oasis_lib_dir, (str, type(None)), "tools.atos.oasis_lib_dir", file)
     _check_type(config.grids.oifs, str, "grids.oifs", file)
     _check_type(config.grids.nemo, str, "grids.nemo", file)
     _check_type(config.eocene.oifs.aerosols, bool, "eocene.oifs.aerosols", file)
