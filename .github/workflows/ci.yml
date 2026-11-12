@@ -36,5 +36,10 @@ jobs:
           cdo --version 2>&1 | head -1
           codes_info -v
 
+      - name: Lint and format check
+        run: |
+          ruff check .
+          ruff format --check .
+
       - name: Unit and integration tests
         run: pytest -m "unit or integration"
