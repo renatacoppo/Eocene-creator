@@ -157,7 +157,8 @@ Keep the current naming scheme; new code follows it.
    `run()` calling the `create_*` methods.
 3. Add the class to the right `PIPELINE`, after the steps it `needs`.
 4. Unit tests for the new `create_*` methods; integration test for the step (dry run and real run
-   with the `fake` backend).
+   with the `fake` backend). Each new `reads` path needs a synthetic writer in `READ_WRITERS`
+   (`tests/synthetic.py`): the test input tree holds only declared reads.
 5. Describe it in `docs/workflow.rst` (what it reads, what it writes, why).
 6. Add a line to `CHANGELOG.rst`.
 

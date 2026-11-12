@@ -23,32 +23,17 @@ from ecefast.core.workspace import Context
 from ecefast.paleo.eocene.bathymetry import EOCENE_PROCESSORS, EoceneBathymetry
 from ecefast.paleo.eocene.nemo.domain import EoceneDomain
 from ecefast.tools.ecearth import FakeBackend, LocalBackend
-from synthetic import write_domain_inputs
+from synthetic import STEPS_WITHOUT_GRIDS, nemo_domain_section
 
 pytestmark = pytest.mark.integration
 
 ALL_PROCESSORS = {**PROCESSORS, **EOCENE_PROCESSORS}
-STEPS_WITHOUT_GRIDS = {
-    "coordinates": False,
-    "bathymetry": False,
-    "configure_domain": True,
-    "domain_cfg": True,
-    "generate_mask": True,
-    "generate_subbasins": False,
-}
 
 
 def write_config(tmp_path: Path, backend: str = "fake", steps: dict | None = None, bathymetries=None) -> Path:
     """A configuration on a synthetic tree, with the synthetic pipeline inputs already in ``nemo_domain.output_dir``."""
     for name in ("input", "herold"):
         (tmp_path / name).mkdir(exist_ok=True)
-    domain_out = tmp_path / "domain"
-    write_domain_inputs(
-        domain_out / "coordinates" / "PALEORCA2" / "coords_halo.nc",
-        domain_out / "bathymetry" / "PALEORCA2" / "HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc",
-    )
-    if bathymetries is None:
-        bathymetries = [{"name": "eocene", "processor": "EoceneBathymetry", "source_file": "{herold}/topo.nc"}]
     raw = {
         "schema": 1,
         "paths": {
@@ -57,15 +42,7 @@ def write_config(tmp_path: Path, backend: str = "fake", steps: dict | None = Non
             "herold": str(tmp_path / "herold"),
         },
         "tools": {"backend": backend},
-        "nemo_domain": {
-            "output_dir": str(domain_out),
-            "coords_ori": str(tmp_path / "coords_ori.nc"),
-            "mesh_mask": str(tmp_path / "mesh_mask.nc"),
-            "grids": {"target": "PALEORCA2", "source": "eORCA1", "staggering_source": "T", "staggering_target": "T"},
-            "parameters": {"minimum_depth": 30},
-            "steps": STEPS_WITHOUT_GRIDS if steps is None else steps,
-            "bathymetries": bathymetries,
-        },
+        "nemo_domain": nemo_domain_section(tmp_path / "domain", tmp_path, steps, bathymetries),
     }
     path = tmp_path / "config.yml"
     path.write_text(yaml.safe_dump(raw))

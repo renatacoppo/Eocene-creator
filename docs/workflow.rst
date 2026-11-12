@@ -76,6 +76,24 @@ output directory, atomically. It replaces the one of an earlier run.
 
 ``scripts/compare_outputs.py`` ignores ``provenance.yml``.
 
+Checks after the run
+~~~~~~~~~~~~~~~~~~~~
+
+After ``provenance.yml``, the run checks the outputs of the steps that ran
+(``ecefast.paleo.eocene.verify``) and fails, listing every problem, if:
+
+- a path declared in ``writes`` is missing;
+- a NetCDF file declared in ``writes`` has NaN in a data variable. Values are read raw: a masked
+  point stored as a ``_FillValue`` such as ``-999`` is fine, a NaN is not (EC-Earth reads the raw
+  values), even when ``_FillValue`` is NaN;
+- ``domain`` ran and the installed Eocene ``domain_cfg.nc`` does not have the vertical grid of the
+  present-day one (the same check as the ``domain`` step).
+
+.. code-block:: text
+
+   ERROR -> Verify: the run finished but its output is wrong:
+     NaN in sorunoff of EOCENE-TEST/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc
+
 The Eocene steps
 ----------------
 
