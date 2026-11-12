@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "eocene"
+name = "ecefast"
 dynamic = ["version"]
 authors = [
   { name="Renata Coppo", email="renatacoppo@cnr.it" },
@@ -50,18 +50,23 @@ docs = [
 ]
 
 [project.scripts]
-eocene = "eocene.cli_eocene:main"
+ecefast = "ecefast.cli.main:main"
+# old command, removed in task 4b
+eocene = "ecefast.cli.eocene:main"
 
 [project.urls]
 "Homepage" = "https://github.com/renatacoppo/Eocene-creator"
 "Bug Tracker" = "https://github.com/renatacoppo/Eocene-creator/issues"
 "Repository" = "https://github.com/renatacoppo/Eocene-creator"
 
-[tool.setuptools]
-packages = ["eocene"]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.txt", "*.csv", "*.yaml", "*.j2", "*.sh", "*.md", "namelists/*"]
 
 [tool.setuptools.dynamic]
-version = {attr = "eocene.__version__"}
+version = {attr = "ecefast.__version__"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -82,4 +87,4 @@ select = ["E9", "F63", "F7", "F82"]
 
 [tool.ruff.lint.per-file-ignores]
 # prepare_vegetation() is unused and refers to an undefined name NC4; to be removed or fixed in a later task.
-"eocene/oifs/vegetation.py" = ["F821"]
+"src/ecefast/paleo/eocene/oifs/vegetation.py" = ["F821"]

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from eocene.nemo.eoceneNEMO import present_day_ocean_mask, woa_zonal_mean
+from ecefast.paleo.eocene.nemo.eoceneNEMO import present_day_ocean_mask, woa_zonal_mean
 
 pytestmark = pytest.mark.unit
 

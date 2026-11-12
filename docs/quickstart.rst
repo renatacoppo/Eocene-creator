@@ -23,9 +23,9 @@ The Herold et al. (2014) datasets and the Eocene PALEORCA2 domain are copied by 
 
 .. code-block:: bash
 
-   cp eocene/config.tmpl eocene/config.yml
+   cp configs/eocene.tmpl configs/eocene.yml
 
-Then set the paths in ``eocene/config.yml`` (see :doc:`configuration`). ``config.yml`` is
+Then set the paths in ``configs/eocene.yml`` (see :doc:`configuration`). ``configs/*.yml`` is
 ignored by git.
 
 3. Run the workflow
@@ -35,13 +35,13 @@ Copy the input subtree to the output directory and run every component:
 
 .. code-block:: bash
 
-   eocene -c eocene/config.yml --run all --copy
+   ecefast eocene -c configs/eocene.yml --run all --copy
 
 Run one component (``oifs``, ``nemo``, ``oasis`` or ``rnfm``) with more logging:
 
 .. code-block:: bash
 
-   eocene -c eocene/config.yml --run nemo -l DEBUG
+   ecefast eocene -c configs/eocene.yml --run nemo -l DEBUG
 
 Options:
 

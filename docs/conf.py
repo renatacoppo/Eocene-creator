@@ -4,10 +4,10 @@ import os
 import sys
 
 # Import the package from the repository, installed or not.
-sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, os.path.abspath("../src"))
 
 try:
-    from eocene import __version__ as release
+    from ecefast import __version__ as release
 except ImportError:
     release = "unknown"
 

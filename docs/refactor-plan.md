@@ -39,16 +39,16 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 | 1.2 ✅ | Env, `pyproject`, pytest markers, first tests, `ci.yml`, local regression test; declare `jinja2` and `shapely` (imported, undeclared); move pip-installed deps (`scipy`, `netcdf4`, `dask`, `cartopy`, ...) to conda | `environment.yaml`, `pyproject.toml`, `tests/`, `.github/workflows/ci.yml` | 0.5 | ‖ 1.1, 1.3 |
 | 1.3 ✅ | Docs skeleton, `docs.yml` workflow, `.readthedocs.yaml` | `docs/*.rst`, `docs/conf.py`, `.github/workflows/docs.yml` | 0.5 | ‖ 1.1, 1.2 |
 | 1.4 ✅ | ruff config, one format-only commit, `.git-blame-ignore-revs` | everything | 1.1–1.3 | serial |
-| 2.1 | `src/` move, import fixes, broken scripts, package data, `ecefast` entry point; `common/executor.py` runs scripts with `sys.executable`, not `python3` from PATH | everything | 1.4 | serial, freeze |
+| 2.1 ✅ | `src/` move, import fixes, broken scripts, package data, `ecefast` entry point; `common/executor.py` runs scripts with `sys.executable`, not `python3` from PATH | everything | 1.4 | serial, freeze |
 | 3.0 | `core/logging`, `core/cdo`; replace 2 loggers and 8 `Cdo()` | imports in many files | 2.1 | serial |
 | 3.1 | Config schema v1, `configs/*.tmpl`, `configuration.rst`, migrate both configs | `core/config.py`, `configs/`, docs | 3.0 | ‖ 3.2, 3.3 |
 | 3.2 | `core/grib.py` merge; Eocene OIFS non-GRIB helpers to `fields.py` | `components/oifs/`, `paleo/eocene/oifs/` | 3.0 | ‖ 3.1, 3.3 |
-| 3.3 | `components/nemo/domain/postprocess.py`; delete `generate-mask-util.py` | `components/nemo/domain/` | 3.0 | ‖ 3.1, 3.2 |
+| 3.3 | `components/nemo/domain/postprocess.py`; delete `domain/mask_util.py` | `components/nemo/domain/` | 3.0 | ‖ 3.1, 3.2 |
 | 4.0 | `core/steps.py`, `workspace.py`, `io.py` (atomic helper), `Stage`, runner tests | new `core/` files, `tests/` | 3.1 | serial |
 | 4.1 | `EoceneOIFS` step, atomic writes, `aerosols` option; `prepare_herold` writes to `tmpdir`, not into the herold folder | `paleo/eocene/oifs/` | 4.0, 3.2 | ‖ 4.2, 4.3, 5.1 |
 | 4.2 | `EoceneNEMO`, `EoceneDomain` with vertical-grid check | `paleo/eocene/nemo.py`, `domain.py` | 4.0 | ‖ 4.1, 4.3, 5.1 |
 | 4.3 | `EoceneOASIS`, new `EoceneRNFM` | `paleo/eocene/oasis.py`, `rnfm.py` | 4.0 | ‖ 4.1, 4.2, 5.1 |
-| 4.4 | `pipeline.py`, `ecefast eocene run`, provenance, remove `cli_eocene.py`, `workflow.rst` | `cli/`, `paleo/eocene/pipeline.py` | 4.1–4.3 | serial |
+| 4.4 | `pipeline.py`, `ecefast eocene run`, provenance, remove `cli/eocene.py`, `workflow.rst` | `cli/`, `paleo/eocene/pipeline.py` | 4.1–4.3 | serial |
 | 5.1 | `tools/ecearth.py` (atos, local, fake), `hpc_profiles.yaml`, `run_domain_cfg.sh` without paths | `tools/` | 3.0 | ‖ wave 4 |
 | 5.2 | Bathymetry registry, backend in the domain pipeline, `ecefast nemo domain`, `EoceneDomain` uses the backend, import-linter | `components/nemo/domain/`, `cli/` | 5.1, 4.4 | serial |
 | 5.3 | Subbasins for every bathymetry, check notebook (**output change**) | subbasins code, `notebooks/analysis/` | 5.2 | ‖ 5.4, 6.2 |
@@ -196,10 +196,10 @@ Done when: `pip install -e .` works; both baselines match; CI green.
 
 - [ ] `core/logging.py` (one `ecefast` logger), `core/config.py` (one YAML loader).
 - [ ] `core/cdo.py`: one shared `Cdo` instance/accessor; replace the 8 module-level `Cdo()`.
-- [ ] `core/grib.py`: merge `utils_oifs.py` and the GRIB half of `eocene/oifs/utils.py` (`unpack/repack_grib_file`,
+- [ ] `core/grib.py`: merge `utils_oifs.py` and the GRIB half of `paleo/eocene/oifs/utils.py` (`unpack/repack_grib_file`,
       `extract_grid_info`); the rest → `paleo/eocene/oifs/fields.py`.
 - [ ] `components/nemo/domain/postprocess.py`: one `domain_cfg` + `maskutil` writer (keep `common/util.py`; delete
-      `generate-mask-util.py` if the domain baseline matches).
+      `domain/mask_util.py` if the domain baseline matches).
 - [ ] Config schema v1 (`schema: 1`; `paths`, `tools`, `grids`, `nemo_domain`, `eocene`) as dataclasses with validation.
       The old `dirs:` format is no longer read; migrate both personal configs. `configs/laptop.tmpl`, `configs/atos.tmpl`.
 - [ ] Unit tests: config (good/bad), GRIB helpers on a CDO-made tiny GRIB, postprocess on a tiny synthetic `domain_cfg`.
@@ -223,7 +223,7 @@ Done when: `pip install -e .` works; both baselines match; CI green.
 ## Phase 4b: CLI and provenance (PR)
 
 - [ ] `ecefast eocene run -c ... [--steps] [--dry-run] [--overwrite]`.
-- [ ] Remove the `eocene` entry point and `cli_eocene.py`.
+- [ ] Remove the `eocene` entry point and `cli/eocene.py`.
 - [ ] `provenance.yml` per run: steps, config hash, git commit, tool versions, time.
 - [ ] Tests: CLI via `main(argv)`.
 

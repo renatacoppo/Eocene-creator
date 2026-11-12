@@ -2,7 +2,7 @@ Configuration
 =============
 
 The ``eocene`` command reads a YAML file with a top-level ``dirs`` section. Start from
-``eocene/config.tmpl``:
+``configs/eocene.tmpl``:
 
 .. code-block:: yaml
 
