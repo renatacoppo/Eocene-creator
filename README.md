@@ -86,7 +86,7 @@ Field meaning:
 - `domain`: directory containing `domain_cfg.nc` and `maskutil.nc` modified for Eocene bathymetry
 - `tmpdir`: reserved temporary directory path (not used yet)
 
-A real example is available in `eocene/config.tmpl`.
+A template is available in `eocene/config.tmpl`.
 
 ## What `--copy` copies
 
