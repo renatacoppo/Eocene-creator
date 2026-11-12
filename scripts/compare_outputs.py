@@ -168,8 +168,8 @@ def compare_trees(baseline: Path, new: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Compare two output trees of the Eocene workflow, file by file.")
-    parser.add_argument("baseline", type=Path, help="reference tree, e.g. EOCENE-BASELINE")
-    parser.add_argument("new", type=Path, help="tree to check, e.g. EOCENE-TEST")
+    parser.add_argument("baseline", type=Path, help="reference tree, e.g. BASELINE/eocene")
+    parser.add_argument("new", type=Path, help="tree to check, e.g. OUTPUT/eocene")
     parser.add_argument("-l", "--loglevel", default="INFO", help="logging level (default: INFO)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=args.loglevel.upper(), format="%(message)s")

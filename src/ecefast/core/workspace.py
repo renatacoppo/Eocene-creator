@@ -1,17 +1,16 @@
 """The run context and the ``stage`` step.
 
 :class:`Context` gives steps the configuration and expands path templates; it refuses write paths inside the
-read-only roots (``input``, ``herold``). :class:`Stage` copies the base files from the input tree to the output
+read-only roots (``inputs.ece4_data``, ``inputs.herold``). :class:`Stage` copies the base files from the input tree to the output
 tree, so the later steps can modify them.
 """
 
 import logging
 import os
 import shutil
-import string
 from dataclasses import dataclass
 
-from .config import Config, Grids, Paths
+from .config import Config
 from .steps import ComponentStep, PipelineError
 
 logger = logging.getLogger(__name__)
@@ -32,37 +31,14 @@ class Context:
     config: Config
     overwrite: bool = False
 
-    @property
-    def paths(self) -> Paths:
-        """Root directories: ``input`` and ``herold`` (read-only), ``output``, ``tmpdir``."""
-        return self.config.paths
-
-    @property
-    def grids(self) -> Grids:
-        """Model resolutions (``oifs``, ``nemo``)."""
-        return self.config.grids
-
-    def placeholders(self) -> dict[str, str]:
-        """Values of the placeholders allowed in path templates."""
-        values = {
-            "input": self.paths.input,
-            "output": self.paths.output,
-            "herold": self.paths.herold,
-            "oifs_grid": self.grids.oifs,
-            "nemo_grid": self.grids.nemo,
-        }
-        if self.paths.tmpdir is not None:
-            values["tmpdir"] = self.paths.tmpdir
-        return values
-
     def expand(self, template: str) -> str:
         """Expand a path template.
 
         Parameters
         ----------
         template : str
-            Path with placeholders ``{input}``, ``{output}``, ``{herold}``, ``{tmpdir}``, ``{oifs_grid}``,
-            ``{nemo_grid}``, e.g. ``"{input}/oasis/{nemo_grid}/rstos.nc"``.
+            Path with ``{section.key}`` placeholders of the configuration, e.g.
+            ``"{inputs.ece4_data}/oasis/{nemo.grid}/rstos.nc"`` (see :meth:`ecefast.core.config.Config.expand`).
 
         Returns
         -------
@@ -71,24 +47,13 @@ class Context:
 
         Raises
         ------
-        ValueError
-            If the template has an unknown placeholder, or uses ``{tmpdir}`` and ``paths.tmpdir`` is not set.
+        ConfigError
+            If the template names a key that does not exist or is not set (e.g. ``{tmpdir}`` with ``tmpdir: null``).
         """
-        values = self.placeholders()
-        for _, field, _, _ in string.Formatter().parse(template):
-            if field is None:
-                continue
-            if field == "tmpdir" and field not in values:
-                raise ValueError(f"Path template {template!r} uses {{tmpdir}}, but 'paths.tmpdir' is not set")
-            if field not in values:
-                raise ValueError(
-                    f"Unknown placeholder {{{field}}} in path template {template!r} "
-                    f"(known: {', '.join('{' + k + '}' for k in values)})"
-                )
-        return template.format(**values)
+        return self.config.expand(template)
 
     def check_writable(self, path: str, step: str = "") -> None:
-        """Refuse a write path inside a read-only root (``input`` or ``herold``).
+        """Refuse a write path inside a read-only root (``inputs.ece4_data`` or ``inputs.herold``).
 
         Parameters
         ----------
@@ -100,11 +65,12 @@ class Context:
         Raises
         ------
         PipelineError
-            If ``path`` is ``input``, ``herold`` or lies inside one of them.
+            If ``path`` is ``inputs.ece4_data``, ``inputs.herold`` or lies inside one of them.
         """
         real = os.path.realpath(path)
-        for root_name in ("input", "herold"):
-            root = os.path.realpath(getattr(self.paths, root_name))
+        for name in ("ece4_data", "herold"):
+            root_name = f"inputs.{name}"
+            root = os.path.realpath(getattr(self.config.inputs, name))
             if real == root or real.startswith(root + os.sep):
                 who = f"Step '{step}'" if step else "A step"
                 raise PipelineError(f"{who} would write {path}, inside the read-only '{root_name}' tree {root}")
@@ -115,8 +81,8 @@ class Stage(ComponentStep):
 
     name = "stage"
     needs = []
-    reads = ["{input}/oifs", "{input}/nemo", "{input}/oasis/{nemo_grid}"]
-    writes = ["{output}/oifs", "{output}/nemo", "{output}/oasis/{nemo_grid}"]
+    reads = ["{inputs.ece4_data}/oifs", "{inputs.ece4_data}/nemo", "{inputs.ece4_data}/oasis/{nemo.grid}"]
+    writes = ["{eocene.output_dir}/oifs", "{eocene.output_dir}/nemo", "{eocene.output_dir}/oasis/{nemo.grid}"]
 
     # subdirectories copied from each component of the input tree
     OIFS_SUBDIRS = ["composition", "ifsdata", "vtables", "rtables"]
@@ -131,7 +97,14 @@ class Stage(ComponentStep):
 
     @classmethod
     def from_context(cls, ctx: Context) -> "Stage":
-        return cls(ctx.paths.input, ctx.paths.output, ctx.grids.oifs, ctx.grids.nemo, overwrite=ctx.overwrite)
+        config = ctx.config
+        return cls(
+            config.inputs.ece4_data,
+            config.eocene.output_dir,
+            config.oifs.grid,
+            config.nemo.grid,
+            overwrite=ctx.overwrite,
+        )
 
     def run(self) -> None:
         """Copy the input folder to the output folder to preserve original data.

@@ -9,12 +9,12 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from ecefast.core.config import Config, Eocene, Grids, Paths
 from ecefast.core.config import EoceneOIFS as EoceneOIFSOptions
 from ecefast.core.steps import PipelineError
 from ecefast.core.workspace import Context, Stage
 from ecefast.paleo.eocene.oifs.eoceneOIFS import EoceneOIFS
 from ecefast.paleo.eocene.oifs.fields import flatten_grib_steps, replace_field
+from synthetic import make_config
 
 pytestmark = pytest.mark.unit
 
@@ -28,14 +28,9 @@ needs_grib_tools = pytest.mark.skipif(
 def make_context(tmp_path: Path, tmpdir: bool = True, aerosols: bool = False) -> Context:
     for name in ("input", "herold"):
         (tmp_path / name).mkdir(exist_ok=True)
-    paths = Paths(
-        input=str(tmp_path / "input"),
-        output=str(tmp_path / "out"),
-        herold=str(tmp_path / "herold"),
-        tmpdir=str(tmp_path / "tmp") if tmpdir else None,
-    )
-    eocene = Eocene(oifs=EoceneOIFSOptions(aerosols=aerosols))
-    return Context(Config(file="test.yml", paths=paths, grids=Grids(oifs="TL63L31"), eocene=eocene))
+    config = make_config(tmp_path, tmpdir=str(tmp_path / "tmp") if tmpdir else None)
+    config.eocene.oifs = EoceneOIFSOptions(aerosols=aerosols)
+    return Context(config)
 
 
 def write_herold_topo(herold: Path) -> None:
@@ -65,24 +60,28 @@ def snapshot(folder: Path) -> dict[str, float]:
 def test_class_attributes() -> None:
     assert EoceneOIFS.name == "oifs"
     assert EoceneOIFS.needs == ["stage"]
-    assert EoceneOIFS.writes and all(w.startswith("{output}/oifs/") for w in EoceneOIFS.writes)
+    assert EoceneOIFS.writes and all(w.startswith("{eocene.output_dir}/oifs/") for w in EoceneOIFS.writes)
     # reads come only from the read-only trees: the step opens the original files, not the staged copies
-    assert EoceneOIFS.reads and all(r.startswith(("{input}/", "{herold}/")) for r in EoceneOIFS.reads)
+    assert EoceneOIFS.reads and all(r.startswith(("{inputs.ece4_data}/", "{inputs.herold}/")) for r in EoceneOIFS.reads)
     assert len(set(EoceneOIFS.reads)) == len(EoceneOIFS.reads)
     assert len(set(EoceneOIFS.writes)) == len(EoceneOIFS.writes)
 
 
 def test_writes_are_the_staged_copies_of_the_input_files() -> None:
     """Each output replaces the staged copy of an input GRIB file, inside a directory that stage writes."""
-    grib_reads = {r.removeprefix("{input}/") for r in EoceneOIFS.reads if r.startswith("{input}/")}
-    assert {w.removeprefix("{output}/") for w in EoceneOIFS.writes} == grib_reads
-    staged = [s.removeprefix("{output}/") for s in Stage.writes]
+    grib_reads = {
+        r.removeprefix("{inputs.ece4_data}/") for r in EoceneOIFS.reads if r.startswith("{inputs.ece4_data}/")
+    }
+    assert {w.removeprefix("{eocene.output_dir}/") for w in EoceneOIFS.writes} == grib_reads
+    staged = [s.removeprefix("{eocene.output_dir}/") for s in Stage.writes]
     for w in EoceneOIFS.writes:
-        assert any(w.removeprefix("{output}/").startswith(s + "/") for s in staged)
+        assert any(w.removeprefix("{eocene.output_dir}/").startswith(s + "/") for s in staged)
 
 
 def test_startdate_matches_declared_paths() -> None:
-    assert all(f"/{EoceneOIFS.STARTDATE}/" in p or "/climate.v020/" in p or "{herold}" in p for p in EoceneOIFS.reads)
+    assert all(
+        f"/{EoceneOIFS.STARTDATE}/" in p or "/climate.v020/" in p or "{inputs.herold}" in p for p in EoceneOIFS.reads
+    )
 
 
 def test_declared_paths_expand(tmp_path: Path) -> None:
@@ -100,17 +99,17 @@ def test_declared_paths_expand(tmp_path: Path) -> None:
 def test_from_context_maps_config(tmp_path: Path, aerosols: bool) -> None:
     ctx = make_context(tmp_path, aerosols=aerosols)
     step = EoceneOIFS.from_context(ctx)
-    assert step.idir == ctx.paths.input
-    assert step.odir == ctx.paths.output
-    assert step.herold == ctx.paths.herold
+    assert step.idir == ctx.config.inputs.ece4_data
+    assert step.odir == ctx.config.eocene.output_dir
+    assert step.herold == ctx.config.inputs.herold
     assert step.startdate == "19900101"
     assert step.resolution == "TL63L31"
     assert step.gaussian == 32
     assert step.build_aerosols is aerosols
-    assert step.tmpdir == os.path.join(ctx.paths.tmpdir, "oifs")
+    assert step.tmpdir == os.path.join(ctx.config.tmpdir, "oifs")
     assert os.path.isdir(step.tmpdir)
     assert not step.own_tmpdir
-    assert step.odir_init == os.path.join(ctx.paths.output, "oifs", "TL63L31", "19900101")
+    assert step.odir_init == os.path.join(ctx.config.eocene.output_dir, "oifs", "TL63L31", "19900101")
 
 
 def test_from_context_without_tmpdir_uses_a_temporary_directory(tmp_path: Path) -> None:
@@ -119,14 +118,14 @@ def test_from_context_without_tmpdir_uses_a_temporary_directory(tmp_path: Path) 
     try:
         assert step.own_tmpdir
         assert os.path.isdir(step.tmpdir)
-        assert not step.tmpdir.startswith(ctx.paths.herold)
+        assert not step.tmpdir.startswith(ctx.config.inputs.herold)
     finally:
         shutil.rmtree(step.tmpdir)
 
 
 def test_from_context_refuses_tmpdir_inside_herold(tmp_path: Path) -> None:
     ctx = make_context(tmp_path)
-    ctx.paths.tmpdir = os.path.join(ctx.paths.herold, "tmp")
+    ctx.config.tmpdir = os.path.join(ctx.config.inputs.herold, "tmp")
     with pytest.raises(PipelineError, match="herold"):
         EoceneOIFS.from_context(ctx)
 
@@ -138,7 +137,7 @@ def test_from_context_refuses_tmpdir_inside_herold(tmp_path: Path) -> None:
 @pytest.mark.parametrize("flag", ["landsea_mask", "mask_opensea", "bathymetry", "orography", "sd_orography"])
 def test_prepare_herold_writes_only_to_tmpdir(tmp_path: Path, flag: str) -> None:
     ctx = make_context(tmp_path)
-    herold = Path(ctx.paths.herold)
+    herold = Path(ctx.config.inputs.herold)
     write_herold_topo(herold)
     before = snapshot(herold)
 

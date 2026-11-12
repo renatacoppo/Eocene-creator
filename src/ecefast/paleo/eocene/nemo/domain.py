@@ -1,9 +1,10 @@
 """The ``domain`` step: install the Eocene NEMO domain and check the vertical grid rule.
 
-Where the domain comes from depends on ``tools.backend``: with ``local`` it is the domain built on Atos
-(``tools.precomputed.domain``); with ``atos`` or ``fake`` the step builds it with the NEMO domain pipeline
-(section ``nemo_domain``, bathymetry ``eocene`` only, its configured steps) and installs the post-processed
-files from the pipeline output.
+The config says where the domain comes from (section ``eocene.domain``): ``from`` is the directory holding its
+``domain_cfg.nc`` and ``maskutil.nc``, e.g. the domain built on Atos, or the output of an earlier
+``ecefast nemo domain`` (``{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene``). With ``build: true`` the
+step first builds it there with the NEMO domain pipeline (section ``nemo.domain``, bathymetry ``eocene`` only, its
+configured steps), which needs DOMAINcfg (``machine.name: atos``, or ``fake`` in tests).
 
 ``EoceneNEMO`` reads only present-day domains (the PALEORCA2 levels for the ocean initial state). This is
 correct only if the Eocene domain has the same vertical grid as the present-day one, so the step stops when
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 # files of a NEMO domain installed into the output tree
 DOMAIN_FILES = ["domain_cfg.nc", "maskutil.nc"]
 
-# name of the Eocene entry of nemo_domain.bathymetries, built by the step with the atos and fake backends
+# name of the Eocene entry of nemo.domain.bathymetries, built by the step with eocene.domain.build: true
 EOCENE_BATHYMETRY = "eocene"
 
 # variables that define the vertical grid; they must be equal in the present-day and Eocene domains
@@ -86,16 +87,16 @@ def check_vertical_grid(present: xr.Dataset, eocene: xr.Dataset, present_name: s
 
 
 class EoceneDomain(ComponentStep):
-    """Install the Eocene NEMO domain (precomputed, or built with the backend) and check its vertical grid."""
+    """Install the Eocene NEMO domain (from eocene.domain.from, built first if asked) and check its vertical grid."""
 
     name = "domain"
     needs = ["stage"]
-    # With tools.backend: local it also reads domain_cfg.nc and maskutil.nc from tools.precomputed.domain; with
-    # atos or fake it runs the NEMO domain pipeline, which reads and writes outside the Eocene tree
-    # (nemo_domain.output_dir). Neither fits a class-level list that cannot depend on the backend, so both are
-    # checked in from_context, which the runner calls for every selected step before the first one runs.
-    reads = ["{input}/nemo/domain/{nemo_grid}/domain_cfg.nc"]
-    writes = [f"{{output}}/nemo/domain/{{nemo_grid}}/{filename}" for filename in DOMAIN_FILES]
+    # It also reads domain_cfg.nc and maskutil.nc from eocene.domain.from; with eocene.domain.build: true it runs the
+    # NEMO domain pipeline first, which reads and writes outside the Eocene tree (nemo.domain.output_dir). Neither
+    # fits a class-level list that cannot depend on eocene.domain.build, so both are checked in from_context, which
+    # the runner calls for every selected step before the first one runs.
+    reads = ["{inputs.ece4_data}/nemo/domain/{nemo.grid}/domain_cfg.nc"]
+    writes = [f"{{eocene.output_dir}}/nemo/domain/{{nemo.grid}}/{filename}" for filename in DOMAIN_FILES]
 
     def __init__(
         self,
@@ -125,41 +126,41 @@ class EoceneDomain(ComponentStep):
 
     @classmethod
     def from_context(cls, ctx: Context) -> "EoceneDomain":
-        backend = get_backend(ctx.config)
-        if backend.name == "local":
-            precomputed_dir = ctx.config.tools.precomputed.domain
-            if precomputed_dir is None:
-                raise ConfigError(
-                    f"{ctx.config.file}: step 'domain' with tools.backend: local needs 'tools.precomputed.domain' "
-                    "(the Eocene domain built on Atos)"
-                )
-            missing = [f for f in DOMAIN_FILES if not os.path.isfile(os.path.join(precomputed_dir, f))]
+        config = ctx.config
+        settings = config.eocene.domain
+        domain_dir = settings.from_
+        args = (config.inputs.ece4_data, config.eocene.output_dir, config.nemo.grid)
+        if not settings.build:
+            missing = [f for f in DOMAIN_FILES if not os.path.isfile(os.path.join(domain_dir, f))]
             if missing:
                 raise PipelineError(
-                    f"Step 'domain': missing in tools.precomputed.domain ({precomputed_dir}): {', '.join(missing)}"
+                    f"Step 'domain': missing in eocene.domain.from ({domain_dir}): {', '.join(missing)}. "
+                    "Build it with `ecefast nemo domain` on Atos, or set eocene.domain.build: true there."
                 )
-            return cls(precomputed_dir, ctx.paths.input, ctx.paths.output, ctx.grids.nemo)
+            return cls(domain_dir, *args)
 
-        domain = ctx.config.nemo_domain
-        if domain is None:
+        # build: true (the config refuses it with machine.name: local)
+        if config.nemo.domain is None:
             raise ConfigError(
-                f"{ctx.config.file}: step 'domain' with tools.backend: {backend.name} builds the Eocene domain and "
-                "needs a 'nemo_domain' section"
+                f"{config.file}: step 'domain' with eocene.domain.build: true builds the Eocene domain and needs a "
+                "'nemo.domain' section"
             )
-        if domain.grids.get("target") != ctx.grids.nemo:
-            raise ConfigError(
-                f"{ctx.config.file}: step 'domain': nemo_domain.grids.target ({domain.grids.get('target')}) "
-                f"is not grids.nemo ({ctx.grids.nemo})"
-            )
-        ctx.check_writable(domain.output_dir, cls.name)
+        ctx.check_writable(config.nemo.domain.output_dir, cls.name)
         workflow = NEMOWorkflow(
-            domain, ctx.paths, {**PROCESSORS, **EOCENE_PROCESSORS}, backend, only=[EOCENE_BATHYMETRY]
+            config, {**PROCESSORS, **EOCENE_PROCESSORS}, get_backend(config), only=[EOCENE_BATHYMETRY]
         )
+        built_dir = workflow.domain_dir(EOCENE_BATHYMETRY)
+        if os.path.normpath(domain_dir) != os.path.normpath(built_dir):
+            raise ConfigError(
+                f"{config.file}: with eocene.domain.build: true, eocene.domain.from must be where the NEMO domain "
+                f"pipeline writes the Eocene domain, {built_dir} "
+                '("{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene"), got ' + domain_dir
+            )
         try:
             workflow.check()
         except PipelineError as e:
             raise PipelineError(f"Step 'domain' builds the Eocene domain with the NEMO domain pipeline. {e}") from e
-        return cls(workflow.domain_dir(EOCENE_BATHYMETRY), ctx.paths.input, ctx.paths.output, ctx.grids.nemo, workflow)
+        return cls(built_dir, *args, workflow=workflow)
 
     def run(self) -> None:
         """Build the domain if there is a workflow, install it, then check the vertical grid rule."""
@@ -174,16 +175,16 @@ class EoceneDomain(ComponentStep):
         Raises
         ------
         FileNotFoundError
-            If ``domain_cfg.nc`` or ``maskutil.nc`` is missing afterwards (e.g. ``nemo_domain.steps.domain_cfg``
+            If ``domain_cfg.nc`` or ``maskutil.nc`` is missing afterwards (e.g. ``nemo.domain.steps.domain_cfg``
             or ``generate_mask`` is off and they were not built before).
         """
-        logger.info("Building the Eocene domain with the '%s' backend", self.workflow.backend.name)
+        logger.info("Building the Eocene domain on machine '%s'", self.workflow.backend.name)
         self.workflow.run()
         missing = [f for f in DOMAIN_FILES if not os.path.isfile(os.path.join(self.domain_dir, f))]
         if missing:
             raise FileNotFoundError(
                 f"Step 'domain': the NEMO domain pipeline did not write {', '.join(missing)} in {self.domain_dir}. "
-                "Turn on nemo_domain.steps domain_cfg and generate_mask."
+                "Turn on nemo.domain.steps domain_cfg and generate_mask."
             )
 
     def install_domain(self) -> None:

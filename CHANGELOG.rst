@@ -74,6 +74,20 @@ Added
 Changed
 ~~~~~~~
 
+- Configuration schema 2 (task 8.1): sections follow the components and commands
+  (``ecefast <component> <command>`` reads ``<component>.<command>``): ``inputs`` (read-only,
+  shared), ``tmpdir``, ``machine`` (was ``tools``), ``oifs.grid``, ``nemo.grid``, ``nemo.domain`` (was
+  ``nemo_domain``), ``eocene``. Every command writes only to its own ``output_dir``
+  (``eocene.output_dir`` was ``paths.output``). Any string may use ``{section.key}`` placeholders,
+  also in the steps' ``reads``/``writes`` (``{inputs.ece4_data}``, ``{eocene.output_dir}``,
+  ``{nemo.grid}``, ...); an unknown key or a cycle is an error. The Eocene domain is explicit:
+  ``eocene.domain.from`` and ``eocene.domain.build`` replace ``tools.precomputed.domain`` and the
+  backend-implied build; ``build: true`` with ``machine.name: local`` is a config error. A schema 1
+  file fails with one error listing each old key and its new name; old → new table in
+  ``docs/configuration.rst`` (#46).
+- Local folders named one way: ``OUTPUT/<command>`` and ``BASELINE/<command>`` (``eocene``,
+  ``nemo-domain``) replace ``EOCENE-TEST``, ``EOCENE-DOMAIN-TEST`` and ``EOCENE-BASELINE/{eocene,domain}``
+  in templates, docs, tutorials and ``tests/local`` (#46).
 - ``ecefast eocene run`` builds every selected step before the first one runs, also in a dry run: the
   ``domain`` step then checks all inputs of the NEMO domain pipeline (``atos`` and ``fake`` backends,
   e.g. ``nemo_domain.coords_ori``), and a missing ``tools.precomputed.domain`` file is a
@@ -162,6 +176,8 @@ Fixed
 Removed
 ~~~~~~~
 
+- Config key ``nemo_domain.aliases`` and the pipeline-internal placeholders (``{output_dir}``,
+  ``{coordsdir}``, ...) in ``bathymetries`` entries: use ``{section.key}`` placeholders (#46).
 - Config key ``nemo_domain.mesh_mask`` and the ``data/eORCA1/mesh_mask.nc`` input: the source grid of the
   present-day bathymetry is read from ``{input}/nemo/domain/<grids.source>/domain_cfg.nc``, which holds the
   same horizontal grid; an old config with the key fails with an unknown-key error (pushed to ``refactor``).
@@ -177,6 +193,12 @@ Removed
 Output
 ~~~~~~
 
+- NEMO domain pipeline layout (file contents unchanged): final files move from
+  ``<output_dir>/domain/<grid>/<name>/`` to ``<output_dir>/nemo/domain/<grid>/<name>/``, as in ECE4-DATA;
+  ``coordinates/`` and ``bathymetry/`` move to ``<output_dir>/work/``, and the laptop DOMAINcfg namelists
+  (and raw DOMAINcfg output) from ``<output_dir>/domain/`` to ``<output_dir>/work/domaincfg/``. The
+  namelists hold the new absolute paths of the coordinates and bathymetry; the domain baseline is
+  regenerated after the merge (#46).
 - NEMO domain pipeline: the intermediate ``coordinates/eORCA1/coords_bounds_{T,F}.nc`` carry the global
   attributes of the eORCA1 ``domain_cfg.nc`` (``CfgName``, ``Iperio``, ``NFold``, ...); their data and every
   bathymetry, namelist and domain file are unchanged (pushed to ``refactor``).

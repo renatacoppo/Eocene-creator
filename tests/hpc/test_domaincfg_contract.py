@@ -6,8 +6,8 @@ dimensions (names, order, sizes) and dtype, and the 1-D vertical grid must be th
 vertical grid are not compared: the fake does no partial steps, closed seas or north fold (see
 ``docs/external_tools.rst``).
 
-Run after ``ecefast nemo domain -c configs/atos.yml`` with the ``atos`` backend. Set ``ECEFAST_HPC_DOMAINCFG_DIR``
-to the folder holding the namelists and the raw outputs (``<nemo_domain.domaincfg_dir>/DOMAINcfg``), then::
+Run after ``ecefast nemo domain -c configs/atos.yml`` with ``machine.name: atos``. Set ``ECEFAST_HPC_DOMAINCFG_DIR``
+to the folder holding the namelists and the raw outputs (``<nemo.domain.tools_dir>/DOMAINcfg``), then::
 
     pytest -m hpc tests/hpc
 

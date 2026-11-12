@@ -9,15 +9,14 @@ that runs DOMAINcfg (``ecefast.tools.ecearth``).
 Usage:
     ecefast nemo domain -c configs/laptop.yml [--bathymetry NAME [NAME ...]] [--dry-run]
 
-The pipeline reads the ``nemo_domain`` section of the configuration file (template: ``configs/laptop.tmpl``).
+The pipeline reads the ``nemo.domain`` section of the configuration file (template: ``configs/laptop.tmpl``).
 """
 
 import logging
-import dataclasses
 import os
 
 from ecefast.core.cdo import cdo_version, get_cdo
-from ecefast.core.config import ConfigError, NemoDomain, Paths, load_config
+from ecefast.core.config import Config, ConfigError, load_config
 from ecefast.core.steps import PipelineError, missing_inputs_message
 from ecefast.tools.ecearth import EcEarthTools, get_backend, output_files
 from ecefast.components.nemo.common.executor import SubprocessExecutor
@@ -28,13 +27,13 @@ logger = logging.getLogger(__name__)
 
 STAGGERING_OPTIONS = ["T", "F"]
 
-# One line per step of nemo_domain.steps (ecefast.core.config.NEMO_DOMAIN_STEPS), in run order; shown by
+# One line per step of nemo.domain.steps (ecefast.core.config.NEMO_DOMAIN_STEPS), in run order; shown by
 # `ecefast nemo domain -h`
 STEP_DESCRIPTIONS = {
     "coordinates": "target grid without halo, cell bounds of the target and source grids",
     "bathymetry": "remap each bathymetry to the target grid, with its processor",
     "configure_domain": "write one DOMAINcfg namelist per bathymetry",
-    "domain_cfg": "run DOMAINcfg through the backend of tools.backend (HPC only)",
+    "domain_cfg": "run DOMAINcfg on the machine of machine.name (Atos only)",
     "generate_mask": "post-process domain_cfg.nc and extract maskutil.nc, per bathymetry",
     "generate_subbasins": "write the ocean subbasin masks subbasins.nc, per bathymetry",
 }
@@ -43,14 +42,17 @@ STEP_DESCRIPTIONS = {
 class NEMOWorkflow:
     """The NEMO domain pipeline: coordinates, bathymetries, DOMAINcfg namelists, DOMAINcfg, masks.
 
+    Everything goes to ``nemo.domain.output_dir``: the final files of bathymetry ``<name>`` (``domain_cfg.nc``,
+    ``maskutil.nc``, ``subbasins.nc``) to ``nemo/domain/<nemo.grid>/<name>/``, as in an EC-Earth input tree;
+    the intermediate files to ``work/`` (``coordinates/``, ``bathymetry/``, and ``domaincfg/`` with the DOMAINcfg
+    namelists and raw output, unless ``nemo.domain.tools_dir`` is set: then they go to its ``DOMAINcfg/``).
+
     Parameters
     ----------
-    config : NemoDomain
-        The ``nemo_domain`` section of the configuration.
-    paths : Paths
-        The ``paths`` section: its values are placeholders in ``source_file``.
+    config : Config
+        The configuration, with a ``nemo.domain`` section.
     processors : dict
-        Bathymetry processor classes by the ``processor`` name used in ``config.bathymetries``.
+        Bathymetry processor classes by the ``processor`` name used in ``nemo.domain.bathymetries``.
     backend : EcEarthTools
         Runs DOMAINcfg (step ``domain_cfg``).
     only : list of str, optional
@@ -61,46 +63,55 @@ class NEMOWorkflow:
     Raises
     ------
     ConfigError
-        If ``only`` names an unknown or disabled bathymetry, a selected bathymetry uses an unknown processor, or
-        the ``domain_cfg`` step is on and the backend is not available.
+        If the configuration has no ``nemo.domain`` section, ``only`` names an unknown or disabled bathymetry, a
+        selected bathymetry uses an unknown processor, or the ``domain_cfg`` step is on and the backend is not
+        available.
     """
 
     def __init__(
         self,
-        config: NemoDomain,
-        paths: Paths,
+        config: Config,
         processors: dict[str, type[BathymetryProcessor]],
         backend: EcEarthTools,
         only: list[str] | None = None,
         log_level: str = "INFO",
     ):
-        output_dir = config.output_dir
-        coordsdir = os.path.join(output_dir, "coordinates")
-        outputdir = os.path.join(output_dir, "domain")
+        domain = config.nemo.domain
+        if domain is None:
+            raise ConfigError(f"{config.file}: the NEMO domain pipeline needs a 'nemo.domain' section")
+        output_dir = domain.output_dir
+        workdir = os.path.join(output_dir, "work")
         self.paths = {
             "output_dir": output_dir,
-            "coordsdir": coordsdir,
-            "bathydir": os.path.join(output_dir, "bathymetry"),
-            "outputdir": outputdir,
-            "domaincfg_dir": config.domaincfg_dir or "",
-            # DOMAINcfg namelists, and the raw DOMAINcfg output next to them: domaincfg_dir/DOMAINcfg if set
-            # (HPC), else outputdir
-            "namelist_dir": os.path.join(config.domaincfg_dir, "DOMAINcfg") if config.domaincfg_dir else outputdir,
+            "coordsdir": os.path.join(workdir, "coordinates"),
+            "bathydir": os.path.join(workdir, "bathymetry"),
+            # final files, laid out as in an EC-Earth input tree: nemo/domain/<grid>/<name>/
+            "domaindir": os.path.join(output_dir, "nemo", "domain", config.nemo.grid),
+            "domaincfg_dir": domain.tools_dir or "",
+            # DOMAINcfg namelists, and the raw DOMAINcfg output next to them: tools_dir/DOMAINcfg if set
+            # (HPC), else work/domaincfg
+            "namelist_dir": (
+                os.path.join(domain.tools_dir, "DOMAINcfg") if domain.tools_dir else os.path.join(workdir, "domaincfg")
+            ),
             # Explicit entry points: pre-existing files consumed by this workflow
-            "coords_ori": config.coords_ori,
+            "coords_ori": domain.coords_ori,
             # Source grid of the present-day bathymetry: its domain_cfg.nc in the input tree holds the
             # horizontal grid (glam*, gphi*, e1*, e2*) that orca_bounds.py reads, identical to its mesh_mask
-            "source_grid": os.path.join(paths.input, "nemo", "domain", config.grids["source"], "domain_cfg.nc"),
+            "source_grid": os.path.join(config.inputs.ece4_data, "nemo", "domain", domain.source_grid, "domain_cfg.nc"),
         }
-        # Placeholders for source_file: the config's paths ({input}, {herold}, ...) and the optional aliases
-        self.aliases = {**{k: v for k, v in dataclasses.asdict(paths).items() if v is not None}, **config.aliases}
 
-        self.grids = config.grids
-        self.params = config.parameters
-        self.steps = config.steps
+        # the grid and parameter names the bathymetry processors read
+        self.grids = {
+            "target": config.nemo.grid,
+            "source": domain.source_grid,
+            "staggering_source": domain.staggering.source,
+            "staggering_target": domain.staggering.target,
+        }
+        self.params = {"minimum_depth": domain.minimum_depth}
+        self.steps = domain.steps
 
-        # Resolve path placeholders, filter disabled entries, then apply --only
-        self.bathymetries = [self._resolve_paths(cfg) for cfg in config.bathymetries if cfg.get("enabled", True)]
+        # placeholders were resolved when the config was read; filter disabled entries, then apply --only
+        self.bathymetries = [dict(cfg) for cfg in domain.bathymetries if cfg.get("enabled", True)]
         if only:
             unknown = set(only) - {cfg["name"] for cfg in self.bathymetries}
             if unknown:
@@ -121,8 +132,8 @@ class NEMOWorkflow:
         # fail before the first step, not after the bathymetries
         if self.steps.get("domain_cfg") and not backend.available():
             raise ConfigError(
-                f"nemo_domain.steps.domain_cfg is on, but DOMAINcfg cannot run with the '{backend.name}' backend on "
-                "this machine. Turn the step off (as on a laptop), or run on Atos with tools.backend: atos."
+                f"nemo.domain.steps.domain_cfg is on, but DOMAINcfg cannot run with 'machine.name: {backend.name}' "
+                "on this machine. Turn the step off (as on a laptop), or run on Atos with machine.name: atos."
             )
         self.backend = backend
         self.log_level = log_level
@@ -134,21 +145,8 @@ class NEMOWorkflow:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _resolve_paths(self, cfg):
-        """Substitute {coordsdir}, {domaindir} etc. in bathymetry config strings/lists."""
-        lookup = {**self.paths, **self.aliases}
-
-        def resolve(v):
-            if isinstance(v, str):
-                return v.format_map(lookup)
-            if isinstance(v, list):
-                return [resolve(item) for item in v]
-            return v
-
-        return {k: resolve(v) for k, v in cfg.items()}
-
     def _validate_paths(self):
-        for key, path in {**self.paths, **self.aliases}.items():
+        for key, path in self.paths.items():
             if path and " " in path:
                 raise ValueError(f"Path for '{key}' contains spaces: '{path}'. This breaks CDO operator chaining.")
 
@@ -169,7 +167,7 @@ class NEMOWorkflow:
 
     def domain_dir(self, name: str) -> str:
         """Directory of the post-processed ``domain_cfg.nc`` and ``maskutil.nc`` of bathymetry ``name``."""
-        return os.path.join(self.paths["outputdir"], self.grids["target"], name)
+        return os.path.join(self.paths["domaindir"], name)
 
     # ------------------------------------------------------------------
     # Step 1: Coordinates
@@ -418,12 +416,12 @@ def run(
     log_level: str = "INFO",
     dry_run: bool = False,
 ) -> None:
-    """Run the NEMO domain pipeline of a configuration file, with the backend of ``tools.backend``.
+    """Run the NEMO domain pipeline of a configuration file (section ``nemo.domain``) on ``machine.name``.
 
     Parameters
     ----------
     config_file : str
-        Configuration file with a ``nemo_domain`` section.
+        Configuration file with a ``nemo.domain`` section.
     processors : dict
         Bathymetry processor classes by name (see :class:`NEMOWorkflow`).
     only : list of str, optional
@@ -436,14 +434,11 @@ def run(
     Raises
     ------
     ConfigError
-        If the configuration has no ``nemo_domain`` section, or see :class:`NEMOWorkflow`.
+        If the configuration has no ``nemo.domain`` section, or see :class:`NEMOWorkflow`.
     PipelineError
         If an input of an enabled step is missing.
     """
     logger.info("CDO version: %s", cdo_version())
     config = load_config(config_file)
-    if config.nemo_domain is None:
-        raise ConfigError(f"{config_file}: the NEMO domain pipeline needs a 'nemo_domain' section")
-    backend = get_backend(config)
-    workflow = NEMOWorkflow(config.nemo_domain, config.paths, processors, backend, only=only, log_level=log_level)
+    workflow = NEMOWorkflow(config, processors, get_backend(config), only=only, log_level=log_level)
     workflow.run(dry_run=dry_run)

@@ -65,26 +65,26 @@ class EoceneNEMO(ComponentStep):
     needs = ["stage"]
     # the PALEORCA2 grid name is hardcoded in create_ocean_init and create_runoff
     reads = [
-        "{herold}/Green_Huber_eocene_tidal_dissipation_1x1.nc",
-        "{herold}/herold_etal_eocene_topo_1x1.nc",
-        "{herold}/age_depth_bath_55.xyadb",
-        "{input}/nemo/initial/zdfiwm_forcing_r720x360.nc",
-        "{input}/nemo/initial/Goutorbe_ghflux.nc",
-        "{input}/nemo/initial/woa13-levitus-L31.nc",
-        "{input}/nemo/domain/PALEORCA2/domain_cfg.nc",
-        "{input}/nemo/domain/ORCA2/domain_cfg.nc",
-        "{input}/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc",
+        "{inputs.herold}/Green_Huber_eocene_tidal_dissipation_1x1.nc",
+        "{inputs.herold}/herold_etal_eocene_topo_1x1.nc",
+        "{inputs.herold}/age_depth_bath_55.xyadb",
+        "{inputs.ece4_data}/nemo/initial/zdfiwm_forcing_r720x360.nc",
+        "{inputs.ece4_data}/nemo/initial/Goutorbe_ghflux.nc",
+        "{inputs.ece4_data}/nemo/initial/woa13-levitus-L31.nc",
+        "{inputs.ece4_data}/nemo/domain/PALEORCA2/domain_cfg.nc",
+        "{inputs.ece4_data}/nemo/domain/ORCA2/domain_cfg.nc",
+        "{inputs.ece4_data}/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc",
     ]
     # the age grid is not in the Herold et al. (2014) supplement
     sources = {
-        "{herold}/age_depth_bath_55.xyadb": (f"{AGE_GRID_URL} (bunzip2, then put it in the herold folder)"),
+        "{inputs.herold}/age_depth_bath_55.xyadb": (f"{AGE_GRID_URL} (bunzip2, then put it in the herold folder)"),
     }
     writes = [
-        "{output}/nemo/initial/zdfiwm_forcing_r720x360.nc",
-        "{output}/nemo/initial/Goutorbe_ghflux.nc",
-        "{output}/nemo/initial/woa13-levitus-L31_deepmip-30.nc",
-        "{output}/nemo/initial/woa13-levitus-L31_woa-pi.nc",
-        "{output}/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc",
+        "{eocene.output_dir}/nemo/initial/zdfiwm_forcing_r720x360.nc",
+        "{eocene.output_dir}/nemo/initial/Goutorbe_ghflux.nc",
+        "{eocene.output_dir}/nemo/initial/woa13-levitus-L31_deepmip-30.nc",
+        "{eocene.output_dir}/nemo/initial/woa13-levitus-L31_woa-pi.nc",
+        "{eocene.output_dir}/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc",
     ]
 
     def __init__(self, herold_folder, input_folder, output_folder, grid="r720x360"):
@@ -97,7 +97,12 @@ class EoceneNEMO(ComponentStep):
 
     @classmethod
     def from_context(cls, ctx: Context) -> "EoceneNEMO":
-        return cls(herold_folder=ctx.paths.herold, input_folder=ctx.paths.input, output_folder=ctx.paths.output)
+        config = ctx.config
+        return cls(
+            herold_folder=config.inputs.herold,
+            input_folder=config.inputs.ece4_data,
+            output_folder=config.eocene.output_dir,
+        )
 
     def run(self) -> None:
         """Create the Eocene NEMO files."""

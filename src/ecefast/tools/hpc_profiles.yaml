@@ -1,5 +1,5 @@
 # HPC profiles: the environment modules loaded before DOMAINcfg is compiled and run
-# (tools.backend: atos, profile chosen with tools.atos.profile).
+# (machine.name: atos, profile chosen with machine.atos.profile).
 # Read by ecefast.tools.ecearth (hpc_modules) and, through it, by run_domain_cfg.sh.
 
 atos:

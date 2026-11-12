@@ -35,8 +35,10 @@ If an input with a known source is missing, the error of ``ecefast eocene run`` 
 
    cp configs/laptop.tmpl configs/laptop.yml
 
-Then set the paths in ``configs/laptop.yml`` (see :doc:`configuration`). ``configs/*.yml`` is
-ignored by git. On ECMWF Atos start from ``configs/atos.tmpl``.
+Then set the paths in ``configs/laptop.yml`` (see :doc:`configuration`): the read-only
+``inputs``, ``eocene.output_dir`` (e.g. ``OUTPUT/eocene``) and ``eocene.domain.from`` (the Eocene
+domain copied from Atos). ``configs/*.yml`` is ignored by git. On ECMWF Atos start from
+``configs/atos.tmpl``.
 
 3. Run the workflow
 -------------------
@@ -65,14 +67,15 @@ Options:
 
 .. code-block:: text
 
-   -c, --config      Configuration file (schema 1). Required.
+   -c, --config      Configuration file (schema 2), section 'eocene'. Required.
    --steps a,b       Comma-separated step names. Default: all steps.
    --dry-run         Check all inputs and show the plan; write nothing.
    --overwrite       Let 'stage' replace an output directory that is not empty.
    -l, --loglevel    Log level. Default: INFO.
 
-To build NEMO domains from the bathymetries of the ``nemo_domain`` section (on a laptop: the
-coordinates, bathymetries and DOMAINcfg namelists; DOMAINcfg itself runs on Atos):
+To build NEMO domains from the bathymetries of the ``nemo.domain`` section (on a laptop: the
+coordinates, bathymetries and DOMAINcfg namelists, in ``<nemo.domain.output_dir>/work/``; DOMAINcfg
+itself runs on Atos, and the final files go to ``<nemo.domain.output_dir>/nemo/domain/``):
 
 .. code-block:: bash
 

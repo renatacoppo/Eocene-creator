@@ -6,11 +6,11 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from ecefast.core.config import Config, Paths
 from ecefast.core.steps import ComponentStep, PipelineError
 from ecefast.core.workspace import Context
 from ecefast.paleo.eocene.nemo.domain import EoceneDomain
 from ecefast.paleo.eocene.verify import missing_outputs, nan_variables, verify
+from synthetic import make_config
 
 pytestmark = pytest.mark.unit
 
@@ -19,18 +19,17 @@ class Writer(ComponentStep):
     """Declares one NetCDF file and one directory."""
 
     name = "writer"
-    writes = ["{output}/a/field.nc", "{output}/b"]
+    writes = ["{eocene.output_dir}/a/field.nc", "{eocene.output_dir}/b"]
 
 
 @pytest.fixture
 def ctx(tmp_path: Path) -> Context:
-    paths = Paths(input=str(tmp_path / "input"), output=str(tmp_path / "out"), herold=str(tmp_path / "herold"))
-    return Context(Config(file="test.yml", paths=paths))
+    return Context(make_config(tmp_path))
 
 
 def write_outputs(ctx: Context, field: np.ndarray | None = None) -> Path:
     """The outputs of ``Writer``; ``field`` is the data of ``field.nc``."""
-    out = Path(ctx.paths.output)
+    out = Path(ctx.config.eocene.output_dir)
     (out / "b").mkdir(parents=True)
     (out / "a").mkdir()
     field = np.ones((2, 3)) if field is None else field
@@ -51,7 +50,7 @@ def test_missing_outputs_none(ctx: Context) -> None:
 
 
 def test_missing_outputs_lists_files_and_directories(ctx: Context) -> None:
-    out = Path(ctx.paths.output)
+    out = Path(ctx.config.eocene.output_dir)
     assert missing_outputs([Writer], ctx) == [str(out / "a/field.nc"), str(out / "b")]
 
 

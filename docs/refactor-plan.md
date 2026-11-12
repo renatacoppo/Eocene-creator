@@ -335,23 +335,23 @@ eocene:                           # ecefast eocene run
 On a laptop `eocene.domain.from` points at the domain copied from Atos (`data/domain/PALEORCA2/eocene`); on
 Atos it points at `{nemo.domain.output_dir}/...`, built by `ecefast nemo domain` or with `build: true`.
 
-- [ ] `core/config.py`: schema 2 dataclasses; `{section.key}` placeholders resolved from the config (unknown
+- [x] `core/config.py`: schema 2 dataclasses; `{section.key}` placeholders resolved from the config (unknown
       key, or a cycle, is an error); a schema 1 file fails with one error listing each old key and its new
       name (no automatic migration, no support for both).
-- [ ] Step `reads`/`writes` use the same placeholders (`{inputs.ece4_data}/nemo/...`,
+- [x] Step `reads`/`writes` use the same placeholders (`{inputs.ece4_data}/nemo/...`,
       `{eocene.output_dir}/...`, `{nemo.grid}`).
-- [ ] `EoceneDomain.from_context` reads `eocene.domain`, not the backend name; `build: true` with
+- [x] `EoceneDomain.from_context` reads `eocene.domain`, not the backend name; `build: true` with
       `machine.name: local` is a config error.
-- [ ] NEMO domain pipeline: final files under `<output_dir>/nemo/domain/<grid>/<name>/`, intermediates
+- [x] NEMO domain pipeline: final files under `<output_dir>/nemo/domain/<grid>/<name>/`, intermediates
       (coordinates, bathymetries, namelists) under `<output_dir>/work/`. Same file contents; the baseline
       layout moves with it.
-- [ ] Local folders: `OUTPUT/{eocene,nemo-domain}`, `BASELINE/{eocene,nemo-domain}` (moved from
+- [x] Local folders: `OUTPUT/{eocene,nemo-domain}`, `BASELINE/{eocene,nemo-domain}` (moved from
       `EOCENE-TEST`, `EOCENE-DOMAIN-TEST`, `EOCENE-BASELINE`); `.gitignore`, `compare_outputs.py`,
       `test_regression.py`, AGENTS.md. The domain baseline is regenerated (its namelists hold absolute paths).
-- [ ] Templates `configs/laptop.tmpl`, `configs/atos.tmpl`; `docs/configuration.rst` (new layout, old → new
+- [x] Templates `configs/laptop.tmpl`, `configs/atos.tmpl`; `docs/configuration.rst` (new layout, old → new
       table); `overview.rst` gets a "commands, sections and outputs" diagram; quickstart, workflow, external
       tools, tutorials, AGENTS.md commands.
-- [ ] Tests: schema, placeholders, schema 1 error; fixtures in `tests/synthetic.py`; all groups.
+- [x] Tests: schema, placeholders, schema 1 error; fixtures in `tests/synthetic.py`; all groups.
 - Done when: both baselines give 0 differences (apart from moved paths), and `ecefast eocene run` and
   `ecefast nemo domain` run with the migrated `configs/laptop.yml`.
 

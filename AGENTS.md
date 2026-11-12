@@ -55,15 +55,15 @@ ecefast eocene run -c configs/laptop.yml --overwrite     # all steps; --overwrit
 ecefast eocene run -c configs/laptop.yml --steps nemo -l DEBUG   # some steps, on an existing output
 ecefast eocene run -c configs/laptop.yml --dry-run       # check all inputs, show the plan, write nothing
 ecefast eocene steps                                     # list the steps (needs, reads, writes)
-ecefast nemo domain -c configs/laptop.yml                # NEMO domain pipeline (section nemo_domain)
+ecefast nemo domain -c configs/laptop.yml                # NEMO domain pipeline (section nemo.domain)
 ecefast nemo domain -c configs/laptop.yml --bathymetry eocene   # only some bathymetries
 ecefast nemo domain -c configs/laptop.yml --dry-run      # check all inputs, show the plan, write nothing
 
 # checks before pushing
 ruff check --fix . && ruff format .                             # (from phase 1)
 pytest -m "unit or integration"                                 # (from phase 1)
-python scripts/compare_outputs.py EOCENE-BASELINE/eocene EOCENE-TEST          # Eocene workflow
-python scripts/compare_outputs.py EOCENE-BASELINE/domain EOCENE-DOMAIN-TEST   # NEMO domain pipeline
+python scripts/compare_outputs.py BASELINE/eocene OUTPUT/eocene            # Eocene workflow
+python scripts/compare_outputs.py BASELINE/nemo-domain OUTPUT/nemo-domain  # NEMO domain pipeline
 sphinx-build -W -b html docs docs/_build/html                   # (from phase 1b)
 ```
 
@@ -74,11 +74,10 @@ All of these live at the repo root and are gitignored; never commit them.
 | Directory | What | How to get it |
 |---|---|---|
 | `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree, including the eORCA1 domain (grid and bathymetry of the present-day bathymetry) | `scripts/get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
-| `data/` | input of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `tools.precomputed.domain`) | copy from the HPC |
+| `data/` | input of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `eocene.domain.from`) | copy from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplementary data | copy from the HPC or the paper supplement |
-| `EOCENE-TEST/` | output of your Eocene run | `ecefast eocene run -c configs/laptop.yml --overwrite` |
-| `EOCENE-DOMAIN-TEST/` | output of your domain-pipeline run (laptop part); always at this path in the main checkout, because the namelists contain absolute paths | see `EOCENE-BASELINE/BASELINE.txt` |
-| `EOCENE-BASELINE/` | frozen reference output: `eocene/` (Eocene workflow) and `domain/` (laptop part of the NEMO domain pipeline), with `BASELINE.txt` (how each was run) (commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
+| `OUTPUT/<command>/` | output of your runs, one folder per command (`eocene`, `nemo-domain`, `oifs-data`): each command's `output_dir` | `ecefast eocene run -c configs/laptop.yml --overwrite`, `ecefast nemo domain -c configs/laptop.yml` |
+| `BASELINE/<command>/` | frozen reference output: `eocene/` (Eocene workflow) and `nemo-domain/` (laptop part of the NEMO domain pipeline, run with `nemo.domain.output_dir` = `<main checkout>/OUTPUT/nemo-domain`, because the namelists contain absolute paths), with `BASELINE.txt` (how each was run, commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
 
 Tests that need this data use the `local_data` marker and read its location from
 `ECEFAST_TEST_DATA`; they skip when the variable is unset.
@@ -174,7 +173,7 @@ the docs.
 ## Scientific integrity
 
 - **Output must not change by accident.** Every refactor must reproduce the frozen baseline
-  (`EOCENE-BASELINE`), checked with `scripts/compare_outputs.py` **(from phase 0)**: same file
+  (`BASELINE/`), checked with `scripts/compare_outputs.py` **(from phase 0)**: same file
   list, NetCDF data variables equal within `rtol=1e-6` with the same names, order, dtypes and
   attributes, GRIB files identical in values, keys and message order (`grib_compare`);
   `history` and date attributes are ignored. A refactor PR that changes numbers is a bug.
@@ -196,7 +195,7 @@ the docs.
   check in `EoceneDomain` / `verify` is a hard error on a mismatch, never a warning.
 - **CDO.** CDO is not pinned and not part of `environment.yaml`: use the most recent release
   available on each machine (Homebrew on macOS, conda-forge `cdo` on Linux and in CI, the module
-  on the HPC). `EOCENE-BASELINE/BASELINE.txt` records the exact CDO version of the baseline, and
+  on the HPC). `BASELINE/BASELINE.txt` records the exact CDO version of the baseline, and
   compares are only valid with that version: a different CDO legitimately changes results (e.g.
   the remapped bathymetries). Follow the grid naming scheme of that version (ECMWF style: `F<N>`
   regular Gaussian, `N<N>` reduced Gaussian, e.g. `F32` for TL63); do not add version checks to
@@ -350,7 +349,7 @@ published on Read the Docs.
   refactor is done. Each task of [docs/refactor-plan.md](docs/refactor-plan.md) (wave table) is
   one branch, created from `origin/refactor`, with one PR **against `refactor`**.
 - PRs into `refactor` may be merged by their author once CI is green and
-  `scripts/compare_outputs.py` reports 0 differences against `EOCENE-BASELINE` (the PR says so).
+  `scripts/compare_outputs.py` reports 0 differences against `BASELINE/` (the PR says so).
   Planned output changes (0.2, 5.3) are the exception: they say which files change, and the
   baseline is regenerated right after the merge.
 - The other author reviews the final `refactor` → `main` PR. It is merged with a merge commit

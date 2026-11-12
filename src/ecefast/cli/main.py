@@ -57,7 +57,7 @@ def eocene_main(argv: list[str]) -> None:
         epilog=format_step_list("steps, in run order (for --steps)", {s.name: step_summary(s) for s in PIPELINE}),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    run_parser.add_argument("-c", "--config", required=True, help="configuration file (schema 1)")
+    run_parser.add_argument("-c", "--config", required=True, help="configuration file (schema 2), section 'eocene'")
     run_parser.add_argument(
         "--steps", type=lambda s: [n.strip() for n in s.split(",") if n.strip()], help="comma-separated step names"
     )
@@ -105,11 +105,13 @@ def nemo_main(argv: list[str]) -> None:
 
     domain_parser = commands.add_parser(
         "domain",
-        help="run the NEMO domain pipeline (section nemo_domain)",
-        epilog=format_step_list("steps, in run order (switched on and off in nemo_domain.steps)", STEP_DESCRIPTIONS),
+        help="run the NEMO domain pipeline (section nemo.domain)",
+        epilog=format_step_list("steps, in run order (switched on and off in nemo.domain.steps)", STEP_DESCRIPTIONS),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    domain_parser.add_argument("-c", "--config", required=True, help="configuration file with a 'nemo_domain' section")
+    domain_parser.add_argument(
+        "-c", "--config", required=True, help="configuration file (schema 2), section 'nemo.domain'"
+    )
     domain_parser.add_argument(
         "--bathymetry", nargs="+", metavar="NAME", help="run only these bathymetries (default: all enabled ones)"
     )

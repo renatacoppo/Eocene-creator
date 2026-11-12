@@ -3,13 +3,13 @@
 The domain pipeline writes one ``namelist_cfg_<name>`` per bathymetry and asks a backend to run DOMAINcfg on
 them. Every backend returns, per bathymetry name, the raw ``domain_cfg_<name>.nc`` and ``mesh_mask_<name>.nc``
 written next to the namelists; the pipeline then post-processes them. The backend is chosen with
-``tools.backend`` in the configuration (:func:`get_backend`):
+``machine.name`` in the configuration (:func:`get_backend`):
 
 ``atos``
-    ECMWF Atos: loads the HPC modules of ``tools.atos.profile`` (``hpc_profiles.yaml``), compiles DOMAINcfg if
+    ECMWF Atos: loads the HPC modules of ``machine.atos.profile`` (``hpc_profiles.yaml``), compiles DOMAINcfg if
     needed and runs it, through ``run_domain_cfg.sh``.
 ``local``
-    A laptop: DOMAINcfg is not available. Use the domain built on Atos (``tools.precomputed.domain``).
+    A laptop: DOMAINcfg is not available. Use the domain built on Atos (``eocene.domain.from``).
 ``fake``
     Tests and CI: writes small but valid files with the structure of the DOMAINcfg output, without running
     DOMAINcfg. See :class:`FakeBackend` for what it does not do.
@@ -172,9 +172,9 @@ class LocalBackend(EcEarthTools):
     def domaincfg(self, namelist_dir: str | os.PathLike, names: list[str]) -> dict[str, tuple[Path, Path]]:
         """Raise: DOMAINcfg cannot run locally."""
         raise RuntimeError(
-            "DOMAINcfg cannot run with the 'local' backend (tools.backend: local). Use the domain built on Atos: "
-            "set tools.precomputed.domain, which the Eocene 'domain' step installs; or run the domain pipeline "
-            "on Atos with tools.backend: atos."
+            "DOMAINcfg cannot run with 'machine.name: local'. Use the domain built on Atos: point "
+            "eocene.domain.from at it (build: false), which the Eocene 'domain' step installs; or run the domain "
+            "pipeline on Atos with machine.name: atos."
         )
 
 
@@ -366,7 +366,7 @@ class FakeBackend(EcEarthTools):
 
 
 def get_backend(config: Config) -> EcEarthTools:
-    """The backend selected by ``tools.backend``.
+    """The backend selected by ``machine.name``.
 
     Parameters
     ----------
@@ -378,14 +378,14 @@ def get_backend(config: Config) -> EcEarthTools:
     EcEarthTools
         :class:`AtosBackend`, :class:`LocalBackend` or :class:`FakeBackend`.
     """
-    tools = config.tools
-    if tools.backend == "atos":
-        return AtosBackend(profile=tools.atos.profile, oasis_lib_dir=tools.atos.oasis_lib_dir)
-    if tools.backend == "local":
+    machine = config.machine
+    if machine.name == "atos":
+        return AtosBackend(profile=machine.atos.profile, oasis_lib_dir=machine.atos.oasis_lib_dir)
+    if machine.name == "local":
         return LocalBackend()
-    if tools.backend == "fake":
+    if machine.name == "fake":
         return FakeBackend()
-    raise ValueError(f"Unknown tools.backend {tools.backend!r}: use atos, local or fake")
+    raise ValueError(f"Unknown machine.name {machine.name!r}: use atos, local or fake")
 
 
 def main(argv: list[str] | None = None) -> None:

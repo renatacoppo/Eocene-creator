@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 
 from ecefast.core.cdo import cdo_version
-from ecefast.core.config import load_config
+from ecefast.core.config import ConfigError, load_config
 from ecefast.core.provenance import write_provenance
 from ecefast.core.steps import ComponentStep, run_pipeline
 from ecefast.core.workspace import Context, Stage
@@ -35,7 +35,7 @@ def run(
     Parameters
     ----------
     config_file : str
-        Configuration file (schema 1).
+        Configuration file (schema 2) with an ``eocene`` section.
     select : list of str, optional
         Names of the steps to run, in any order; they run in pipeline order. ``None`` runs all of them.
     dry_run : bool
@@ -50,6 +50,8 @@ def run(
 
     Raises
     ------
+    ConfigError
+        If the configuration is invalid or has no ``eocene`` section.
     PipelineError
         If the pipeline cannot start, a step did not write a declared output, or the outputs fail the checks.
     """
@@ -57,10 +59,12 @@ def run(
     cdo = cdo_version()
     logger.info("CDO version: %s", cdo)
     config = load_config(config_file)
+    if config.eocene is None:
+        raise ConfigError(f"{config_file}: `ecefast eocene run` needs an 'eocene' section")
     ctx = Context(config, overwrite=overwrite)
     names = run_pipeline(PIPELINE, ctx, select=select, dry_run=dry_run)
     if not dry_run:
-        path = write_provenance(config.paths.output, names, config_file, cdo, start, datetime.now().astimezone())
+        path = write_provenance(config.eocene.output_dir, names, config_file, cdo, start, datetime.now().astimezone())
         logger.info("Provenance written to %s", path)
         verify([s for s in PIPELINE if s.name in names], ctx)
     return names
