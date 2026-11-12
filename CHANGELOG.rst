@@ -15,6 +15,8 @@ Unreleased
 Added
 ~~~~~
 
+- ``tests/hpc/test_domaincfg_contract.py``: checks on Atos that the ``fake`` backend has the structure of
+  the real DOMAINcfg output; checklist for a run on Atos in ``docs/external_tools.rst`` (#44).
 - Tutorial notebooks in ``notebooks/tutorials/`` (``01_quickstart``, ``02_oifs``, ``03_nemo``,
   ``04_oasis_rnfm``), linked from ``docs/quickstart.rst``; plot helper ``plot_before_after`` (#43).
 - ``ecefast eocene run`` checks the outputs of the steps that ran (``paleo/eocene/verify.py``): every
