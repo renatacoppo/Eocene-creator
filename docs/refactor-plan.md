@@ -30,22 +30,22 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 
 | ID | Task | Files | Depends on | Runs |
 |---|---|---|---|---|
-| 0.1 | Create `refactor`; AGENTS.md git rules; `data/` in `.gitignore` | AGENTS.md, plan | #18 | serial |
-| 0.2 | Ocean init: `profile=None` builds both files, CLI calls it without arguments (**output change**) | `eoceneNEMO.py`, `cli_eocene.py`, CHANGELOG | 0.1 | ‖ 0.3 |
-| 0.3 | `compare_outputs.py` with a self-test on tiny synthetic files; fetch script gets eORCA1 | `scripts/compare_outputs.py`, `get_ece4_data.sh` | 0.1 | ‖ 0.2 |
-| 0.4 | Fetch all local data (rsync, Eocene domain, `data/`) | local only | 0.3 | Paolo |
-| 0.5 | Env, both baselines, vertical-grid check, `BASELINE.txt` | local only | 0.2, 0.3, 0.4 | serial, with Paolo |
+| 0.1 ✅ | Create `refactor`; AGENTS.md git rules; `data/` in `.gitignore` | AGENTS.md, plan | #18 | serial |
+| 0.2 ✅ | Ocean init: `profile=None` builds both files, CLI calls it without arguments (**output change**) | `eoceneNEMO.py`, `cli_eocene.py`, CHANGELOG | 0.1 | ‖ 0.3 |
+| 0.3 ✅ | `compare_outputs.py` with a self-test on tiny synthetic files; fetch script gets eORCA1 | `scripts/compare_outputs.py`, `get_ece4_data.sh` | 0.1 | ‖ 0.2 |
+| 0.4 ✅ | Fetch all local data (rsync, Eocene domain, `data/`) | local only | 0.3 | Paolo |
+| 0.5 ✅ | Env, both baselines, vertical-grid check, `BASELINE.txt` | local only | 0.2, 0.3, 0.4 | serial, with Paolo |
 | 1.1 | Housekeeping: pycache, notebooks, `scripts/`, `config.tmpl` placeholders | notebooks, `unsorted/`, `eocene/config.tmpl` | 0.5 | ‖ 1.2, 1.3 |
-| 1.2 | Env pin, `pyproject`, pytest markers, first tests, `ci.yml`, local regression test | `environment.yaml`, `pyproject.toml`, `tests/`, `.github/workflows/ci.yml` | 0.5 | ‖ 1.1, 1.3 |
+| 1.2 | Env pin, `pyproject`, pytest markers, first tests, `ci.yml`, local regression test; declare `jinja2` and `shapely` (imported, undeclared); move pip-installed deps (`scipy`, `netcdf4`, `dask`, `cartopy`, ...) to conda | `environment.yaml`, `pyproject.toml`, `tests/`, `.github/workflows/ci.yml` | 0.5 | ‖ 1.1, 1.3 |
 | 1.3 | Docs skeleton, `docs.yml` workflow, `.readthedocs.yaml` | `docs/*.rst`, `docs/conf.py`, `.github/workflows/docs.yml` | 0.5 | ‖ 1.1, 1.2 |
 | 1.4 | ruff config, one format-only commit, `.git-blame-ignore-revs` | everything | 1.1–1.3 | serial |
-| 2.1 | `src/` move, import fixes, broken scripts, package data, `ecefast` entry point | everything | 1.4 | serial, freeze |
+| 2.1 | `src/` move, import fixes, broken scripts, package data, `ecefast` entry point; `common/executor.py` runs scripts with `sys.executable`, not `python3` from PATH | everything | 1.4 | serial, freeze |
 | 3.0 | `core/logging`, `core/cdo`; replace 2 loggers and 8 `Cdo()` | imports in many files | 2.1 | serial |
 | 3.1 | Config schema v1, `configs/*.tmpl`, `configuration.rst`, migrate both configs | `core/config.py`, `configs/`, docs | 3.0 | ‖ 3.2, 3.3 |
 | 3.2 | `core/grib.py` merge; Eocene OIFS non-GRIB helpers to `fields.py` | `components/oifs/`, `paleo/eocene/oifs/` | 3.0 | ‖ 3.1, 3.3 |
 | 3.3 | `components/nemo/domain/postprocess.py`; delete `generate-mask-util.py` | `components/nemo/domain/` | 3.0 | ‖ 3.1, 3.2 |
 | 4.0 | `core/steps.py`, `workspace.py`, `io.py` (atomic helper), `Stage`, runner tests | new `core/` files, `tests/` | 3.1 | serial |
-| 4.1 | `EoceneOIFS` step, atomic writes, `aerosols` option | `paleo/eocene/oifs/` | 4.0, 3.2 | ‖ 4.2, 4.3, 5.1 |
+| 4.1 | `EoceneOIFS` step, atomic writes, `aerosols` option; `prepare_herold` writes to `tmpdir`, not into the herold folder | `paleo/eocene/oifs/` | 4.0, 3.2 | ‖ 4.2, 4.3, 5.1 |
 | 4.2 | `EoceneNEMO`, `EoceneDomain` with vertical-grid check | `paleo/eocene/nemo.py`, `domain.py` | 4.0 | ‖ 4.1, 4.3, 5.1 |
 | 4.3 | `EoceneOASIS`, new `EoceneRNFM` | `paleo/eocene/oasis.py`, `rnfm.py` | 4.0 | ‖ 4.1, 4.2, 5.1 |
 | 4.4 | `pipeline.py`, `ecefast eocene run`, provenance, remove `cli_eocene.py`, `workflow.rst` | `cli/`, `paleo/eocene/pipeline.py` | 4.1–4.3 | serial |
@@ -120,7 +120,6 @@ Local data needed (all gitignored, see AGENTS.md):
 | Directory | Contents | Source |
 |---|---|---|
 | `ECE4-DATA-V3/` | Eocene workflow inputs, plus `nemo/domain/eORCA1/domain_cfg.nc` (present-day bathymetry source) | `get_ece4_data.sh`, extended with the eORCA1 domain |
-| `ECE4-DATA-EOCENE/nemo/domain/PALEORCA2/` | Eocene domain built on Atos | rsync from HPC |
 | `data/` | `PALEORCA2/coords_ori.nc`, `eORCA1/mesh_mask.nc` (plus outputs of earlier runs) | copied by hand from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplement | HPC or paper |
 
@@ -136,9 +135,9 @@ Steps:
 5. **Domain baseline** (laptop part of the NEMO domain pipeline, no DOMAINcfg): run `cli-domain-paleorca.py` up to
    the namelist step for `present_day` and `eocene` (bathymetry, coordinates, namelists), plus the
    post-processing (`process_domain_cfg`, `extract_maskutil`) on the Atos-built `domain_cfg_*.nc` /
-   `mesh_mask_*.nc` if available. Save as `EOCENE-BASELINE/domain/`.
+   `mesh_mask_*.nc` if available. Save as `EOCENE-BASELINE/domain/`. Done: DOMAINcfg output is not on the laptop, so the baseline covers coordinates, bathymetry and namelists; the post-processing is covered by unit tests in 3.3.
 6. Check `nav_lev` and `e3t_1d` are identical in the present-day and Eocene PALEORCA2 domains.
-7. `mv EOCENE-TEST EOCENE-BASELINE`; write `BASELINE.txt` (git commit, CDO, Python, ecCodes versions).
+7. `mv EOCENE-TEST EOCENE-BASELINE/eocene`; write `BASELINE.txt` (git commit, CDO, Python, ecCodes versions).
 8. `scripts/compare_outputs.py BASELINE NEW`:
    - same file list;
    - NetCDF: every data variable with `np.testing.assert_allclose(rtol=1e-6)`; variable/dimension names, order,
@@ -253,7 +252,7 @@ Done when: CI runs end to end in a few minutes.
 ## Phase 7: Atos validation (manual, by a person)
 
 - [ ] Recreate the env on Atos; `ecefast eocene run --dry-run -c configs/atos.yml`.
-- [ ] `ecefast nemo domain` with `AtosBackend`; compare the new Eocene `domain_cfg.nc` with `ECE4-DATA-EOCENE`.
+- [ ] `ecefast nemo domain` with `AtosBackend`; compare the new Eocene `domain_cfg.nc` with `data/domain/PALEORCA2/eocene/`.
 - [ ] `tests/hpc/test_domaincfg_contract.py`: the real `domain_cfg.nc` has every variable/dimension the fake produces.
 - [ ] Full run with `AtosBackend`; compare with the baseline.
 

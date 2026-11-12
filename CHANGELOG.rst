@@ -35,6 +35,8 @@ Changed
 - ``EoceneNEMO.create_ocean_init`` defaults to ``profile=None``, which builds both ocean initial
   files (``deepmip_cold`` and ``woa_pi``); the ``eocene`` CLI calls it without arguments (#19).
 - ``get_ece4_data.sh`` also fetches ``nemo/domain/eORCA1/domain_cfg.nc`` (#20).
+- Frozen baseline layout ``EOCENE-BASELINE/{eocene,domain}`` documented; the Eocene domain is read
+  from ``data/``; pre-existing issues found while building the baseline added to the plan (#21).
 
 Output
 ~~~~~~
