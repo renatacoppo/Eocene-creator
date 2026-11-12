@@ -3,7 +3,15 @@
 ## Overview
 This workflow processes bathymetry and coordinate data to generate NEMO domain configuration files for both present-day and Eocene paleoenvironments on the PALEORCA2 grid.
 
-**Main Entry Point**: `ecefast nemo-domain -c configs/laptop.yml`
+**Main Entry Point**: `ecefast nemo domain -c configs/laptop.yml [--bathymetry NAME ...]`
+
+**Bathymetry processors**: found by the `processor` name of each bathymetry in a plain mapping passed to
+`NEMOWorkflow` by the caller: `ecefast.components.nemo.bathymetry.PROCESSORS` (generic: `PresentDayBathymetry`)
+merged with `ecefast.paleo.eocene.bathymetry.EOCENE_PROCESSORS` (`EoceneBathymetry`). This package never imports
+`paleo`. An unknown name stops the pipeline before the first step, listing the known names.
+
+**DOMAINcfg backend**: `NEMOWorkflow` also gets the backend of `tools.backend` (`ecefast.tools.ecearth`: `atos`,
+`local`, `fake`), used by the `domain_cfg` step.
 
 **Configuration**: the `nemo_domain` section of the config file (one file per machine, see `docs/configuration.rst`):
 - `output_dir`: Base output directory (coordinates/, bathymetry/, domain/)
@@ -53,7 +61,8 @@ Directory structure derived from `output_dir`:
 - `{output_dir}/coordinates/{grid}/` - coordinate bounds files
 - `{output_dir}/bathymetry/{grid}/` - processed bathymetry files
 - `{output_dir}/domain/{grid}/{name}/` - final domain_cfg and maskutil files
-- `{domaincfg_dir}/DOMAINcfg/` - NEMO tool workspace (HPC only)
+- `{namelist_dir}` - DOMAINcfg namelists and raw DOMAINcfg output: `{domaincfg_dir}/DOMAINcfg/` if
+  `domaincfg_dir` is set (HPC), else `{output_dir}/domain/`
 
 Workflow steps controlled via `steps` flags in YAML:
 - `coordinates`, `bathymetry`, `configure_domain`, `domain_cfg`, `generate_mask`, `generate_subbasins`
@@ -134,10 +143,13 @@ Workflow steps controlled via `steps` flags in YAML:
 
 ---
 
-## Step 6: Run NEMO Domain Configuration Tool (HPC)
+## Step 6: Run NEMO Domain Configuration Tool (backend)
 **YAML Key**: `steps.domain_cfg`
-**Method**: `NEMOWorkflow.run_domain_cfg()`
-**Script**: `domain/run_domain_cfg.sh`
+**Method**: `NEMOWorkflow.run_domain_cfg()` → `backend.domaincfg(namelist_dir, names)`
+
+The backend comes from `tools.backend` (see `docs/external_tools.rst`). If the step is on and the backend is not
+available (`local`, or `atos` off Atos), the pipeline stops before its first step. `fake` writes small files with
+the structure of the DOMAINcfg output (tests). `atos` runs `ecefast/tools/run_domain_cfg.sh`, which does:
 
 - Load HPC modules from `ecefast/tools/hpc_profiles.yaml` (profile: atos)
   - Modules: prgenv/intel, intel/2021.4.0, hdf5-parallel/1.12.2, netcdf4-parallel/4.9.1, etc.
@@ -148,7 +160,7 @@ Workflow steps controlled via `steps` flags in YAML:
   - Generates: `domain_cfg_{name}.nc`, `mesh_mask_{name}.nc`
   - Renames files immediately to prevent overwriting
 - Error handling: captures segfault (exit 139), validates output with CDO
-- Working directory: `{domaincfg_dir}/DOMAINcfg/`
+- Working directory: `{domaincfg_dir}/DOMAINcfg/` (the `atos` backend needs `domaincfg_dir`)
 
 ---
 
@@ -158,14 +170,14 @@ Workflow steps controlled via `steps` flags in YAML:
 **Functions**: `common.util.process_domain_cfg()`, `common.util.extract_maskutil()`
 
 ### 7a. Process domain_cfg.nc
-- Read `domain_cfg_{name}.nc` from `{domaincfg_dir}/DOMAINcfg/`
+- Read `domain_cfg_{name}.nc` from `{namelist_dir}`
 - Rename vertical dimension: `nav_lev` → `z`; `nav_lev` stays as a plain variable on `z`
 - Add PALEORCA attributes: `cn_cfg='PALEORCA'`, `nn_cfg=2`
 - Write with no `_FillValue` on any variable and `time_counter` as the unlimited dimension
 - Write to: `{output_dir}/domain/{grid}/{name}/domain_cfg.nc`
 
 ### 7b. Extract maskutil.nc
-- Read `mesh_mask_{name}.nc` from `{domaincfg_dir}/DOMAINcfg/`
+- Read `mesh_mask_{name}.nc` from `{namelist_dir}`
 - Extract mask variables: `tmaskutil`, `umaskutil`, `vmaskutil`
 - Rename time dimension: `time_counter` → `t` (unlimited) and drop the `time_counter` variable
 - Replace the global attributes with `Conventions='CF-1.1'`
@@ -184,7 +196,7 @@ These two functions are the only writer of `domain_cfg.nc` and `maskutil.nc` (th
 **Script**: `domain/subbasins.py`
 
 - Only runs for `PresentDayBathymetry` processor (skips Eocene)
-- Read `mesh_mask_{name}.nc` from `{domaincfg_dir}/DOMAINcfg/`
+- Read `mesh_mask_{name}.nc` from `{namelist_dir}`
 - Extract surface mask (`tmask[0,0,:,:]`) and coordinates (`glamt`, `gphit`)
 - Classify ocean points into basins using shapely polygons:
   - Atlantic Ocean (includes Mediterranean, Arctic connections)
@@ -220,16 +232,16 @@ These two functions are the only writer of `domain_cfg.nc` and `maskutil.nc` (th
   - Contains: Paleobathymetry remapped and processed
   - Used for: Eocene domain configuration
 
-### Configuration Files (HPC)
-- `{domaincfg_dir}/DOMAINcfg/namelist_cfg_{name}`
+### Configuration Files
+- `{namelist_dir}/namelist_cfg_{name}`
   - Contains: NEMO namelist parameters for domain configuration
   - Generated via Jinja2 template from bathymetry/coordinates metadata
   - References: Bathymetry path, coordinates path, grid dimensions, vertical levels
 
-### Domain Files (Intermediate - HPC)
-- `{domaincfg_dir}/DOMAINcfg/domain_cfg_{name}.nc`
-- `{domaincfg_dir}/DOMAINcfg/mesh_mask_{name}.nc`
-  - Generated by NEMO DOMAINcfg tool
+### Domain Files (Intermediate)
+- `{namelist_dir}/domain_cfg_{name}.nc`
+- `{namelist_dir}/mesh_mask_{name}.nc`
+  - Generated by NEMO DOMAINcfg tool (through the backend)
   - Processed and moved to final location in Step 7
 
 ### Final Domain Output

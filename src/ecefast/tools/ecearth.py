@@ -34,9 +34,7 @@ from ecefast.core.io import atomic_write
 logger = logging.getLogger(__name__)
 
 PROFILES_FILE = Path(__file__).with_name("hpc_profiles.yaml")
-# The script stays next to the domain pipeline, which still calls it directly; task 5.2 moves it into tools/
-# when the pipeline switches to get_backend.
-RUN_DOMAIN_CFG = Path(__file__).parents[1] / "components" / "nemo" / "domain" / "run_domain_cfg.sh"
+RUN_DOMAIN_CFG = Path(__file__).with_name("run_domain_cfg.sh")
 
 # Earth rotation rate (rad/s), 2*pi/rsiday with the sidereal day rsiday = 86164 s, as in NEMO (phycst.F90)
 OMEGA = 2.0 * np.pi / 86164.0

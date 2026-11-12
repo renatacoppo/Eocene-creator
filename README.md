@@ -89,7 +89,7 @@ tools:
 ```
 
 Optional sections: `grids` (`oifs: TL63L31`, `nemo: PALEORCA2`), `eocene` (`oifs.aerosols: false`,
-`oasis.constant_sst: 290.0`) and `nemo_domain` (the NEMO domain pipeline, `ecefast nemo-domain -c <file>`).
+`oasis.constant_sst: 290.0`) and `nemo_domain` (the NEMO domain pipeline, `ecefast nemo domain -c <file>`).
 Every key is described in `docs/configuration.rst`. The old `dirs:` format is no longer read.
 
 ## What `stage` copies
@@ -121,7 +121,8 @@ The OIFS workflow:
 
 The NEMO workflow:
 
-- copies `domain_cfg.nc` and `maskutil.nc` into the output tree (`domain` step)
+- installs the Eocene `domain_cfg.nc` and `maskutil.nc` into the output tree (`domain` step): the precomputed
+  ones (`tools.backend: local`), or built with the NEMO domain pipeline (`atos`, `fake`)
 - creates tidal mixing forcing
 - creates geothermal heat flux forcing
 - creates ocean initial conditions

@@ -15,6 +15,12 @@ Unreleased
 Added
 ~~~~~
 
+- import-linter contracts in ``pyproject.toml`` (layers ``cli > paleo > components > tools >
+  core``; OIFS, NEMO, OASIS and RNFM independent), checked by ``lint-imports`` in CI (#37).
+- The Eocene ``domain`` step builds the Eocene domain with the NEMO domain pipeline when
+  ``tools.backend`` is ``atos`` or ``fake`` (``local`` still installs ``tools.precomputed.domain``);
+  the vertical grid check runs in both cases (#37).
+
 - ``ecefast eocene run -c CONFIG [--steps a,b] [--dry-run] [--overwrite] [-l LEVEL]`` runs the
   Eocene pipeline (``paleo/eocene/pipeline.py``: ``stage``, ``domain``, ``oasis``, ``oifs``,
   ``nemo``, ``rnfm``); ``ecefast eocene steps`` lists the steps with what they need, read and
@@ -47,6 +53,18 @@ Added
 
 Changed
 ~~~~~~~
+
+- The vertical grid check of the ``domain`` step accepts differences up to 1e-6 m in ``nav_lev``
+  and ``e3t_1d`` (floating-point rounding between DOMAINcfg builds and the fake backend, about
+  1e-12 m); a different number of levels or a larger difference is still an error, whose message
+  now shows the maximum absolute difference (#37).
+- ``ecefast nemo domain -c CONFIG [--bathymetry NAME ...]`` replaces ``ecefast nemo-domain`` and
+  its ``--only``. The NEMO domain pipeline runs DOMAINcfg through the backend of
+  ``tools.backend`` (``run_domain_cfg.sh`` moved to ``tools/``) and stops before its first step
+  if ``domain_cfg`` is on and the backend is not available. Bathymetry processors come from plain
+  mappings passed by the caller (``components/nemo/bathymetry.PROCESSORS``,
+  ``paleo/eocene/bathymetry.EOCENE_PROCESSORS``), so ``components`` no longer imports ``paleo``;
+  an unknown ``processor`` name lists the known ones (#37).
 
 - ``stage`` refuses an output directory that is not empty unless ``--overwrite`` is given (the old
   ``--copy`` always replaced it); configuration errors and preflight failures exit with code 1
@@ -95,6 +113,10 @@ Changed
 
 Fixed
 ~~~~~
+
+- NEMO domain pipeline: with ``domaincfg_dir: null`` the ``generate_mask`` and
+  ``generate_subbasins`` steps looked for the DOMAINcfg output in a relative ``DOMAINcfg/``
+  folder instead of next to the namelists (``output_dir/domain``) (#37).
 
 - NEMO domain pipeline: helper scripts run with the current Python interpreter, not ``python3``
   from ``PATH``, and are found from the package directory (#26).

@@ -61,5 +61,12 @@ Options:
    --overwrite       Let 'stage' replace an output directory that is not empty.
    -l, --loglevel    Log level. Default: INFO.
 
+To build NEMO domains from the bathymetries of the ``nemo_domain`` section (on a laptop: the
+coordinates, bathymetries and DOMAINcfg namelists; DOMAINcfg itself runs on Atos):
+
+.. code-block:: bash
+
+   ecefast nemo domain -c configs/laptop.yml
+
 ``ecefast eocene steps`` lists the steps. The pipeline, the steps and ``provenance.yml`` are
 described in :doc:`workflow`.

@@ -14,8 +14,8 @@ paths:
 # External tools and files built elsewhere
 tools:
   backend: atos                           # how DOMAINcfg is run: atos (here), local (laptop, not available) or fake (tests)
-  precomputed:
-    domain: /path/to/domain/PALEORCA2/eocene  # Eocene domain_cfg.nc + maskutil.nc, copied by the `domain` step (needed by it)
+  # precomputed:
+  #   domain: null                        # Eocene domain_cfg.nc + maskutil.nc; read only with backend local (here the `domain` step builds it)
   atos:                                   # options of the atos backend
     profile: atos                         # HPC modules to load: a profile of ecefast/tools/hpc_profiles.yaml (default atos)
     oasis_lib_dir: /path/to/ecearth4/sources/oasis3-mct-5.2/arch_ecearth/lib  # added to LD_LIBRARY_PATH (default null)
@@ -25,7 +25,7 @@ tools:
 #   oifs: TL63L31                         # OIFS resolution (directory under oifs/)
 #   nemo: PALEORCA2                       # NEMO grid (directory under oasis/ and nemo/domain/)
 
-# NEMO domain pipeline (`ecefast nemo-domain`); omit the section if you do not run it
+# NEMO domain pipeline (`ecefast nemo domain`); omit the section if you do not run it
 nemo_domain:
   output_dir: /path/to/EOCENE-DOMAIN-TEST # output: coordinates/, bathymetry/, domain/ (required)
   domaincfg_dir: /path/to/ecearth4/sources/nemo-4.2/tools  # NEMO tools dir holding DOMAINcfg/ (namelists and DOMAINcfg run there)
@@ -61,7 +61,7 @@ nemo_domain:
   # Required fields:
   #   name        : identifier, used in output filenames and namelist names
   #   enabled     : skip this entry if false
-  #   processor   : BathymetryProcessor subclass name (registered in components/nemo/domain/pipeline.py)
+  #   processor   : BathymetryProcessor class name (PROCESSORS in components/nemo/bathymetry, EOCENE_PROCESSORS in paleo/eocene/bathymetry.py)
   #   source_file : path to source NetCDF ({input}, {herold}, {output_dir} and aliases as placeholders)
   #
   # All algorithm choices (variable, mask_type, remap_method, etc.) live in the

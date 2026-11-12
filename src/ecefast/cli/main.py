@@ -1,7 +1,7 @@
 """The ``ecefast`` command: argument parsing only.
 
 Commands: ``ecefast eocene run -c CONFIG [--steps a,b] [--dry-run] [--overwrite] [-l LEVEL]``,
-``ecefast eocene steps`` and ``ecefast nemo-domain -c CONFIG``.
+``ecefast eocene steps`` and ``ecefast nemo domain -c CONFIG [--bathymetry NAME ...] [-l LEVEL]``.
 """
 
 import argparse
@@ -11,7 +11,7 @@ from ecefast import __version__
 
 SUBCOMMANDS = {
     "eocene": "Eocene (DeepMIP) modifications of OIFS, NEMO, OASIS and runoff-mapper input",
-    "nemo-domain": "NEMO domain pipeline (coordinates, bathymetries, DOMAINcfg namelists)",
+    "nemo": "NEMO tools: the domain pipeline (coordinates, bathymetries, DOMAINcfg, masks)",
 }
 
 
@@ -32,9 +32,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.subcommand == "eocene":
         eocene_main(args.args)
     else:
-        from ecefast.components.nemo.domain.pipeline import main as nemo_domain_main
-
-        nemo_domain_main(args.args)
+        nemo_main(args.args)
 
 
 def eocene_main(argv: list[str]) -> None:
@@ -77,6 +75,42 @@ def eocene_main(argv: list[str]) -> None:
     try:
         run(args.config, select=args.steps, dry_run=args.dry_run, overwrite=args.overwrite)
     except (ConfigError, PipelineError) as e:
+        logger.error("%s", e)
+        sys.exit(1)
+
+
+def nemo_main(argv: list[str]) -> None:
+    """Run ``ecefast nemo domain [args ...]``.
+
+    The domain pipeline gets the generic bathymetry processors merged with the Eocene ones. Exits with code 1,
+    after logging the error, if the configuration is invalid.
+
+    Parameters
+    ----------
+    argv : list of str
+        Arguments after ``ecefast nemo``.
+    """
+    parser = argparse.ArgumentParser(prog="ecefast nemo", description=SUBCOMMANDS["nemo"])
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    domain_parser = commands.add_parser("domain", help="run the NEMO domain pipeline (section nemo_domain)")
+    domain_parser.add_argument("-c", "--config", required=True, help="configuration file with a 'nemo_domain' section")
+    domain_parser.add_argument(
+        "--bathymetry", nargs="+", metavar="NAME", help="run only these bathymetries (default: all enabled ones)"
+    )
+    domain_parser.add_argument("-l", "--loglevel", default="INFO", help="log level (DEBUG, INFO, WARNING, ...)")
+
+    args = parser.parse_args(argv)
+
+    from ecefast.components.nemo.bathymetry import PROCESSORS
+    from ecefast.components.nemo.domain.pipeline import run
+    from ecefast.core import ConfigError, setup_logger
+    from ecefast.paleo.eocene.bathymetry import EOCENE_PROCESSORS
+
+    logger = setup_logger(level=args.loglevel)
+    try:
+        run(args.config, {**PROCESSORS, **EOCENE_PROCESSORS}, only=args.bathymetry, log_level=args.loglevel)
+    except ConfigError as e:
         logger.error("%s", e)
         sys.exit(1)
 

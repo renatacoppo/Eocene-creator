@@ -41,5 +41,8 @@ jobs:
           ruff check .
           ruff format --check .
 
+      - name: Import contracts (layers, independent components)
+        run: lint-imports
+
       - name: Unit and integration tests
         run: pytest -m "unit or integration"

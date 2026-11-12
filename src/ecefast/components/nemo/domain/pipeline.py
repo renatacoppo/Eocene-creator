@@ -1,57 +1,79 @@
-#!/usr/bin/env python3
 """
 NEMO bathymetry workflow: generates domain configuration files for PALEORCA2.
 
-Each bathymetry source is handled by a BathymetryProcessor subclass that lives
-in bathymetry/.  The YAML entry names the class; all algorithm choices are
-encapsulated in the class.
+Each bathymetry source is handled by a BathymetryProcessor subclass. The YAML entry names the class; all
+algorithm choices are encapsulated in the class. The caller passes the mapping from names to classes (generic
+ones in ``ecefast.components.nemo.bathymetry.PROCESSORS``, paleo ones under ``ecefast.paleo``) and the backend
+that runs DOMAINcfg (``ecefast.tools.ecearth``).
 
 Usage:
-    ecefast nemo-domain --config configs/laptop.yml [--only NAME [NAME ...]]
-    python -m ecefast.components.nemo.domain.pipeline --config configs/laptop.yml [--only NAME [NAME ...]]
+    ecefast nemo domain -c configs/laptop.yml [--bathymetry NAME [NAME ...]]
 
 The pipeline reads the ``nemo_domain`` section of the configuration file (template: ``configs/laptop.tmpl``).
 """
 
-import argparse
 import logging
 import dataclasses
 import os
 
 from ecefast.core.cdo import cdo_version, get_cdo
 from ecefast.core.config import ConfigError, NemoDomain, Paths, load_config
-from ecefast.core.logger import setup_logger
+from ecefast.tools.ecearth import EcEarthTools, get_backend
 from ecefast.components.nemo.common.executor import SubprocessExecutor
 from ecefast.components.nemo.common.util import process_domain_cfg, extract_maskutil, check_files_exist
-from ecefast.components.nemo.bathymetry.present_day import PresentDayBathymetry
+from ecefast.components.nemo.bathymetry.base import BathymetryProcessor
 
-# temporary until task 5.2: components must not import paleo
-from ecefast.paleo.eocene.bathymetry import EoceneBathymetry
-
-# explicit name: this module also runs with `python -m`, where __name__ is "__main__"
-logger = logging.getLogger("ecefast.components.nemo.domain.pipeline")
-
-
-# Registry: maps the processor name used in YAML to the class.
-# Add a new entry here when adding a new processor.
-PROCESSOR_REGISTRY = {
-    "PresentDayBathymetry": PresentDayBathymetry,
-    "EoceneBathymetry": EoceneBathymetry,
-}
+logger = logging.getLogger(__name__)
 
 STAGGERING_OPTIONS = ["T", "F"]
 
 
 class NEMOWorkflow:
-    def __init__(self, config: NemoDomain, paths: Paths, only=None, log_level="INFO"):
+    """The NEMO domain pipeline: coordinates, bathymetries, DOMAINcfg namelists, DOMAINcfg, masks.
+
+    Parameters
+    ----------
+    config : NemoDomain
+        The ``nemo_domain`` section of the configuration.
+    paths : Paths
+        The ``paths`` section: its values are placeholders in ``source_file``.
+    processors : dict
+        Bathymetry processor classes by the ``processor`` name used in ``config.bathymetries``.
+    backend : EcEarthTools
+        Runs DOMAINcfg (step ``domain_cfg``).
+    only : list of str, optional
+        Names of the bathymetries to run (default: all enabled ones).
+    log_level : str
+        Log level of the helper scripts.
+
+    Raises
+    ------
+    ConfigError
+        If ``only`` names an unknown or disabled bathymetry, a selected bathymetry uses an unknown processor, or
+        the ``domain_cfg`` step is on and the backend is not available.
+    """
+
+    def __init__(
+        self,
+        config: NemoDomain,
+        paths: Paths,
+        processors: dict[str, type[BathymetryProcessor]],
+        backend: EcEarthTools,
+        only: list[str] | None = None,
+        log_level: str = "INFO",
+    ):
         output_dir = config.output_dir
         coordsdir = os.path.join(output_dir, "coordinates")
+        outputdir = os.path.join(output_dir, "domain")
         self.paths = {
             "output_dir": output_dir,
             "coordsdir": coordsdir,
             "bathydir": os.path.join(output_dir, "bathymetry"),
-            "outputdir": os.path.join(output_dir, "domain"),
+            "outputdir": outputdir,
             "domaincfg_dir": config.domaincfg_dir or "",
+            # DOMAINcfg namelists, and the raw DOMAINcfg output next to them: domaincfg_dir/DOMAINcfg if set
+            # (HPC), else outputdir
+            "namelist_dir": os.path.join(config.domaincfg_dir, "DOMAINcfg") if config.domaincfg_dir else outputdir,
             # Explicit entry points: pre-existing files consumed by this workflow
             "coords_ori": config.coords_ori,
             "mesh_mask": config.mesh_mask,
@@ -68,9 +90,27 @@ class NEMOWorkflow:
         if only:
             unknown = set(only) - {cfg["name"] for cfg in self.bathymetries}
             if unknown:
-                raise ValueError(f"Unknown bathymetry name(s): {', '.join(sorted(unknown))}")
+                raise ConfigError(
+                    f"Unknown or disabled bathymetry name(s): {', '.join(sorted(unknown))} "
+                    f"(enabled: {', '.join(cfg['name'] for cfg in self.bathymetries)})"
+                )
             self.bathymetries = [cfg for cfg in self.bathymetries if cfg["name"] in only]
 
+        self.processors = processors
+        for cfg in self.bathymetries:
+            if cfg["processor"] not in processors:
+                raise ConfigError(
+                    f"Unknown processor '{cfg['processor']}' for bathymetry '{cfg['name']}' "
+                    f"(known: {', '.join(processors)})"
+                )
+
+        # fail before the first step, not after the bathymetries
+        if self.steps.get("domain_cfg") and not backend.available():
+            raise ConfigError(
+                f"nemo_domain.steps.domain_cfg is on, but DOMAINcfg cannot run with the '{backend.name}' backend on "
+                "this machine. Turn the step off (as on a laptop), or run on Atos with tools.backend: atos."
+            )
+        self.backend = backend
         self.log_level = log_level
         self.cdo = get_cdo()
         self.executor = SubprocessExecutor()
@@ -111,14 +151,11 @@ class NEMOWorkflow:
 
     def _make_processor(self, cfg):
         """Instantiate the processor declared in cfg['processor']."""
-        name = cfg["processor"]
-        cls = PROCESSOR_REGISTRY.get(name)
-        if cls is None:
-            raise ValueError(
-                f"Processor '{name}' not found in PROCESSOR_REGISTRY. "
-                "Add an import and a registry entry in ecefast/components/nemo/domain/pipeline.py."
-            )
-        return cls(cfg, self.paths, self.grids, self.params, self.cdo)
+        return self.processors[cfg["processor"]](cfg, self.paths, self.grids, self.params, self.cdo)
+
+    def domain_dir(self, name: str) -> str:
+        """Directory of the post-processed ``domain_cfg.nc`` and ``maskutil.nc`` of bathymetry ``name``."""
+        return os.path.join(self.paths["outputdir"], self.grids["target"], name)
 
     # ------------------------------------------------------------------
     # Step 1: Coordinates
@@ -166,12 +203,8 @@ class NEMOWorkflow:
 
     def configure_domain_namelists(self):
         """Generate NEMO DOMAINcfg namelist for each enabled bathymetry."""
-        domaincfg_dir = self.paths["domaincfg_dir"]
-        outputdir = self.paths["outputdir"]
         coords = self._target_halo()
-
-        # Write namelists into domaincfg_dir/DOMAINcfg if available (HPC), else outputdir
-        namelist_dir = os.path.join(domaincfg_dir, "DOMAINcfg") if domaincfg_dir else outputdir
+        namelist_dir = self.paths["namelist_dir"]
         os.makedirs(namelist_dir, exist_ok=True)
 
         for cfg in self.bathymetries:
@@ -199,16 +232,14 @@ class NEMOWorkflow:
             )
 
     # ------------------------------------------------------------------
-    # Step 4: Run domain configuration tool (HPC)
+    # Step 4: Run domain configuration tool (through the backend)
     # ------------------------------------------------------------------
 
     def run_domain_cfg(self):
-        """Delegate HPC module loading + compilation + execution to run_domain_cfg.sh."""
-        domaincfg_dir = self.paths["domaincfg_dir"]
+        """Run DOMAINcfg on the namelists with the backend; the raw output lands next to the namelists."""
         names = [cfg["name"] for cfg in self.bathymetries]
-
-        logger.info("Running domain configuration (HPC step)...")
-        self.executor.run_bash_script("domain/run_domain_cfg.sh", [domaincfg_dir] + names)
+        logger.info("Running DOMAINcfg with the '%s' backend...", self.backend.name)
+        self.backend.domaincfg(self.paths["namelist_dir"], names)
 
     # ------------------------------------------------------------------
     # Step 5: Post-process domain_cfg + extract maskutil
@@ -216,14 +247,11 @@ class NEMOWorkflow:
 
     def generate_mask_util(self):
         """Post-process domain_cfg.nc and extract maskutil.nc for each bathymetry."""
-        domaincfg_dir = self.paths["domaincfg_dir"]
-        outputdir = self.paths["outputdir"]
-        tgt = self.grids["target"]
-        src_dir = os.path.join(domaincfg_dir, "DOMAINcfg")
+        src_dir = self.paths["namelist_dir"]
 
         for cfg in self.bathymetries:
             name = cfg["name"]
-            tgt_dir = os.path.join(outputdir, tgt, name)
+            tgt_dir = self.domain_dir(name)
             logger.info("Processing domain_cfg and mask util for %s -> %s", name, tgt_dir)
 
             # Process domain_cfg: rename vertical dimension
@@ -242,10 +270,7 @@ class NEMOWorkflow:
         Calls the domain/subbasins.py script for each bathymetry.
         Only applicable to PresentDayBathymetry processor.
         """
-        domaincfg_dir = self.paths["domaincfg_dir"]
-        outputdir = self.paths["outputdir"]
-        tgt = self.grids["target"]
-        src_dir = os.path.join(domaincfg_dir, "DOMAINcfg")
+        src_dir = self.paths["namelist_dir"]
 
         for cfg in self.bathymetries:
             name = cfg["name"]
@@ -256,7 +281,7 @@ class NEMOWorkflow:
                 logger.info("Skipping subbasins for %s (only applicable to present-day)", name)
                 continue
 
-            tgt_dir = os.path.join(outputdir, tgt, name)
+            tgt_dir = self.domain_dir(name)
             logger.info("Generating subbasin masks for %s -> %s", name, tgt_dir)
 
             self.executor.run_python_script(
@@ -288,7 +313,7 @@ class NEMOWorkflow:
         if self.steps.get("generate_mask"):
             logger.info("=== Step: Generate Mask Util ===")
             # Check that domain_cfg files exist
-            src_dir = os.path.join(self.paths["domaincfg_dir"], "DOMAINcfg")
+            src_dir = self.paths["namelist_dir"]
             check_files_exist(
                 src_dir, self.bathymetries, ["domain_cfg_{name}.nc", "mesh_mask_{name}.nc"], "generate_mask"
             )
@@ -297,36 +322,40 @@ class NEMOWorkflow:
         if self.steps.get("generate_subbasins"):
             logger.info("=== Step: Generate Subbasin Masks ===")
             # Check that mesh_mask files exist
-            src_dir = os.path.join(self.paths["domaincfg_dir"], "DOMAINcfg")
+            src_dir = self.paths["namelist_dir"]
             check_files_exist(src_dir, self.bathymetries, ["mesh_mask_{name}.nc"], "generate_subbasins")
             self.generate_subbasins()
 
         logger.info("Workflow complete.")
 
 
-def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="NEMO bathymetry workflow")
-    parser.add_argument("-c", "--config", required=True, help="configuration file with a 'nemo_domain' section")
-    parser.add_argument(
-        "--only",
-        nargs="+",
-        metavar="NAME",
-        help="Run only the specified bathymetry name(s) (e.g. --only present_day eocene)",
-    )
-    parser.add_argument(
-        "-l", "--log-level", default="INFO", metavar="LEVEL", help="Logging level: DEBUG, INFO, WARNING (default: INFO)"
-    )
-    args = parser.parse_args(argv)
+def run(
+    config_file: str,
+    processors: dict[str, type[BathymetryProcessor]],
+    only: list[str] | None = None,
+    log_level: str = "INFO",
+) -> None:
+    """Run the NEMO domain pipeline of a configuration file, with the backend of ``tools.backend``.
 
-    setup_logger(args.log_level)
+    Parameters
+    ----------
+    config_file : str
+        Configuration file with a ``nemo_domain`` section.
+    processors : dict
+        Bathymetry processor classes by name (see :class:`NEMOWorkflow`).
+    only : list of str, optional
+        Names of the bathymetries to run (default: all enabled ones).
+    log_level : str
+        Log level of the helper scripts.
+
+    Raises
+    ------
+    ConfigError
+        If the configuration has no ``nemo_domain`` section, or see :class:`NEMOWorkflow`.
+    """
     logger.info("CDO version: %s", cdo_version())
-
-    config = load_config(args.config)
+    config = load_config(config_file)
     if config.nemo_domain is None:
-        raise ConfigError(f"{args.config}: the NEMO domain pipeline needs a 'nemo_domain' section")
-
-    NEMOWorkflow(config.nemo_domain, config.paths, only=args.only, log_level=args.log_level).run()
-
-
-if __name__ == "__main__":
-    main()
+        raise ConfigError(f"{config_file}: the NEMO domain pipeline needs a 'nemo_domain' section")
+    backend = get_backend(config)
+    NEMOWorkflow(config.nemo_domain, config.paths, processors, backend, only=only, log_level=log_level).run()

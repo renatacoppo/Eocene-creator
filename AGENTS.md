@@ -53,7 +53,8 @@ ecefast eocene run -c configs/laptop.yml --overwrite     # all steps; --overwrit
 ecefast eocene run -c configs/laptop.yml --steps nemo -l DEBUG   # some steps, on an existing output
 ecefast eocene run -c configs/laptop.yml --dry-run       # check all inputs, show the plan, write nothing
 ecefast eocene steps                                     # list the steps (needs, reads, writes)
-ecefast nemo-domain -c configs/laptop.yml                # NEMO domain pipeline (section nemo_domain)
+ecefast nemo domain -c configs/laptop.yml                # NEMO domain pipeline (section nemo_domain)
+ecefast nemo domain -c configs/laptop.yml --bathymetry eocene   # only some bathymetries
 
 # checks before pushing
 ruff check --fix . && ruff format .                             # (from phase 1)
@@ -185,9 +186,10 @@ the docs.
   `eocene.oifs.aerosols: false`, `eocene.oasis.constant_sst: 290.0`). Do not delete
   disabled code paths such as aerosols; switch them off in config.
 - **Vertical grid rule.** The present-day and Eocene PALEORCA2 domains must share the vertical
-  grid (`nav_lev`, `e3t_1d`). `EoceneNEMO` reads the present-day domain from the input tree on
-  purpose; do not change which domain it reads. The check in `EoceneDomain` / `verify` must fail
-  on a mismatch, never warn.
+  grid: the same number of levels, and `nav_lev`, `e3t_1d` equal within 1e-6 m (a tolerance for
+  floating-point rounding between DOMAINcfg builds, `VERTICAL_GRID_ATOL`). `EoceneNEMO` reads the
+  present-day domain from the input tree on purpose; do not change which domain it reads. The
+  check in `EoceneDomain` / `verify` is a hard error on a mismatch, never a warning.
 - **CDO.** CDO is not pinned and not part of `environment.yaml`: use the most recent release
   available on each machine (Homebrew on macOS, conda-forge `cdo` on Linux and in CI, the module
   on the HPC). `EOCENE-BASELINE/BASELINE.txt` records the exact CDO version of the baseline, and

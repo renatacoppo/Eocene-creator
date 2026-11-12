@@ -46,7 +46,7 @@ A dry run checks everything and logs the plan, one line per step with what it wr
    INFO -> CDO version: 2.6.4
    INFO -> Dry run: nothing is written. Plan:
    INFO ->   stage   Copy base files from the input tree to the output tree.  → EOCENE-TEST/oifs, EOCENE-TEST/nemo, EOCENE-TEST/oasis/PALEORCA2
-   INFO ->   domain  Install the precomputed Eocene NEMO domain and check its vertical grid.  → EOCENE-TEST/nemo/domain/PALEORCA2/domain_cfg.nc, ...
+   INFO ->   domain  Install the Eocene NEMO domain (precomputed, or built with the backend) and check its vertical grid.  → EOCENE-TEST/nemo/domain/PALEORCA2/domain_cfg.nc, ...
    INFO ->   oasis   Write the OASIS restart rstos.nc: no sea ice, constant SST.  → EOCENE-TEST/oasis/PALEORCA2/rstos.nc
    INFO ->   oifs    Modify the OIFS initial and climate files for the Eocene (Herold et al. 2014).  → EOCENE-TEST/oifs/TL63L31/19900101/ICMGGECE4INIT, ...
    INFO ->   nemo    Modify NEMO input files for the Eocene: tidal mixing, geothermal flux, ocean initial state, runoff.  → EOCENE-TEST/nemo/initial/zdfiwm_forcing_r720x360.nc, ...
@@ -83,12 +83,18 @@ The Eocene steps
    Copies the base files from the input tree to the output tree; see :ref:`stage-step`.
 
 ``domain`` (``EoceneDomain``)
-   Needs ``stage``. Copies ``domain_cfg.nc`` and ``maskutil.nc`` from ``tools.precomputed.domain`` to
-   ``{output}/nemo/domain/{nemo_grid}/``, then checks the vertical grid rule: ``nav_lev`` and ``e3t_1d`` of the
-   installed Eocene domain must equal those of the present-day ``{input}/nemo/domain/{nemo_grid}/domain_cfg.nc``.
-   On a mismatch the pipeline stops with an error naming both files and their number of levels.
-   Why: ``nemo`` builds the ocean initial state on the present-day levels. The files in
-   ``tools.precomputed.domain`` are checked when the step starts, not in the preflight.
+   Needs ``stage``. Installs ``domain_cfg.nc`` and ``maskutil.nc`` in ``{output}/nemo/domain/{nemo_grid}/``.
+   Where they come from depends on ``tools.backend`` (:doc:`external_tools`): with ``local`` they are copied from
+   ``tools.precomputed.domain``; with ``atos`` or ``fake`` the step first runs the NEMO domain pipeline (below) for
+   the ``eocene`` bathymetry, with the steps of ``nemo_domain.steps``, and copies its output
+   ``{nemo_domain.output_dir}/domain/{nemo_grid}/eocene/``. Then it checks the vertical grid rule: the installed Eocene domain must have the
+   same number of levels as the present-day one, and ``nav_lev`` and ``e3t_1d`` within 1e-6 m (rounding) of the
+   present-day
+   ``{input}/nemo/domain/{nemo_grid}/domain_cfg.nc``. On a mismatch the pipeline stops with an error naming both
+   files and their number of levels. Why: ``nemo`` builds the ocean initial state on the present-day levels.
+   ``reads`` lists only the present-day domain: what else the step reads depends on the backend, which a
+   class-level list cannot express, so the precomputed files (``local``) and the ``nemo_domain`` section
+   (``atos``, ``fake``) are checked when the step starts, not in the preflight.
 
 ``oasis`` (``EoceneOASIS``)
    Needs ``stage``. Reads ``{input}/oasis/{nemo_grid}/rstos.nc``, writes ``{output}/oasis/{nemo_grid}/rstos.nc``:
@@ -122,6 +128,34 @@ The Eocene steps
    ``arrival_point_id`` (no ice sheets in the Eocene).
 
 ``ecefast eocene steps`` prints the exact ``needs``, ``reads`` and ``writes`` of each step.
+
+NEMO domain pipeline
+--------------------
+
+``ecefast nemo domain`` builds NEMO domains from bathymetries, following the ``nemo_domain``
+section of the configuration (:doc:`configuration`):
+
+.. code-block:: bash
+
+   ecefast nemo domain -c configs/laptop.yml                        # every enabled bathymetry
+   ecefast nemo domain -c configs/laptop.yml --bathymetry eocene    # only some of them
+   ecefast nemo domain -c configs/laptop.yml -l DEBUG               # more logging
+
+Its steps, each switched on or off in ``nemo_domain.steps``: ``coordinates`` (PALEORCA2 without
+halo, cell bounds), ``bathymetry`` (one processor per bathymetry, named by ``processor``),
+``configure_domain`` (one DOMAINcfg namelist per bathymetry), ``domain_cfg`` (DOMAINcfg, through
+the backend of ``tools.backend``, see :doc:`external_tools`), ``generate_mask``
+(``domain_cfg.nc`` and ``maskutil.nc`` per bathymetry) and ``generate_subbasins`` (present-day
+only). On a laptop the last three are off. Details of each step are in
+``src/ecefast/components/nemo/domain/NEMO_WORKFLOW_STEPS.md``.
+
+Bathymetry processors are found by name in a plain mapping: the generic ones in
+``ecefast.components.nemo.bathymetry.PROCESSORS`` (``PresentDayBathymetry``), the Eocene ones in
+``ecefast.paleo.eocene.bathymetry.EOCENE_PROCESSORS`` (``EoceneBathymetry``). The command passes
+both to :class:`~ecefast.components.nemo.domain.pipeline.NEMOWorkflow`; the NEMO component never
+imports ``paleo``. A ``processor`` name that is in neither is an error listing the known ones. To
+add a paleo bathymetry, subclass ``BathymetryProcessor`` under ``ecefast/paleo/<period>/``, export
+it in a mapping like ``EOCENE_PROCESSORS`` and merge that mapping where the pipeline is built.
 
 Writing a step
 --------------

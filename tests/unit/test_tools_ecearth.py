@@ -18,11 +18,11 @@ from ecefast.components.nemo.domain import namelist as namelist_script
 from ecefast.core.config import ConfigError, load_config
 from ecefast.tools import ecearth
 from ecefast.tools.ecearth import AtosBackend, FakeBackend, LocalBackend, get_backend
+from synthetic import NX, NY, write_domain_inputs
 
 pytestmark = pytest.mark.unit
 
 L31 = Path(ecearth.__file__).parents[1] / "components" / "nemo" / "grids" / "L31.txt"
-NY, NX = 6, 8
 
 
 def config_file(tmp_path: Path, tools: dict | None = None) -> Path:
@@ -165,25 +165,7 @@ def test_local_backend_error(tmp_path: Path) -> None:
 @pytest.fixture
 def namelist_dir(tmp_path: Path) -> Path:
     """A namelist_cfg_test rendered by the pipeline's namelist script, with synthetic bathymetry and coordinates."""
-    lon = np.linspace(0, 315, NX)[None].repeat(NY, axis=0)
-    lat = np.linspace(-60, 60, NY)[:, None].repeat(NX, axis=1)
-    coords = {}
-    for point, shift in zip("tuvf", (0.0, 0.5, 0.0, 0.5)):
-        coords[f"glam{point}"] = (("y", "x"), lon + shift)
-        coords[f"gphi{point}"] = (("y", "x"), lat + shift)
-        coords[f"e1{point}"] = (("y", "x"), np.full((NY, NX), 2.0e5))
-        coords[f"e2{point}"] = (("y", "x"), np.full((NY, NX), 2.0e5))
-    xr.Dataset(coords).to_netcdf(tmp_path / "coords_halo.nc")
-
-    depth = np.full((NY, NX), 4000.0)
-    depth[:, :2] = 0.0  # a land strip
-    depth[2, 4] = 50.0  # shallow point: five T levels
-    depth[3, 5] = np.nan  # missing value = land
-    xr.Dataset(
-        {"bathy_metry": (("time_counter", "y", "x"), depth[None])},
-        coords={"lon": (("y", "x"), lon), "lat": (("y", "x"), lat)},
-    ).to_netcdf(tmp_path / "bathy.nc")
-
+    write_domain_inputs(tmp_path / "coords_halo.nc", tmp_path / "bathy.nc")
     out = tmp_path / "DOMAINcfg"
     out.mkdir()
     args = argparse.Namespace(
