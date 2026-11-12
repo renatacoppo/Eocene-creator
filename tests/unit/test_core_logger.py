@@ -23,7 +23,7 @@ def test_setup_logger_returns_ecefast_logger_with_level(clean_logger) -> None:
     logger = setup_logger("debug")
     assert logger.name == "ecefast"
     assert logger.level == logging.DEBUG
-    assert logging.getLogger("ecefast.paleo.eocene.oifs.utils").getEffectiveLevel() == logging.DEBUG
+    assert logging.getLogger("ecefast.paleo.eocene.oifs.fields").getEffectiveLevel() == logging.DEBUG
 
 
 def test_setup_logger_twice_keeps_one_handler(clean_logger) -> None:

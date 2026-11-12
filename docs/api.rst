@@ -3,6 +3,13 @@ API reference
 
 Generated from the docstrings.
 
+Core
+----
+
+.. automodule:: ecefast.core.grib
+   :members:
+   :undoc-members:
+
 OIFS
 ----
 

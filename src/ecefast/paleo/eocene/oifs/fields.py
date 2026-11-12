@@ -1,6 +1,5 @@
-"""Some utilities for OIFS grid definition"""
+"""Eocene OIFS field operations: change, replace, zero or truncate fields in GRIB files."""
 
-import re
 import os
 import tempfile
 import shutil
@@ -10,14 +9,11 @@ import xarray as xr
 import xesmf as xe
 import subprocess
 from ecefast.core.cdo import get_cdo
+from ecefast.core.grib import GRIB1, GRIB2, NC4
+from ecefast.core.grib import count_grib_messages, detect_grib_version, repack_grib_file, unpack_grib_file
 
 
 logger = logging.getLogger(__name__)
-
-# CDO grib2 options
-GRIB2 = "-f grb2 --eccodes"
-GRIB1 = "-f grb1 --eccodes"
-NC4 = "-f nc4 --eccodes"
 
 
 def nullify_grib(
@@ -218,15 +214,6 @@ def truncate_grib_file(inputfile, outputfile, variables, orig=63, trunc=1):
     subprocess.run(["grib_copy", compact, temp_path, outputfile], check=True)
 
 
-def detect_grib_version(filepath):
-    """Detect the GRIB version of a file."""
-    with open(filepath, "rb") as f:
-        header = f.read(8)  # read enough bytes
-        if header[:4] != b"GRIB":
-            return None  # Not a GRIB file
-        return header[7]  # Edition number (1 or 2)
-
-
 def replace_field(
     inputfile: str,
     singlefile: str,
@@ -342,30 +329,6 @@ def replace_value(field, var, newfield):
     return field
 
 
-def extract_grid_info(string):
-    """Extract grid info from a string"""
-    string = string.upper()
-    pattern = r"T(CO|L)(\d+)L(\d+)"
-    match = re.match(pattern, string)
-    if match:
-        grid_type = match.group(1)
-        spectral = int(match.group(2))
-        num_levels = int(match.group(3))
-        return grid_type, spectral, num_levels
-
-    return None
-
-
-def spectral2gaussian(spectral, kind):
-    """Convert spectral resolution to gaussian"""
-    if kind.upper() == "CO":
-        return int(spectral) + 1
-    if kind == "L":
-        return int((int(spectral) + 1) / 2)
-
-    raise ValueError("Unknown grid type")
-
-
 def regrid_dataset(data, regrid_to_reference, method="remapbil"):
     """
     Regrid a DataArray or Dataset to the grid of a reference object using CDO.
@@ -414,50 +377,6 @@ def regrid_dataset(data, regrid_to_reference, method="remapbil"):
         return ds_out[varname]
     else:
         return ds_out
-
-
-def unpack_grib_file(inputfile, tmpfile):
-    """
-    Unpack a GRIB file using grib_copy.
-    This is used to split the GRIB messages into GRIB1 and GRIB2.
-    """
-    logger.info(f"Unpacking GRIB file {inputfile} into {tmpfile}_grib1 and {tmpfile}_grib2")
-    subprocess.run(["grib_copy", "-w", "edition=1", inputfile, f"{tmpfile}_grib1"], check=True)
-    subprocess.run(["grib_copy", "-w", "edition=2", inputfile, f"{tmpfile}_grib2"], check=True)
-    return f"{tmpfile}_grib1", f"{tmpfile}_grib2"
-
-
-def repack_grib_file(grib1, grib2, outputfile, clean=True):
-    """
-    Repack a GRIB file using grib_copy.
-    This is used to merge the GRIB1 and GRIB2 files back together.
-    """
-    if os.path.exists(outputfile):
-        os.remove(outputfile)
-    if not os.path.exists(grib1):
-        logger.info(f"Repacking GRIB file {grib2} into {outputfile}")
-        subprocess.run(["grib_copy", grib2, outputfile], check=True)
-    elif not os.path.exists(grib2):
-        logger.info(f"Repacking GRIB file {grib1} into {outputfile}")
-        subprocess.run(["grib_copy", grib1, outputfile], check=True)
-    else:
-        logger.info(f"Repacking GRIB file {grib1} and {grib2} into {outputfile}")
-        subprocess.run(["grib_copy", grib1, grib2, outputfile], check=True)
-
-    # cleanup
-    if clean:
-        for file in [grib1, grib2]:
-            if os.path.exists(file):
-                logger.debug(f"Removing temporary file {file}")
-                os.remove(file)
-
-
-def count_grib_messages(inputfile):
-    """Return the number of messages in a GRIB file."""
-    result = subprocess.run(["grib_count", inputfile], check=True, capture_output=True, text=True)
-    n = int(result.stdout.strip())
-    logger.debug(f"{inputfile} contains {n} messages")
-    return n
 
 
 def flatten_grib_steps(inputfile, n_messages=None):
