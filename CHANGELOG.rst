@@ -16,6 +16,8 @@ Added
 ~~~~~
 
 - ``AGENTS.md``: rules for contributors and coding agents; ``CLAUDE.md`` imports it (#17).
+- ``scripts/compare_outputs.py``: compares a run with the frozen baseline (NetCDF within
+  ``rtol=1e-6``, GRIB with ``grib_compare``), with a self-test (#20).
 - ``CHANGELOG.rst`` (#17).
 - ``get_ece4_data.sh``: fetches the OIFS TL63L31, NEMO PALEORCA2, OASIS PALEORCA2 and
   runoff-mapper subset of ECE4-DATA-V3 for local runs (#17).
@@ -32,6 +34,7 @@ Changed
   table; ``data/`` is ignored (#16).
 - ``EoceneNEMO.create_ocean_init`` defaults to ``profile=None``, which builds both ocean initial
   files (``deepmip_cold`` and ``woa_pi``); the ``eocene`` CLI calls it without arguments (#19).
+- ``get_ece4_data.sh`` also fetches ``nemo/domain/eORCA1/domain_cfg.nc`` (#20).
 
 Output
 ~~~~~~
