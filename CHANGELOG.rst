@@ -15,6 +15,9 @@ Unreleased
 Added
 ~~~~~
 
+- ``docs/overview.rst``, the first page of the docs: what the tool does, inputs and outputs, a schematic
+  of the Eocene workflow and of the NEMO domain pipeline with what each step changes and writes, and
+  where each part runs (pushed to ``refactor``).
 - ``tests/hpc/test_domaincfg_contract.py``: checks on Atos that the ``fake`` backend has the structure of
   the real DOMAINcfg output; checklist for a run on Atos in ``docs/external_tools.rst`` (#44).
 - Tutorial notebooks in ``notebooks/tutorials/`` (``01_quickstart``, ``02_oifs``, ``03_nemo``,

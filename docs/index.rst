@@ -5,13 +5,14 @@ ecefast
 and modifies it for Eocene (DeepMIP) boundary conditions, starting from the ECE4-DATA-V3 tree
 and the Herold et al. (2014) paleo datasets.
 
-The code is being restructured into a single ``ecefast`` package; until then the Eocene
-workflow is run with the ``eocene`` command described in :doc:`quickstart`.
+Start with the :doc:`overview` (what the tool does, step by step), then :doc:`installation`
+and :doc:`quickstart`.
 
 .. toctree::
    :maxdepth: 2
    :caption: User guide
 
+   overview
    installation
    quickstart
    configuration
