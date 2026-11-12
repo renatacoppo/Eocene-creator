@@ -119,6 +119,47 @@ passes it.
 
 Use it to test the workflow, never to produce a domain for EC-Earth.
 
+.. _atos-checklist:
+
+Checking a new setup on Atos
+----------------------------
+
+Coding agents and CI cannot run on Atos, so a person checks each new setup (and the refactor
+before it reaches ``main``) by hand. You need:
+
+- the repository (on the branch to check) and the ``eocene`` environment, created from
+  ``environment.yaml`` with ``pip install -e ".[dev]"``. For CDO use conda-forge ``cdo`` in that
+  environment with the version recorded in ``EOCENE-BASELINE/BASELINE.txt`` (or the module, if you do
+  not compare with the baseline): a different CDO changes the remapped bathymetries;
+- the inputs: the ECE4-DATA-V3 tree, the Herold et al. (2014) ``Supp/`` folder, the PALEORCA2
+  ``coords_ori.nc`` and the eORCA1 ``mesh_mask.nc``;
+- an EC-Earth4 build: the NEMO tools directory holding ``maketools`` (``nemo_domain.domaincfg_dir``)
+  and the OASIS library directory (``tools.atos.oasis_lib_dir``);
+- the modules of the ``atos`` profile in ``src/ecefast/tools/hpc_profiles.yaml``: check that each
+  one is still available (``module avail <name>``) and update the profile if one was retired;
+- ``configs/atos.yml``, copied from ``configs/atos.tmpl`` with the paths set.
+
+Run on an interactive or batch node, not on a login node:
+
+.. code-block:: bash
+
+   ecefast eocene run -c configs/atos.yml --dry-run    # every input found, plan shown
+   ecefast nemo domain -c configs/atos.yml             # DOMAINcfg through the atos backend
+   ECEFAST_HPC_DOMAINCFG_DIR=/path/to/nemo-4.2/tools/DOMAINcfg pytest -m hpc tests/hpc
+   ecefast eocene run -c configs/atos.yml --overwrite  # full run, Eocene domain built here
+
+The ``hpc`` test checks that the ``fake`` backend still has the structure of the real DOMAINcfg
+output (variables, dimensions, dtypes, 1-D vertical grid). Then compare the results:
+
+- the Eocene ``domain_cfg.nc`` of ``ecefast nemo domain`` with the reference Eocene domain
+  (``tools.precomputed.domain`` on a laptop);
+- the output of the full run with the baseline:
+  ``python scripts/compare_outputs.py EOCENE-BASELINE/eocene /path/to/output``. The baseline installs
+  the precomputed domain, so differences in ``nemo/domain/`` mean the domain built on Atos differs
+  from it.
+
+Report in the pull request what ran and what differed.
+
 API
 ---
 
