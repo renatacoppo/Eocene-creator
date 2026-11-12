@@ -2,8 +2,7 @@
 # run_domain_cfg.sh <domaincfg_dir> <name1> [name2 ...]
 #
 # HPC-only block: module loading, compilation, and execution of the NEMO
-# DOMAINcfg tool. Called by ecefast.tools.ecearth.AtosBackend (and, until task 5.2, directly by
-# ecefast/components/nemo/domain/pipeline.py).
+# DOMAINcfg tool. Called by ecefast.tools.ecearth.AtosBackend.
 # Module loading must live here — it cannot propagate back to a Python parent process.
 
 set -euo pipefail

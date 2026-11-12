@@ -28,3 +28,8 @@ class EoceneBathymetry(BathymetryProcessor):
     remap_method = "remapbil"
     output_prefix = "HEROLD"
     # setgrid is None — source file already carries a proper grid description
+
+
+# Eocene processors by the name used in nemo_domain.bathymetries; merged with
+# ecefast.components.nemo.bathymetry.PROCESSORS by the callers of NEMOWorkflow
+EOCENE_PROCESSORS: dict[str, type[BathymetryProcessor]] = {"EoceneBathymetry": EoceneBathymetry}

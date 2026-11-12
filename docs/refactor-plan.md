@@ -50,7 +50,7 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 | 4.3 ✅ | `EoceneOASIS`, new `EoceneRNFM` | `paleo/eocene/oasis.py`, `rnfm.py` | 4.0 | ‖ 4.1, 4.2, 5.1 |
 | 4.4 ✅ | `pipeline.py`, `ecefast eocene run`, provenance, remove `cli/eocene.py`, `workflow.rst` | `cli/`, `paleo/eocene/pipeline.py` | 4.1–4.3 | serial |
 | 5.1 ✅ | `tools/ecearth.py` (atos, local, fake), `hpc_profiles.yaml`, `run_domain_cfg.sh` without paths | `tools/` | 3.0 | ‖ wave 4 |
-| 5.2 | Bathymetry registry, backend in the domain pipeline, `ecefast nemo domain`, `EoceneDomain` uses the backend, import-linter | `components/nemo/domain/`, `cli/` | 5.1, 4.4 | serial |
+| 5.2 ✅ | Bathymetry registry, backend in the domain pipeline, `ecefast nemo domain`, `EoceneDomain` uses the backend, import-linter | `components/nemo/domain/`, `cli/` | 5.1, 4.4 | serial |
 | 5.3 | Subbasins for every bathymetry, check notebook (**output change**) | subbasins code, `notebooks/analysis/` | 5.2 | ‖ 5.4, 6.2 |
 | 5.4 | Remaining hardcoded paths (WEIGHTS namelists → placeholders), grep check in CI | scattered, `components/nemo/namelists/` | 5.2 | ‖ 5.3, 6.2 |
 | 6.1 | Synthetic fixtures (declared reads only), integration tests, `verify` checks | `tests/integration/`, `paleo/eocene/verify.py` | 5.2 | ‖ 6.3 |
@@ -230,14 +230,14 @@ Done when: `pip install -e .` works; both baselines match; CI green.
 
 ## Phase 5: external tools and domain pipeline (PR, output change)
 
-- [ ] `tools/ecearth.py`: `AtosBackend` (wraps `run_domain_cfg.sh`, HPC profile from `tools/hpc_profiles.yaml`),
+- [x] `tools/ecearth.py`: `AtosBackend` (wraps `run_domain_cfg.sh`, HPC profile from `tools/hpc_profiles.yaml`),
       `LocalBackend` (installs `tools.precomputed.domain`), `FakeBackend` (minimal valid `domain_cfg.nc` + `mesh_mask.nc`).
-- [ ] Bathymetry registry; `present_day` and `eocene` registered; the domain pipeline no longer imports `paleo`.
-- [ ] `NEMOWorkflow` takes the backend; `EoceneDomain` calls it with `bathymetry="eocene"`.
+- [x] Bathymetry registry; `present_day` and `eocene` registered; the domain pipeline no longer imports `paleo`.
+- [x] `NEMOWorkflow` takes the backend; `EoceneDomain` calls it with `bathymetry="eocene"`.
 - [ ] Subbasins for every bathymetry. **Output change**: Eocene subbasins file added. Checked by eye in a notebook,
       listed in the PR and under *Output*; baseline regenerated after merge.
-- [ ] `ecefast nemo domain -c ... --bathymetry present_day eocene`.
-- [ ] import-linter contract in CI.
+- [x] `ecefast nemo domain -c ... --bathymetry present_day eocene`.
+- [x] import-linter contract in CI.
 - [ ] No hardcoded `/lus`, `/home`, `/ec`, `/Users` paths left outside the OIFS generator (flagged for later); WEIGHTS namelists get placeholders, nothing else changes in them.
 
 ## Phase 6: CI integration tests and tutorials (PR)
@@ -263,6 +263,9 @@ Done when: CI runs end to end in a few minutes.
 - WEIGHTS driver (`tools.ecearth.weights()`, templated namelists).
 - OIFS generator: constants → config, pipeline, tests.
 - Finer steps, other HPC profiles, new palaeo periods under `paleo/`.
+- Vertical grid check (`EoceneDomain`) compares exactly: the fake backend's `e3t_1d` differs from the real PALEORCA2
+  L31 one by ~1e-12 m (NumPy vs Fortran), so `ecefast eocene run` with `fake` fails on the real tree; a new DOMAINcfg
+  build on Atos may differ the same way. Decide on a tolerance (scientific choice, both authors) (found in 5.2).
 - `create_ocean_init`/`create_runoff` hardcode `PALEORCA2`: follow `grids.nemo` (found in #33).
 - Dead code to remove or fix: `vegetation.prepare_vegetation` (undefined `NC4`), `EoceneOIFS.create_sic`/`create_sst`
   (undefined `idir_amip`), `fields.modify_grib` (unused) (found in #25, #34).

@@ -11,11 +11,16 @@ asks the backend to run DOMAINcfg; every backend leaves the raw ``domain_cfg_<na
 ``mesh_mask_<name>.nc`` next to the namelists, which the pipeline then post-processes into
 ``domain_cfg.nc`` and ``maskutil.nc``.
 
-.. note::
+Two commands use the backend of ``tools.backend``:
 
-   The domain pipeline (``ecefast nemo-domain``) does not use the backends yet: it still calls
-   ``run_domain_cfg.sh`` directly when ``nemo_domain.steps.domain_cfg`` is on. It switches to
-   :func:`~ecefast.tools.ecearth.get_backend` in a later step of the refactor.
+- ``ecefast nemo domain`` (the domain pipeline): its ``domain_cfg`` step runs DOMAINcfg through
+  the backend. If the step is on and the backend is not available (``local``, or ``atos`` off
+  Atos), the pipeline stops before its first step; on a laptop the step is off.
+- the ``domain`` step of ``ecefast eocene run``: with ``local`` it installs the domain of
+  ``tools.precomputed.domain``; with ``atos`` or ``fake`` it builds the Eocene domain with the
+  domain pipeline (bathymetry ``eocene`` only, the steps of ``nemo_domain.steps``) and installs
+  the post-processed ``domain_cfg.nc`` and ``maskutil.nc``. The vertical grid check runs in both
+  cases (see :doc:`workflow`).
 
 Backends
 --------
@@ -35,8 +40,9 @@ Select the backend with ``tools.backend`` (see :doc:`configuration`):
        it once per bathymetry (``run_domain_cfg.sh``).
    * - ``local``
      - laptop, workstation (default)
-     - Nothing: DOMAINcfg is not available. Use the Eocene domain built on Atos, given with
-       ``tools.precomputed.domain``. Asking it to run DOMAINcfg stops with an error that says so.
+     - Nothing: DOMAINcfg is not available. The ``domain`` step uses the Eocene domain built on
+       Atos, given with ``tools.precomputed.domain``. Asking it to run DOMAINcfg stops with an
+       error that says so.
    * - ``fake``
      - tests, CI
      - Writes small but valid raw outputs with the structure of DOMAINcfg's, without running
@@ -60,7 +66,7 @@ The namelists must be in the ``DOMAINcfg/`` folder of the NEMO tools directory
 
 .. code-block:: bash
 
-   bash run_domain_cfg.sh <nemo tools dir> <name> [<name> ...]
+   bash src/ecefast/tools/run_domain_cfg.sh <nemo tools dir> <name> [<name> ...]
 
 which
 
@@ -105,6 +111,12 @@ What it does **not** do, so its numbers are not those of DOMAINcfg:
 - no north-fold treatment of the masks (periodic in ``x``, closed at the last row);
 - no ``gdept_0`` / ``gdepw_0`` and no ``DOMAIN_*`` global attributes;
 - other vertical grid definitions (``ppdzmin``/``pphmax``, double tanh) are refused.
+
+Its ``e3t_1d`` differs from the one of the real PALEORCA2 L31 domain by rounding (about 1e-12 m:
+NumPy and the Fortran build evaluate the same formula), while ``nav_lev`` is equal. The vertical
+grid check of the Eocene ``domain`` step compares exactly, so ``ecefast eocene run`` with
+``tools.backend: fake`` on the real input tree stops at that check; on synthetic trees, whose
+present-day domain comes from the fake backend too, it passes.
 
 Use it to test the workflow, never to produce a domain for EC-Earth.
 

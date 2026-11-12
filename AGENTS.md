@@ -53,7 +53,8 @@ ecefast eocene run -c configs/laptop.yml --overwrite     # all steps; --overwrit
 ecefast eocene run -c configs/laptop.yml --steps nemo -l DEBUG   # some steps, on an existing output
 ecefast eocene run -c configs/laptop.yml --dry-run       # check all inputs, show the plan, write nothing
 ecefast eocene steps                                     # list the steps (needs, reads, writes)
-ecefast nemo-domain -c configs/laptop.yml                # NEMO domain pipeline (section nemo_domain)
+ecefast nemo domain -c configs/laptop.yml                # NEMO domain pipeline (section nemo_domain)
+ecefast nemo domain -c configs/laptop.yml --bathymetry eocene   # only some bathymetries
 
 # checks before pushing
 ruff check --fix . && ruff format .                             # (from phase 1)

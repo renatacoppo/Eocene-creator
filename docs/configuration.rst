@@ -1,7 +1,7 @@
 Configuration
 =============
 
-``ecefast eocene`` and ``ecefast nemo-domain`` read one YAML file, one per machine. Start from a
+``ecefast eocene`` and ``ecefast nemo domain`` read one YAML file, one per machine. Start from a
 template and set the paths:
 
 .. code-block:: bash
@@ -98,8 +98,9 @@ The four paths are also placeholders in ``nemo_domain.bathymetries`` (``{input}`
      - str
      - ``null``
      - Directory with the Eocene ``domain_cfg.nc`` and ``maskutil.nc``, built on Atos by the
-       NEMO domain pipeline. The ``domain`` step of ``ecefast eocene run`` copies them into the
-       output tree and stops with an error if the key is not set.
+       NEMO domain pipeline. With ``tools.backend: local`` the ``domain`` step of
+       ``ecefast eocene run`` copies them into the output tree and stops with an error if the key
+       is not set; with ``atos`` or ``fake`` it builds the domain instead and ignores this key.
    * - ``tools.atos.profile``
      - str
      - ``atos``
@@ -145,7 +146,8 @@ Example for Atos:
 ``nemo_domain``: the NEMO domain pipeline
 -----------------------------------------
 
-Read only by ``ecefast nemo-domain``; leave the section out if you do not run it.
+Read by ``ecefast nemo domain``, and by the Eocene ``domain`` step when ``tools.backend`` is ``atos`` or
+``fake`` (it builds the ``eocene`` bathymetry); leave the section out if you use neither.
 
 .. list-table::
    :header-rows: 1
@@ -190,12 +192,14 @@ Read only by ``ecefast nemo-domain``; leave the section out if you do not run it
      - required
      - ``true``/``false`` per step: ``coordinates``, ``bathymetry``, ``configure_domain``,
        ``domain_cfg``, ``generate_mask``, ``generate_subbasins``. A missing step is off. The last
-       three need DOMAINcfg, so they run on Atos only.
+       three need DOMAINcfg output: ``domain_cfg`` runs it with the backend (``tools.backend``:
+       ``atos`` on Atos, ``fake`` in tests) and stops before the first step with ``local``.
    * - ``nemo_domain.bathymetries``
      - list
      - required
      - One entry per bathymetry: ``name``, ``enabled``, ``processor`` (a ``BathymetryProcessor``
-       class name) and ``source_file`` (placeholders: the ``paths`` keys, ``{output_dir}`` and the
+       class name: ``PresentDayBathymetry`` or ``EoceneBathymetry``; an unknown name is an error
+       that lists the known ones) and ``source_file`` (placeholders: the ``paths`` keys, ``{output_dir}`` and the
        aliases). ``PresentDayBathymetry`` also takes ``orca2_file`` for a comparison plot.
 
 Example (laptop part of the pipeline):

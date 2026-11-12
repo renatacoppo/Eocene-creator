@@ -64,7 +64,7 @@ class Grids:
 
 @dataclass
 class NemoDomain:
-    """NEMO domain pipeline (``ecefast nemo-domain``)."""
+    """NEMO domain pipeline (``ecefast nemo domain``)."""
 
     output_dir: str
     coords_ori: str

@@ -15,14 +15,14 @@ paths:
 tools:
   # backend: local                        # how DOMAINcfg is run: local (not available on a laptop), atos (HPC) or fake (tests)
   precomputed:
-    domain: /path/to/domain/PALEORCA2/eocene  # Eocene domain_cfg.nc + maskutil.nc, copied by the `domain` step (needed by it)
+    domain: /path/to/domain/PALEORCA2/eocene  # Eocene domain_cfg.nc + maskutil.nc, copied by the `domain` step (needed by it with backend local)
 
 # Model resolutions, named as in ECE4-DATA
 # grids:
 #   oifs: TL63L31                         # OIFS resolution (directory under oifs/)
 #   nemo: PALEORCA2                       # NEMO grid (directory under oasis/ and nemo/domain/)
 
-# NEMO domain pipeline (`ecefast nemo-domain`); omit the section if you do not run it
+# NEMO domain pipeline (`ecefast nemo domain`); omit the section if you do not run it
 nemo_domain:
   output_dir: /path/to/EOCENE-DOMAIN-TEST # output: coordinates/, bathymetry/, domain/ (required)
   domaincfg_dir: null                     # NEMO tools dir holding DOMAINcfg/; null on a laptop (namelists go to output_dir/domain)
@@ -58,7 +58,7 @@ nemo_domain:
   # Required fields:
   #   name        : identifier, used in output filenames and namelist names
   #   enabled     : skip this entry if false
-  #   processor   : BathymetryProcessor subclass name (registered in components/nemo/domain/pipeline.py)
+  #   processor   : BathymetryProcessor class name (PROCESSORS in components/nemo/bathymetry, EOCENE_PROCESSORS in paleo/eocene/bathymetry.py)
   #   source_file : path to source NetCDF ({input}, {herold}, {output_dir} and aliases as placeholders)
   #
   # All algorithm choices (variable, mask_type, remap_method, etc.) live in the
