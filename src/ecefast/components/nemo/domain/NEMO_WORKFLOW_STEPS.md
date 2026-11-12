@@ -3,9 +3,9 @@
 ## Overview
 This workflow processes bathymetry and coordinate data to generate NEMO domain configuration files for both present-day and Eocene paleoenvironments on the PALEORCA2 grid.
 
-**Main Entry Point**: `ecefast nemo-domain --config nemo_workflow.yaml`
+**Main Entry Point**: `ecefast nemo-domain -c configs/laptop.yml`
 
-**Configuration**: Controlled via `nemo_workflow.yaml` with profile-based paths:
+**Configuration**: the `nemo_domain` section of the config file (one file per machine, see `docs/configuration.rst`):
 - `output_dir`: Base output directory (coordinates/, bathymetry/, domain/)
 - `domaincfg_dir`: NEMO tools directory (for HPC compilation)
 - `coords_ori`: Pre-existing target grid coordinates (input)
@@ -47,7 +47,7 @@ The workflow uses different remapping strategies based on data characteristics:
 ---
 
 ## Step 1: Environment Setup
-**YAML Key**: `profile` (altai/atos)
+**YAML Key**: `nemo_domain` (one config file per machine: `configs/laptop.tmpl`, `configs/atos.tmpl`)
 
 Directory structure derived from `output_dir`:
 - `{output_dir}/coordinates/{grid}/` - coordinate bounds files

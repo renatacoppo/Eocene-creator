@@ -15,6 +15,8 @@ Unreleased
 Added
 ~~~~~
 
+- Config options ``eocene.oifs.aerosols`` (default ``false``) and ``eocene.oasis.constant_sst``
+  (default ``290.0``) (#30).
 - ``AGENTS.md``: rules for contributors and coding agents; ``CLAUDE.md`` imports it (#17).
 - ``scripts/compare_outputs.py``: compares a run with the frozen baseline (NetCDF within
   ``rtol=1e-6``, GRIB with ``grib_compare``), with a self-test (#20).
@@ -56,6 +58,13 @@ Changed
 - All code moves into one ``ecefast`` package with a ``src/`` layout (``core``, ``tools``,
   ``components``, ``paleo/eocene``, ``cli``); new ``ecefast`` command with the ``eocene`` and
   ``nemo-domain`` subcommands; the config template moves to ``configs/eocene.tmpl`` (#26).
+- One configuration file per machine, schema 1 (``paths``, ``tools``, ``grids``, ``nemo_domain``,
+  ``eocene``), read by ``ecefast.core.config.load_config``; the old ``dirs:`` and ``profiles:``
+  formats are no longer read, see ``docs/configuration.rst`` (#30).
+- GRIB and grid helpers merged into ``ecefast.core.grib``; Eocene OIFS field operations in
+  ``paleo/eocene/oifs/fields.py``; the OIFS generator logs instead of printing (#29).
+- NEMO domain post-processing: ``common/util.py`` is the one ``domain_cfg``/``maskutil`` writer,
+  with docstrings and tests (#28).
 
 Fixed
 ~~~~~
@@ -69,6 +78,9 @@ Removed
 - Tracked ``__pycache__`` files; ``modify_oifs.ipynb`` and ``modify_nemo.ipynb``, replaced by
   ``notebooks/analysis/plots.ipynb`` (#22).
 - ``nemo-workflow.sh``, superseded by the NEMO domain pipeline (#26).
+- Standalone ``domain/mask_util.py``, a duplicate of the pipeline's ``maskutil`` writer (#28).
+- ``configs/eocene.tmpl`` and the in-package ``nemo_workflow.yaml``, replaced by
+  ``configs/laptop.tmpl`` and ``configs/atos.tmpl`` (#30).
 
 Output
 ~~~~~~

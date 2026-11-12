@@ -41,9 +41,9 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 | 1.4 ✅ | ruff config, one format-only commit, `.git-blame-ignore-revs` | everything | 1.1–1.3 | serial |
 | 2.1 ✅ | `src/` move, import fixes, broken scripts, package data, `ecefast` entry point; `common/executor.py` runs scripts with `sys.executable`, not `python3` from PATH | everything | 1.4 | serial, freeze |
 | 3.0 ✅ | `core/logging`, `core/cdo`; replace 2 loggers and 8 `Cdo()` | imports in many files | 2.1 | serial |
-| 3.1 | Config schema v1, `configs/*.tmpl`, `configuration.rst`, migrate both configs | `core/config.py`, `configs/`, docs | 3.0 | ‖ 3.2, 3.3 |
-| 3.2 | `core/grib.py` merge; Eocene OIFS non-GRIB helpers to `fields.py` | `components/oifs/`, `paleo/eocene/oifs/` | 3.0 | ‖ 3.1, 3.3 |
-| 3.3 | `components/nemo/domain/postprocess.py`; delete `domain/mask_util.py` | `components/nemo/domain/` | 3.0 | ‖ 3.1, 3.2 |
+| 3.1 ✅ | Config schema v1, `configs/*.tmpl`, `configuration.rst`, migrate both configs | `core/config.py`, `configs/`, docs | 3.0 | ‖ 3.2, 3.3 |
+| 3.2 ✅ | `core/grib.py` merge; Eocene OIFS non-GRIB helpers to `fields.py` | `components/oifs/`, `paleo/eocene/oifs/` | 3.0 | ‖ 3.1, 3.3 |
+| 3.3 ✅ | `components/nemo/domain/postprocess.py`; delete `domain/mask_util.py` | `components/nemo/domain/` | 3.0 | ‖ 3.1, 3.2 |
 | 4.0 | `core/steps.py`, `workspace.py`, `io.py` (atomic helper), `Stage`, runner tests | new `core/` files, `tests/` | 3.1 | serial |
 | 4.1 | `EoceneOIFS` step, atomic writes, `aerosols` option; `prepare_herold` writes to `tmpdir`, not into the herold folder | `paleo/eocene/oifs/` | 4.0, 3.2 | ‖ 4.2, 4.3, 5.1 |
 | 4.2 | `EoceneNEMO`, `EoceneDomain` with vertical-grid check | `paleo/eocene/nemo.py`, `domain.py` | 4.0 | ‖ 4.1, 4.3, 5.1 |
@@ -145,7 +145,7 @@ Steps:
    - GRIB: `grib_compare` per file (values, keys and message order), not only `cdo diffn`;
    - exit code 0/1 and a short report. Sanity check: baseline against itself.
 
-Note: `repack_grib_file` already regroups messages (GRIB2 then GRIB1), so the output message order differs from
+Note: `repack_grib_file` already regroups messages (all GRIB1, then all GRIB2), so the output message order differs from
 the original files. That is existing behaviour, frozen in the baseline; the AGENTS.md GRIB rule applies to new code.
 
 ## Phase 1a: housekeeping, env, tests, CI (PR)
