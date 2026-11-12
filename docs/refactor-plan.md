@@ -45,9 +45,9 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 | 3.2 ✅ | `core/grib.py` merge; Eocene OIFS non-GRIB helpers to `fields.py` | `components/oifs/`, `paleo/eocene/oifs/` | 3.0 | ‖ 3.1, 3.3 |
 | 3.3 ✅ | `components/nemo/domain/postprocess.py`; delete `domain/mask_util.py` | `components/nemo/domain/` | 3.0 | ‖ 3.1, 3.2 |
 | 4.0 ✅ | `core/steps.py`, `workspace.py`, `io.py` (atomic helper), `Stage`, runner tests | new `core/` files, `tests/` | 3.1 | serial |
-| 4.1 | `EoceneOIFS` step, atomic writes, `aerosols` option; `prepare_herold` writes to `tmpdir`, not into the herold folder | `paleo/eocene/oifs/` | 4.0, 3.2 | ‖ 4.2, 4.3, 5.1 |
-| 4.2 | `EoceneNEMO`, `EoceneDomain` with vertical-grid check | `paleo/eocene/nemo.py`, `domain.py` | 4.0 | ‖ 4.1, 4.3, 5.1 |
-| 4.3 | `EoceneOASIS`, new `EoceneRNFM` | `paleo/eocene/oasis.py`, `rnfm.py` | 4.0 | ‖ 4.1, 4.2, 5.1 |
+| 4.1 ✅ | `EoceneOIFS` step, atomic writes, `aerosols` option; `prepare_herold` writes to `tmpdir`, not into the herold folder | `paleo/eocene/oifs/` | 4.0, 3.2 | ‖ 4.2, 4.3, 5.1 |
+| 4.2 ✅ | `EoceneNEMO`, `EoceneDomain` with vertical-grid check | `paleo/eocene/nemo.py`, `domain.py` | 4.0 | ‖ 4.1, 4.3, 5.1 |
+| 4.3 ✅ | `EoceneOASIS`, new `EoceneRNFM` | `paleo/eocene/oasis.py`, `rnfm.py` | 4.0 | ‖ 4.1, 4.2, 5.1 |
 | 4.4 | `pipeline.py`, `ecefast eocene run`, provenance, remove `cli/eocene.py`, `workflow.rst` | `cli/`, `paleo/eocene/pipeline.py` | 4.1–4.3 | serial |
 | 5.1 | `tools/ecearth.py` (atos, local, fake), `hpc_profiles.yaml`, `run_domain_cfg.sh` without paths | `tools/` | 3.0 | ‖ wave 4 |
 | 5.2 | Bathymetry registry, backend in the domain pipeline, `ecefast nemo domain`, `EoceneDomain` uses the backend, import-linter | `components/nemo/domain/`, `cli/` | 5.1, 4.4 | serial |
@@ -263,3 +263,6 @@ Done when: CI runs end to end in a few minutes.
 - WEIGHTS driver (`tools.ecearth.weights()`, templated namelists).
 - OIFS generator: constants → config, pipeline, tests.
 - Finer steps, other HPC profiles, new palaeo periods under `paleo/`.
+- `create_ocean_init`/`create_runoff` hardcode `PALEORCA2`: follow `grids.nemo` (found in #33).
+- Dead code to remove or fix: `vegetation.prepare_vegetation` (undefined `NC4`), `EoceneOIFS.create_sic`/`create_sst`
+  (undefined `idir_amip`), `fields.modify_grib` (unused) (found in #25, #34).

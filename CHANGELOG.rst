@@ -70,12 +70,22 @@ Changed
   ``paleo/eocene/oifs/fields.py``; the OIFS generator logs instead of printing (#29).
 - NEMO domain post-processing: ``common/util.py`` is the one ``domain_cfg``/``maskutil`` writer,
   with docstrings and tests (#28).
+- ``EoceneOASIS`` and a new ``EoceneRNFM`` (today's runoff code, moved as-is) are pipeline steps
+  (``oasis``, ``rnfm``) with declared reads and writes; outputs written atomically (#32).
+- ``EoceneNEMO`` is the ``nemo`` step (needs only ``stage``); new ``domain`` step
+  (``EoceneDomain``) installs the precomputed Eocene domain and fails if its vertical grid
+  (``nav_lev``, ``e3t_1d``) differs from the present-day one; outputs written atomically (#33).
+- ``EoceneOIFS`` is the ``oifs`` step with declared reads and writes; outputs written
+  atomically (#34).
 
 Fixed
 ~~~~~
 
 - NEMO domain pipeline: helper scripts run with the current Python interpreter, not ``python3``
   from ``PATH``, and are found from the package directory (#26).
+- OIFS: intermediate files (``landsea_mask.nc``, ``orography.nc``, ``sd_orography.nc``, their
+  ``_remap`` versions, the aerosol standard atmosphere) go to ``tmpdir`` instead of the read-only
+  Herold folder (#34).
 
 Removed
 ~~~~~~~
