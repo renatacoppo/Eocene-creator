@@ -24,13 +24,13 @@ logger = logging.getLogger("nemo.processors")
 # CDO operator chains and sign-flip flag per mask type.
 # Add new entries here if a new input convention is needed.
 MASK_PRESETS = {
-    'positive_depth': {
-        'lsm_preprocess': '-setrtoc,0.0001,10000,1',
-        'sign_flip': False,
+    "positive_depth": {
+        "lsm_preprocess": "-setrtoc,0.0001,10000,1",
+        "sign_flip": False,
     },
-    'negative_elevation': {
-        'lsm_preprocess': '-setrtoc,-10000,-0.0001,1 -setrtoc,0,10000,0',
-        'sign_flip': True,
+    "negative_elevation": {
+        "lsm_preprocess": "-setrtoc,-10000,-0.0001,1 -setrtoc,0,10000,0",
+        "sign_flip": True,
     },
 }
 
@@ -52,11 +52,11 @@ class BathymetryProcessor:
     output_prefix : str | None — prefix for output filename; defaults to cfg['name']
     """
 
-    variable      = None
-    rename_to     = None
-    setgrid       = None
-    mask_type     = None
-    remap_method  = None
+    variable = None
+    rename_to = None
+    setgrid = None
+    mask_type = None
+    remap_method = None
     output_prefix = None
 
     def __init__(self, cfg, paths, grids, params, cdo):
@@ -69,11 +69,11 @@ class BathymetryProcessor:
         params : dict   — workflow parameters (minimum_depth, …)
         cdo    : Cdo    — CDO Python binding instance
         """
-        self.cfg    = cfg
-        self.paths  = paths
-        self.grids  = grids
+        self.cfg = cfg
+        self.paths = paths
+        self.grids = grids
         self.params = params
-        self.cdo    = cdo
+        self.cdo = cdo
 
         self.output_file = None
 
@@ -83,7 +83,7 @@ class BathymetryProcessor:
 
     def process(self):
         """Run the full pipeline.  Sets self.output_file on success."""
-        name       = self.cfg['name']
+        name = self.cfg["name"]
         output_dir = self._output_dir()
         os.makedirs(output_dir, exist_ok=True)
 
@@ -130,7 +130,7 @@ class BathymetryProcessor:
     def corrected_output(self, remap_file, output_dir):
         """Return the standard _corrected.nc path for a given remap file."""
         stem = os.path.splitext(os.path.basename(remap_file))[0]
-        return os.path.join(output_dir, f'{stem}_corrected.nc')
+        return os.path.join(output_dir, f"{stem}_corrected.nc")
 
     def expected_output(self):
         """
@@ -149,60 +149,47 @@ class BathymetryProcessor:
 
     def _preprocess(self):
         """Rename variable and/or assign source grid.  Returns tempfile path."""
-        tmp      = self._tmp()
+        tmp = self._tmp()
         variable = self.variable
-        rename   = self.rename_to
-        setgrid  = self.setgrid
-        src      = self.cfg['source_file']
+        rename = self.rename_to
+        setgrid = self.setgrid
+        src = self.cfg["source_file"]
 
-        base_input = f'-setgrid,{setgrid} {src}' if setgrid else src
+        base_input = f"-setgrid,{setgrid} {src}" if setgrid else src
 
         if rename:
-            self.cdo.chname(
-                f'{variable},{rename}',
-                input=f'-selname,{variable} {base_input}',
-                output=tmp, options='-O'
-            )
+            self.cdo.chname(f"{variable},{rename}", input=f"-selname,{variable} {base_input}", output=tmp, options="-O")
         else:
-            self.cdo.selname(variable, input=base_input, output=tmp, options='-O')
+            self.cdo.selname(variable, input=base_input, output=tmp, options="-O")
 
         return tmp
 
     def _build_lsm(self, preprocessed):
         """Conservative remapping + thresholding → binary land-sea mask."""
-        preset        = MASK_PRESETS[self.mask_type]
+        preset = MASK_PRESETS[self.mask_type]
         target_bounds = self._target_bounds()
-        tmp           = self._tmp()
+        tmp = self._tmp()
 
         self.cdo.setrtoc(
-            '0,0.5,0',
-            input=f'-setrtoc,0.5,1,1 -remapcon,{target_bounds} '
-                  f'{preset["lsm_preprocess"]} {preprocessed}',
-            output=tmp, options='-O'
+            "0,0.5,0",
+            input=f"-setrtoc,0.5,1,1 -remapcon,{target_bounds} {preset['lsm_preprocess']} {preprocessed}",
+            output=tmp,
+            options="-O",
         )
         return tmp
 
     def _remap(self, preprocessed, lsm, output_file):
         """Remap to target grid, apply land-sea mask and minimum depth."""
-        preset        = MASK_PRESETS[self.mask_type]
+        preset = MASK_PRESETS[self.mask_type]
         target_bounds = self._target_bounds()
-        min_depth     = self.params['minimum_depth']
+        min_depth = self.params["minimum_depth"]
 
-        if preset['sign_flip']:
-            remap_chain = (
-                f'-mul {lsm} -mulc,-1 -setrtoc,0,10000,0 '
-                f'-{self.remap_method},{target_bounds} {preprocessed}'
-            )
+        if preset["sign_flip"]:
+            remap_chain = f"-mul {lsm} -mulc,-1 -setrtoc,0,10000,0 -{self.remap_method},{target_bounds} {preprocessed}"
         else:
-            remap_chain = (
-                f'-mul {lsm} -{self.remap_method},{target_bounds} {preprocessed}'
-            )
+            remap_chain = f"-mul {lsm} -{self.remap_method},{target_bounds} {preprocessed}"
 
-        self.cdo.setrtoc(
-            f'0.00001,{min_depth},{min_depth}',
-            input=remap_chain,
-            output=output_file, options='-O'
-        )
+        self.cdo.setrtoc(f"0.00001,{min_depth},{min_depth}", input=remap_chain, output=output_file, options="-O")
 
     # ------------------------------------------------------------------
     # Helpers
@@ -213,24 +200,21 @@ class BathymetryProcessor:
         return type(self).postprocess is not BathymetryProcessor.postprocess
 
     def _output_dir(self):
-        tgt = self.grids['target']
-        return os.path.join(self.paths['bathydir'], tgt)
+        tgt = self.grids["target"]
+        return os.path.join(self.paths["bathydir"], tgt)
 
     def _remap_path(self):
-        tgt    = self.grids['target']
-        stagg  = self.grids['staggering_target']
-        prefix = self.output_prefix or self.cfg['name']
-        return os.path.join(
-            self._output_dir(),
-            f'{prefix}_bathy_metry_{self.remap_method}_to_{tgt}_{stagg}.nc'
-        )
+        tgt = self.grids["target"]
+        stagg = self.grids["staggering_target"]
+        prefix = self.output_prefix or self.cfg["name"]
+        return os.path.join(self._output_dir(), f"{prefix}_bathy_metry_{self.remap_method}_to_{tgt}_{stagg}.nc")
 
     def _target_bounds(self, staggering=None):
-        s   = staggering or self.grids['staggering_target']
-        tgt = self.grids['target']
-        return os.path.join(self.paths['coordsdir'], tgt, f'coords_bounds_{s}.nc')
+        s = staggering or self.grids["staggering_target"]
+        tgt = self.grids["target"]
+        return os.path.join(self.paths["coordsdir"], tgt, f"coords_bounds_{s}.nc")
 
     def _tmp(self):
-        f = tempfile.NamedTemporaryFile(suffix='.nc', delete=False)
+        f = tempfile.NamedTemporaryFile(suffix=".nc", delete=False)
         f.close()
         return f.name

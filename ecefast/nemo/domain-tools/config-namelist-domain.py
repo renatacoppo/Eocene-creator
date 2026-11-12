@@ -12,45 +12,28 @@ logger = logging.getLogger("nemo.domain_tools")
 
 def get_args():
     """Parse command-line arguments for the script."""
-    parser = argparse.ArgumentParser(
-        description="Generates a lat/lon file for the ORCA grid, with bounds.")
+    parser = argparse.ArgumentParser(description="Generates a lat/lon file for the ORCA grid, with bounds.")
+    parser.add_argument("--bathymetry", type=str, help="Input bathymetry file name")
+    parser.add_argument("--coordinates", type=str, help="Input coordinates file name")
     parser.add_argument(
-        "--bathymetry",
-        type=str,
-        help="Input bathymetry file name"
-    )
-    parser.add_argument(
-        "--coordinates",
-        type=str,
-        help="Input coordinates file name"
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default="namelist_cfg",
-        help="Output namelist file name (default: namelist_cfg)"
+        "--output", type=str, default="namelist_cfg", help="Output namelist file name (default: namelist_cfg)"
     )
     parser.add_argument(
         "--configuration",
         type=str,
         default="PALEORCA2",
-        help="Configuration name to use in the namelist (default: PALEORCA2)"
-    ) 
+        help="Configuration name to use in the namelist (default: PALEORCA2)",
+    )
     parser.add_argument(
-        "--levels",
-        type=int,
-        default=31,
-        help="Number of vertical levels to use in the namelist (default: 31)"
+        "--levels", type=int, default=31, help="Number of vertical levels to use in the namelist (default: 31)"
     )
 
     parser.add_argument(
-        "--log-level",
-        type=str,
-        default="INFO",
-        help="Logging level: DEBUG, INFO, WARNING (default: INFO)"
+        "--log-level", type=str, default="INFO", help="Logging level: DEBUG, INFO, WARNING (default: INFO)"
     )
 
     return parser.parse_args()
+
 
 def find_variable(file, pattern, exclude_pattern=None):
     """Find a variable by pattern in data_vars, fall back to coords."""
@@ -63,7 +46,7 @@ def find_variable(file, pattern, exclude_pattern=None):
     raise ValueError(f"Variable matching '{pattern}' not found")
 
 
-_BATHY_EXCLUDE = frozenset({'lon', 'lat', 'time', 'nav_lev', 'depth', 'bnds'})
+_BATHY_EXCLUDE = frozenset({"lon", "lat", "time", "nav_lev", "depth", "bnds"})
 
 
 def find_bathymetry_variable(file):
@@ -72,20 +55,14 @@ def find_bathymetry_variable(file):
 
     Raises a descriptive ValueError when the result is ambiguous or absent.
     """
-    candidates = [
-        v for v in file.data_vars
-        if not any(token in v.lower() for token in _BATHY_EXCLUDE)
-    ]
+    candidates = [v for v in file.data_vars if not any(token in v.lower() for token in _BATHY_EXCLUDE)]
     if len(candidates) == 1:
         return candidates[0]
     all_vars = list(file.data_vars)
     if not candidates:
-        raise ValueError(
-            f"No bathymetry variable found. data_vars: {all_vars}"
-        )
-    raise ValueError(
-        f"Ambiguous bathymetry variable: {candidates}. All data_vars: {all_vars}"
-    )
+        raise ValueError(f"No bathymetry variable found. data_vars: {all_vars}")
+    raise ValueError(f"Ambiguous bathymetry variable: {candidates}. All data_vars: {all_vars}")
+
 
 def main(args):
     """Main function to generate the namelist_cfg file based on the provided bathymetry and coordinates files."""
@@ -94,25 +71,23 @@ def main(args):
     root.setLevel(level)
     root.propagate = False
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(
-        "%(asctime)s | %(name)s | %(levelname)8s -> %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    ))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s | %(name)s | %(levelname)8s -> %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    )
     root.addHandler(handler)
 
     file = xr.open_dataset(args.bathymetry)
 
     bathymetry_variable = find_bathymetry_variable(file)
-    lon_variable = find_variable(file, pattern='lon', exclude_pattern='bnds')
-    lat_variable = find_variable(file, pattern='lat', exclude_pattern='bnds')
-    
+    lon_variable = find_variable(file, pattern="lon", exclude_pattern="bnds")
+    lat_variable = find_variable(file, pattern="lat", exclude_pattern="bnds")
+
     # Check variable names in the dataset
     logger.debug("Bathymetry variable: %s", bathymetry_variable)
     logger.debug("Longitude variable:  %s", lon_variable)
     logger.debug("Latitude variable:   %s", lat_variable)
 
     lat_dimension, lon_dimension = file[bathymetry_variable].squeeze().shape
-
 
     # 1. Define your data dictionary
     context = {
@@ -124,7 +99,7 @@ def main(args):
         "configuration": args.configuration,
         "lon_dimension": lon_dimension,
         "lat_dimension": lat_dimension,
-        "levels": args.levels
+        "levels": args.levels,
     }
 
     # 2. Set up the environment and load the template
@@ -141,6 +116,6 @@ def main(args):
 
     logger.info("Namelist written: %s", args.output)
 
+
 if __name__ == "__main__":
     main(get_args())
- 

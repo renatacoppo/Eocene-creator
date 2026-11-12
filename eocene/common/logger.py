@@ -63,7 +63,9 @@ def convert_logger(loglev=None):
 
     # If loglev_int is None, the log level doesn't exist
     if loglev_int is None:
-        logging.warning("Invalid logging level '%s' specified. Setting it back to default '%s'.", loglev, loglev_default)
+        logging.warning(
+            "Invalid logging level '%s' specified. Setting it back to default '%s'.", loglev, loglev_default
+        )
         loglev = loglev_default
 
     return loglev

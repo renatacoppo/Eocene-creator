@@ -177,9 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     for root in (args.baseline, args.new):
         if not root.is_dir():
             parser.error(f"not a directory: {root}")
-    if shutil.which("grib_compare") is None and any(
-        is_grib(args.baseline / rel) for rel in list_files(args.baseline)
-    ):
+    if shutil.which("grib_compare") is None and any(is_grib(args.baseline / rel) for rel in list_files(args.baseline)):
         parser.error("GRIB files found but grib_compare (ecCodes) is not on PATH")
 
     return 1 if compare_trees(args.baseline, args.new) else 0

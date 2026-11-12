@@ -2,6 +2,7 @@
 import yaml
 from pathlib import Path
 
+
 def load_yaml(infile):
     """
     Load and parse a YAML configuration file.

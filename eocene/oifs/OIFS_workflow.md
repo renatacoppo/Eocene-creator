@@ -22,14 +22,13 @@ First thing, you need to initialize the class. This requires setting up 3 differ
 - `herolddir`: DeepMIP protocol relies on the work by Herold et al, 2014, where all the netcdf files are provided to create orography/bathymetry etc.
 
 ```python
-
 from eocene_creator import EoceneOIFS
 import xarray as xr
 
 eocene = EoceneOIFS(
     idir="/lus/h2resw01/hpcperm/ccpd/ECE4-DATA",
     odir="/lus/h2resw01/hpcperm/ccpd/ECE4-DATA-EOCEENE",
-    herold="/lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014"
+    herold="/lus/h2resw01/hpcperm/ccpd/EPOCHAL/Herold_etal_2014",
 )
 ```
 
@@ -37,7 +36,7 @@ Then using this class, it is possible to prepare a couple of fundamental xarray 
 
 ```python
 vegetation = xr.open_dataset("eocene.prepare_vegetation_zhang()")
-landsea =xr.open_dataset(eocene.prepare_herold(flag="landsea_mask"))
+landsea = xr.open_dataset(eocene.prepare_herold(flag="landsea_mask"))
 orog = xr.open_dataset(eocene.prepare_herold(flag="orography"))
 ```
 
@@ -46,7 +45,14 @@ orog = xr.open_dataset(eocene.prepare_herold(flag="orography"))
 The class allow for a pretty simple call
 
 ```python
-eocene.create_init(landsea=landsea['landsea_mask'], tvl=vegetation['tvl'], tvh=vegetation['tvh'], cvl=vegetation['cvl'], cvh=vegetation['cvh'], sd_orog=sd_orog)
+eocene.create_init(
+    landsea=landsea["landsea_mask"],
+    tvl=vegetation["tvl"],
+    tvh=vegetation["tvh"],
+    cvl=vegetation["cvl"],
+    cvh=vegetation["cvh"],
+    sd_orog=sd_orog,
+)
 eocene.create_iniua()
 ```
 
@@ -72,7 +78,7 @@ Finally, given that we do not have a specific knowledge of the initial condition
 
 
 ```python
-eocene.create_sh(orog=orog['orography'])
+eocene.create_sh(orog=orog["orography"])
 ```
 
 ## Generate the climate files

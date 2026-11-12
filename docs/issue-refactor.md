@@ -171,9 +171,11 @@ The only change inside the `create_*` methods: they save their files through one
 
 ```python
 def run_nemo(config, logger):
-    eocene_nemo = EoceneNEMO(herold_folder=config["dirs"]["herold"],
-                             input_folder=config["dirs"]["input"],
-                             output_folder=config["dirs"]["output"])
+    eocene_nemo = EoceneNEMO(
+        herold_folder=config["dirs"]["herold"],
+        input_folder=config["dirs"]["input"],
+        output_folder=config["dirs"]["output"],
+    )
     # ... copy the domain files ...
     eocene_nemo.create_tidal_mixing()
     eocene_nemo.create_geothermal_flux()
@@ -186,23 +188,24 @@ def run_nemo(config, logger):
 ```python
 class EoceneNEMO(ComponentStep):
     """Tides, geothermal flux, ocean initial state, runoff."""
-    name  = "nemo"
-    needs = ["stage"]                                    # run after the base files are copied
-    reads = ["{input}/nemo/initial/woa13-levitus-L31.nc", # checked before anything starts
-             "{input}/nemo/domain/ORCA2/domain_cfg.nc"]
+
+    name = "nemo"
+    needs = ["stage"]  # run after the base files are copied
+    reads = [
+        "{input}/nemo/initial/woa13-levitus-L31.nc",  # checked before anything starts
+        "{input}/nemo/domain/ORCA2/domain_cfg.nc",
+    ]
 
     # __init__ and all create_* methods: same signatures and logic
 
     @classmethod
     def from_context(cls, ctx):
-        return cls(herold_folder=ctx.paths.herold,
-                   input_folder=ctx.paths.input,
-                   output_folder=ctx.paths.output)
+        return cls(herold_folder=ctx.paths.herold, input_folder=ctx.paths.input, output_folder=ctx.paths.output)
 
     def run(self):
         self.create_tidal_mixing()
         self.create_geothermal_flux()
-        self.create_ocean_init()          # builds both woa-pi and deepmip-30
+        self.create_ocean_init()  # builds both woa-pi and deepmip-30
         self.create_runoff()
 ```
 

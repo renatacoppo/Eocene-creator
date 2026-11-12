@@ -22,9 +22,9 @@ class EoceneBathymetry(BathymetryProcessor):
     source_file : path to Herold et al. NetCDF file
     """
 
-    variable      = 'paleotopo'
-    rename_to     = 'bathy_metry'
-    mask_type     = 'negative_elevation'
-    remap_method  = 'remapbil'
-    output_prefix = 'HEROLD'
+    variable = "paleotopo"
+    rename_to = "bathy_metry"
+    mask_type = "negative_elevation"
+    remap_method = "remapbil"
+    output_prefix = "HEROLD"
     # setgrid is None — source file already carries a proper grid description

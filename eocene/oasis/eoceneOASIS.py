@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -13,7 +12,8 @@ import xarray as xr
 
 loggy = logging.getLogger(__name__)
 
-class EoceneOASIS():
+
+class EoceneOASIS:
     """Class to create OASIS boundary conditions for EOCENE"""
 
     def __init__(self, idir, odir, nemo_resolution="PALEORCA2"):
