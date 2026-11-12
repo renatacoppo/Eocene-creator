@@ -103,16 +103,16 @@ def test_placeholders_across_sections_and_defaults(tmp_path: Path) -> None:
     """A path may refer to another section's value, to a default and to a value that has placeholders itself."""
     raw = minimal(tmp_path) | {
         "nemo": {"domain": nemo_domain() | {"output_dir": "{tmpdir}/nemo-domain"}},
-        "tmpdir": str(tmp_path / "scratch"),
+        "tmpdir": str(tmp_path / "work"),
         "eocene": {
             "output_dir": "{tmpdir}/eocene",
             "domain": {"from": "{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene"},
         },
     }
     config = load_config(write(tmp_path, raw))
-    assert config.nemo.domain.output_dir == f"{tmp_path}/scratch/nemo-domain"
-    assert config.eocene.domain.from_ == f"{tmp_path}/scratch/nemo-domain/nemo/domain/PALEORCA2/eocene"
-    assert config.eocene.output_dir == f"{tmp_path}/scratch/eocene"
+    assert config.nemo.domain.output_dir == f"{tmp_path}/work/nemo-domain"
+    assert config.eocene.domain.from_ == f"{tmp_path}/work/nemo-domain/nemo/domain/PALEORCA2/eocene"
+    assert config.eocene.output_dir == f"{tmp_path}/work/eocene"
     assert config.expand("{eocene.domain.from}/domain_cfg.nc") == f"{config.eocene.domain.from_}/domain_cfg.nc"
 
 
