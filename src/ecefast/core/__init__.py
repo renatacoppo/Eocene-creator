@@ -1,4 +1,4 @@
+from .config import Config, ConfigError, load_config, load_yaml
 from .logger import setup_logger
-from .yaml import load_yaml
 
-__all__ = ["setup_logger", "load_yaml"]
+__all__ = ["Config", "ConfigError", "load_config", "load_yaml", "setup_logger"]

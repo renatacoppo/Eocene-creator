@@ -1,0 +1,93 @@
+# ecefast configuration, schema 1: laptop / workstation.
+# Copy to configs/laptop.yml (gitignored) and set the paths. Every key is described in docs/configuration.rst.
+# Keys shown commented out are optional; the value shown is the default.
+
+schema: 1                       # configuration schema version (required)
+
+# Root directories (required section)
+paths:
+  input: /path/to/ECE4-DATA-V3            # EC-Earth4 input tree, read-only (required, must exist)
+  output: /path/to/EOCENE-TEST            # output tree of `ecefast eocene`; --copy overwrites it (required)
+  herold: /path/to/herold-et-al-2014/Supp # Herold et al. (2014) supplementary data, read-only (required, must exist)
+  # tmpdir: null                          # temporary directory; reserved, not read yet
+
+# External tools and files built elsewhere
+tools:
+  # backend: local                        # how EC-Earth tools are run; only 'local' for now
+  precomputed:
+    domain: /path/to/domain/PALEORCA2/eocene  # Eocene domain_cfg.nc + maskutil.nc, copied by `--run nemo` (needed by nemo)
+
+# Model resolutions, named as in ECE4-DATA
+# grids:
+#   oifs: TL63L31                         # OIFS resolution (directory under oifs/)
+#   nemo: PALEORCA2                       # NEMO grid (directory under oasis/ and nemo/domain/)
+
+# NEMO domain pipeline (`ecefast nemo-domain`); omit the section if you do not run it
+nemo_domain:
+  output_dir: /path/to/EOCENE-DOMAIN-TEST # output: coordinates/, bathymetry/, domain/ (required)
+  domaincfg_dir: null                     # NEMO tools dir holding DOMAINcfg/; null on a laptop (namelists go to output_dir/domain)
+
+  # Pre-existing files consumed (not produced) by the pipeline (required)
+  coords_ori: /path/to/data/PALEORCA2/coords_ori.nc   # PALEORCA2 coordinates with halo (NEMO 3.6)
+  mesh_mask: /path/to/data/eORCA1/mesh_mask.nc        # eORCA1 mesh_mask (NEMO 4.2), source grid of present_day
+
+  # Extra placeholders for source_file, besides {input}, {output}, {herold}, {tmpdir} from 'paths' (optional)
+  # aliases:
+  #   my_dir: /path/to/somewhere          # used as "{my_dir}/file.nc"
+
+  grids:
+    target: PALEORCA2      # grid of the produced domain
+    source: eORCA1         # only used for the present_day bathymetry; keep consistent with mesh_mask
+    staggering_source: T   # staggering of source-grid coordinate bounds (used in setgrid)
+    staggering_target: T   # staggering of target-grid coordinate bounds (used in remapping)
+
+  parameters:
+    minimum_depth: 30      # meters; values 0 < d < min_depth are raised to min_depth
+
+  # Enable/disable pipeline steps. DOMAINcfg runs only on the HPC: its steps are off on a laptop.
+  steps:
+    coordinates: true
+    bathymetry: true
+    configure_domain: true
+    domain_cfg: false          # run DOMAINcfg (HPC only)
+    generate_mask: false       # post-process domain_cfg.nc and extract maskutil.nc (needs DOMAINcfg output)
+    generate_subbasins: false  # generate ocean subbasin masks, present-day only (needs DOMAINcfg output)
+
+  # One entry per bathymetry source.
+  #
+  # Required fields:
+  #   name        : identifier, used in output filenames and namelist names
+  #   enabled     : skip this entry if false
+  #   processor   : BathymetryProcessor subclass name (registered in components/nemo/domain/pipeline.py)
+  #   source_file : path to source NetCDF ({input}, {herold}, {output_dir} and aliases as placeholders)
+  #
+  # All algorithm choices (variable, mask_type, remap_method, etc.) live in the
+  # processor class.  Only per-instance/per-machine fields go here.
+  #
+  # To add a new bathymetry: create bathymetry/<name>.py (paleo ones in ecefast/paleo/), subclass BathymetryProcessor,
+  # set class attributes, optionally override postprocess(), then add an entry below.
+  bathymetries:
+
+    - name: present_day
+      enabled: true
+      processor: PresentDayBathymetry
+      source_file: "{input}/nemo/domain/eORCA1/domain_cfg.nc"
+      orca2_file: "{input}/nemo/domain/ORCA2/domain_cfg.nc"   # enables land-sea mask comparison plot
+
+    - name: eocene
+      enabled: true
+      processor: EoceneBathymetry
+      source_file: "{herold}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc"
+
+    # Template for future paleographies — uncomment and fill in:
+    # - name: cretaceous
+    #   enabled: false
+    #   processor: CretaceousBathymetry           # define in ecefast/paleo/cretaceous/bathymetry.py
+    #   source_file: "/path/to/cretaceous_topo.nc"
+
+# Eocene (DeepMIP) options of `ecefast eocene`
+# eocene:
+#   oifs:
+#     aerosols: false        # build the Herold Eocene aerosol climatology (EoceneOIFS.aerosols); off
+#   oasis:
+#     constant_sst: 290.0    # SST (K) written everywhere in OASIS rstos.nc (value used so far, placeholder)

@@ -7,17 +7,19 @@ in bathymetry/.  The YAML entry names the class; all algorithm choices are
 encapsulated in the class.
 
 Usage:
-    ecefast nemo-domain --config nemo_workflow.yaml [--only NAME [NAME ...]]
-    python -m ecefast.components.nemo.domain.pipeline --config nemo_workflow.yaml [--only NAME [NAME ...]]
+    ecefast nemo-domain --config configs/laptop.yml [--only NAME [NAME ...]]
+    python -m ecefast.components.nemo.domain.pipeline --config configs/laptop.yml [--only NAME [NAME ...]]
+
+The pipeline reads the ``nemo_domain`` section of the configuration file (template: ``configs/laptop.tmpl``).
 """
 
 import argparse
 import logging
+import dataclasses
 import os
 
-import yaml
-
 from ecefast.core.cdo import cdo_version, get_cdo
+from ecefast.core.config import ConfigError, NemoDomain, Paths, load_config
 from ecefast.core.logger import setup_logger
 from ecefast.components.nemo.common.executor import SubprocessExecutor
 from ecefast.components.nemo.common.util import process_domain_cfg, extract_maskutil, check_files_exist
@@ -41,33 +43,28 @@ STAGGERING_OPTIONS = ["T", "F"]
 
 
 class NEMOWorkflow:
-    def __init__(self, config, only=None, log_level="INFO"):
-        profile_name = config.get("profile", "default")
-        profile = config["profiles"][profile_name]
-
-        output_dir = profile["output_dir"]
+    def __init__(self, config: NemoDomain, paths: Paths, only=None, log_level="INFO"):
+        output_dir = config.output_dir
         coordsdir = os.path.join(output_dir, "coordinates")
         self.paths = {
             "output_dir": output_dir,
             "coordsdir": coordsdir,
             "bathydir": os.path.join(output_dir, "bathymetry"),
             "outputdir": os.path.join(output_dir, "domain"),
-            "domaincfg_dir": profile.get("domaincfg_dir", ""),
+            "domaincfg_dir": config.domaincfg_dir or "",
             # Explicit entry points: pre-existing files consumed by this workflow
-            "coords_ori": profile["coords_ori"],
-            "mesh_mask": profile["mesh_mask"],
+            "coords_ori": config.coords_ori,
+            "mesh_mask": config.mesh_mask,
         }
-        # Optional per-profile aliases (e.g. {domaindir}, {herolddir}) used in source_file
-        self.aliases = profile.get("aliases", {})
+        # Placeholders for source_file: the config's paths ({input}, {herold}, ...) and the optional aliases
+        self.aliases = {**{k: v for k, v in dataclasses.asdict(paths).items() if v is not None}, **config.aliases}
 
-        self.grids = config["grids"]
-        self.params = config["parameters"]
-        self.steps = config["steps"]
+        self.grids = config.grids
+        self.params = config.parameters
+        self.steps = config.steps
 
         # Resolve path placeholders, filter disabled entries, then apply --only
-        self.bathymetries = [
-            self._resolve_paths(cfg) for cfg in config.get("bathymetries", []) if cfg.get("enabled", True)
-        ]
+        self.bathymetries = [self._resolve_paths(cfg) for cfg in config.bathymetries if cfg.get("enabled", True)]
         if only:
             unknown = set(only) - {cfg["name"] for cfg in self.bathymetries}
             if unknown:
@@ -309,7 +306,7 @@ class NEMOWorkflow:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="NEMO bathymetry workflow")
-    parser.add_argument("--config", default="nemo_workflow.yaml")
+    parser.add_argument("-c", "--config", required=True, help="configuration file with a 'nemo_domain' section")
     parser.add_argument(
         "--only",
         nargs="+",
@@ -324,10 +321,11 @@ def main(argv: list[str] | None = None) -> None:
     setup_logger(args.log_level)
     logger.info("CDO version: %s", cdo_version())
 
-    with open(args.config, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+    config = load_config(args.config)
+    if config.nemo_domain is None:
+        raise ConfigError(f"{args.config}: the NEMO domain pipeline needs a 'nemo_domain' section")
 
-    NEMOWorkflow(config, only=args.only, log_level=args.log_level).run()
+    NEMOWorkflow(config.nemo_domain, config.paths, only=args.only, log_level=args.log_level).run()
 
 
 if __name__ == "__main__":

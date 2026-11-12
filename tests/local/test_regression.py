@@ -48,17 +48,17 @@ def test_eocene_workflow_matches_baseline(tmp_path: Path) -> None:
     baseline = data / "EOCENE-BASELINE" / "eocene"
     output = tmp_path / "EOCENE-TEST"
     config = {
-        "dirs": {
+        "schema": 1,
+        "paths": {
             "input": str(data / "ECE4-DATA-V3"),
             "output": str(output),
             "herold": str(data / "herold-et-al-2014" / "Supp"),
-            "domain": str(data / "data" / "domain" / "PALEORCA2" / "eocene"),
             "tmpdir": str(tmp_path / "tmp"),
-        }
+        },
+        "tools": {"precomputed": {"domain": str(data / "data" / "domain" / "PALEORCA2" / "eocene")}},
     }
-    for key, path in config["dirs"].items():
-        if key not in ("output", "tmpdir"):
-            assert Path(path).is_dir(), f"missing test data: {path}"
+    for path in (config["paths"]["input"], config["paths"]["herold"], config["tools"]["precomputed"]["domain"]):
+        assert Path(path).is_dir(), f"missing test data: {path}"
     assert baseline.is_dir(), f"missing test data: {baseline}"
     expected_cdo = baseline_cdo_version(data / "EOCENE-BASELINE" / "BASELINE.txt")
     found_cdo = cdo_version()

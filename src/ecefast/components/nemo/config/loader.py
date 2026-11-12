@@ -2,7 +2,8 @@
 
 import logging
 import os
-import yaml
+
+from ecefast.core.config import load_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +17,7 @@ def load_hpc_modules():
     Returns:
         dict: HPC environment configs organized by environment name
     """
-    modules_file = os.path.join(_CONFIG_DIR, "hpc_modules.yaml")
-    with open(modules_file, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    return load_yaml(os.path.join(_CONFIG_DIR, "hpc_modules.yaml"))
 
 
 def get_hpc_modules(environment="default"):
@@ -57,9 +56,7 @@ def load_bathymetry_corrections():
     Returns:
         dict: Corrections config organized by grid_remap_key (e.g. 'PALEORCA2_remapnn')
     """
-    corrections_file = os.path.join(_CONFIG_DIR, "bathymetry_corrections.yaml")
-    with open(corrections_file, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    return load_yaml(os.path.join(_CONFIG_DIR, "bathymetry_corrections.yaml"))
 
 
 def _convert_cell_indices(y_start, y_end, x_start, x_end):

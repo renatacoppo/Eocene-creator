@@ -43,8 +43,8 @@ pip install -e .
 From the repository root:
 
 ```bash
-cp configs/eocene.tmpl configs/eocene.yml   # then set the paths; configs/*.yml is gitignored
-ecefast eocene -c configs/eocene.yml --copy
+cp configs/laptop.tmpl configs/laptop.yml   # then set the paths; configs/*.yml is gitignored
+ecefast eocene -c configs/laptop.yml --copy
 ```
 
 ## Command-line options
@@ -59,37 +59,32 @@ ecefast eocene -c configs/eocene.yml --copy
 Examples:
 
 ```bash
-ecefast eocene -c configs/eocene.yml --copy
-ecefast eocene -c configs/eocene.yml --run oifs -l DEBUG
-ecefast eocene -c configs/eocene.yml --run nemo -l INFO
-ecefast eocene -c configs/eocene.yml --run rnfm
-ecefast eocene -c configs/eocene.yml --run all --copy
+ecefast eocene -c configs/laptop.yml --copy
+ecefast eocene -c configs/laptop.yml --run oifs -l DEBUG
+ecefast eocene -c configs/laptop.yml --run nemo -l INFO
+ecefast eocene -c configs/laptop.yml --run rnfm
+ecefast eocene -c configs/laptop.yml --run all --copy
 ```
 
 ## Configuration file
 
-The CLI expects a YAML file with a top-level `dirs` section.
-
-Minimal structure:
+One YAML file per machine (schema 1). Start from `configs/laptop.tmpl` (or `configs/atos.tmpl` on ECMWF Atos).
+Minimal structure for `ecefast eocene`:
 
 ```yaml
-dirs:
-  input: /path/to/ECE4-DATA-V2
-  output: /path/to/output
-  herold: /path/to/herold-data
-  domain: /path/to/nemo/domain/PALEORCA2
-  tmpdir: /path/to/tmp
+schema: 1
+paths:
+  input: /path/to/ECE4-DATA-V3              # EC-Earth input tree, read-only
+  output: /path/to/EOCENE-TEST              # destination tree for copied and generated files
+  herold: /path/to/herold-et-al-2014/Supp   # Herold paleo datasets, read-only
+tools:
+  precomputed:
+    domain: /path/to/domain/PALEORCA2/eocene  # domain_cfg.nc and maskutil.nc for the Eocene bathymetry
 ```
 
-Field meaning:
-
-- `input`: source EC-Earth data tree, the one retrieved from official repo
-- `output`: destination tree where copied and generated files are written
-- `herold`: directory containing Herold paleo input datasets
-- `domain`: directory containing `domain_cfg.nc` and `maskutil.nc` modified for Eocene bathymetry
-- `tmpdir`: reserved temporary directory path (not used yet)
-
-A template is available in `configs/eocene.tmpl`.
+Optional sections: `grids` (`oifs: TL63L31`, `nemo: PALEORCA2`), `eocene` (`oifs.aerosols: false`,
+`oasis.constant_sst: 290.0`) and `nemo_domain` (the NEMO domain pipeline, `ecefast nemo-domain -c <file>`).
+Every key is described in `docs/configuration.rst`. The old `dirs:` format is no longer read.
 
 ## What `--copy` copies
 
