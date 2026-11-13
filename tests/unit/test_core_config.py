@@ -299,4 +299,5 @@ def test_templates_load(tmp_path: Path, template: str) -> None:
     raw["inputs"] = minimal(tmp_path)["inputs"]
     config = load_config(write(tmp_path, raw))
     assert [b["name"] for b in config.nemo.domain.bathymetries] == ["present_day", "eocene"]
+    assert (config.oifs.data is not None) == (template == "atos.tmpl")  # the generator's inputs are on Atos
     assert config.eocene.domain.from_.endswith("/nemo/domain/PALEORCA2/eocene") or template == "laptop.tmpl"

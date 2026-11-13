@@ -1,7 +1,8 @@
 """The ``ecefast`` command: argument parsing only.
 
 Commands: ``ecefast eocene run -c CONFIG [--steps a,b] [--dry-run] [--overwrite] [-l LEVEL]``,
-``ecefast eocene steps`` and ``ecefast nemo domain -c CONFIG [--bathymetry NAME ...] [--dry-run] [-l LEVEL]``.
+``ecefast eocene steps``, ``ecefast nemo domain -c CONFIG [--bathymetry NAME ...] [--dry-run] [-l LEVEL]`` and
+``ecefast oifs data -c CONFIG [--dry-run] [-l LEVEL]``.
 """
 
 import argparse
@@ -12,6 +13,7 @@ from ecefast import __version__
 SUBCOMMANDS = {
     "eocene": "Eocene (DeepMIP) modifications of OIFS, NEMO, OASIS and runoff-mapper input",
     "nemo": "NEMO tools: the domain pipeline (coordinates, bathymetries, DOMAINcfg, masks)",
+    "oifs": "OIFS tools: the base data of a resolution, made from a finer one (inputs on Atos)",
 }
 
 
@@ -31,8 +33,10 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.subcommand == "eocene":
         eocene_main(args.args)
-    else:
+    elif args.subcommand == "nemo":
         nemo_main(args.args)
+    else:
+        oifs_main(args.args)
 
 
 def eocene_main(argv: list[str]) -> None:
@@ -132,6 +136,45 @@ def nemo_main(argv: list[str]) -> None:
     processors = {**PROCESSORS, **EOCENE_PROCESSORS}
     try:
         run(args.config, processors, only=args.bathymetry, log_level=args.loglevel, dry_run=args.dry_run)
+    except (ConfigError, PipelineError) as e:
+        logger.error("%s", e)
+        sys.exit(1)
+
+
+def oifs_main(argv: list[str]) -> None:
+    """Run ``ecefast oifs data [args ...]``.
+
+    Exits with code 1, after logging the error, if the configuration is invalid or an input is missing.
+
+    Parameters
+    ----------
+    argv : list of str
+        Arguments after ``ecefast oifs``.
+    """
+    from ecefast.components.oifs.generator import STEP_DESCRIPTIONS
+
+    parser = argparse.ArgumentParser(prog="ecefast oifs", description=SUBCOMMANDS["oifs"])
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    data_parser = commands.add_parser(
+        "data",
+        help="make the OIFS base data of oifs.grid (section oifs.data)",
+        epilog=format_step_list("steps, in run order (switched on and off in oifs.data.steps)", STEP_DESCRIPTIONS),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    data_parser.add_argument("-c", "--config", required=True, help="configuration file (schema 2), section 'oifs.data'")
+    data_parser.add_argument("--dry-run", action="store_true", help="check all inputs and show the plan; write nothing")
+    data_parser.add_argument("-l", "--loglevel", default="INFO", help="log level (DEBUG, INFO, WARNING, ...)")
+
+    args = parser.parse_args(argv)
+
+    from ecefast.components.oifs.generator import run
+    from ecefast.core import ConfigError, setup_logger
+    from ecefast.core.steps import PipelineError
+
+    logger = setup_logger(level=args.loglevel)
+    try:
+        run(args.config, dry_run=args.dry_run)
     except (ConfigError, PipelineError) as e:
         logger.error("%s", e)
         sys.exit(1)

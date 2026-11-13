@@ -58,6 +58,7 @@ ecefast eocene steps                                     # list the steps (needs
 ecefast nemo domain -c configs/laptop.yml                # NEMO domain pipeline (section nemo.domain)
 ecefast nemo domain -c configs/laptop.yml --bathymetry eocene   # only some bathymetries
 ecefast nemo domain -c configs/laptop.yml --dry-run      # check all inputs, show the plan, write nothing
+ecefast oifs data -c configs/atos.yml                    # OIFS base data of oifs.grid (section oifs.data; Atos inputs)
 
 # checks before pushing
 ruff check --fix . && ruff format .                             # (from phase 1)
@@ -76,7 +77,7 @@ All of these live at the repo root and are gitignored; never commit them.
 | `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree, including the eORCA1 domain (grid and bathymetry of the present-day bathymetry) | `scripts/get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
 | `data/` | input of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `eocene.domain.from`) | copy from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplementary data | copy from the HPC or the paper supplement |
-| `OUTPUT/<command>/` | output of your runs, one folder per command (`eocene`, `nemo-domain`, `oifs-data`): each command's `output_dir` | `ecefast eocene run -c configs/laptop.yml --overwrite`, `ecefast nemo domain -c configs/laptop.yml` |
+| `OUTPUT/<command>/` | output of your runs, one folder per command (`eocene`, `nemo-domain`, `oifs-data`): each command's `output_dir` | `ecefast eocene run -c configs/laptop.yml --overwrite`, `ecefast nemo domain -c configs/laptop.yml`, `ecefast oifs data` (Atos) |
 | `BASELINE/<command>/` | frozen reference output: `eocene/` (Eocene workflow) and `nemo-domain/` (laptop part of the NEMO domain pipeline, run with `nemo.domain.output_dir` = `<main checkout>/OUTPUT/nemo-domain`, because the namelists contain absolute paths), with `BASELINE.txt` (how each was run, commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
 
 Tests that need this data use the `local_data` marker and read its location from
@@ -364,7 +365,6 @@ Do not start these without an issue agreed by both authors:
 
 - reworking the WEIGHTS driver (its namelists move as data; only their hardcoded paths become
   placeholders);
-- reworking the OIFS generator (moved as-is, constants stay);
 - splitting steps more finely than one per component;
 - HPC targets other than ECMWF Atos.
 

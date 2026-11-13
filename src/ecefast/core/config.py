@@ -53,10 +53,36 @@ class Machine:
 
 
 @dataclass
+class OIFSDataSteps:
+    """Steps of ``ecefast oifs data``: today's defaults of the OIFS generator."""
+
+    spectral: bool = True
+    gridpoint: bool = True
+    boundary: bool = False
+
+
+@dataclass
+class OIFSData:
+    """OIFS generator (``ecefast oifs data``): base data of ``oifs.grid`` made from ``source_grid``."""
+
+    output_dir: str
+    # Defaults: the values of the original generator script (Atos, cy48). A finer source is better in
+    # principle; TL255L91 because of the remapcon issue noted there.
+    source_grid: str = "TL255L91"
+    startdate: str = "19900101"
+    climate_version: str = "climate.v020"  # climate files version: climate.v020 for cy48, v015 for cy43
+    climate_dir: str | None = None
+    precomputed_climate_dir: str | None = None
+    vertical_grids_dir: str | None = None
+    steps: OIFSDataSteps = field(default_factory=OIFSDataSteps)
+
+
+@dataclass
 class OIFS:
-    """OIFS settings."""
+    """OIFS settings and commands."""
 
     grid: str = "TL63L31"
+    data: OIFSData | None = None
 
 
 @dataclass
@@ -180,6 +206,8 @@ STAGGERING_OPTIONS = ("T", "F")
 SECTIONS = {"inputs": Inputs, "machine": Machine, "oifs": OIFS, "nemo": Nemo, "eocene": Eocene}
 NESTED = {
     "machine": {"atos": Atos},
+    "oifs": {"data": OIFSData},
+    "oifs.data": {"steps": OIFSDataSteps},
     "nemo": {"domain": NemoDomain},
     "nemo.domain": {"staggering": Staggering},
     "eocene": {"domain": EoceneDomain, "oifs": EoceneOIFS, "oasis": EoceneOASIS},
@@ -363,6 +391,14 @@ def _validate(config: Config) -> None:
     _check_type(config.machine.atos.profile, str, "machine.atos.profile", file)
     _check_type(config.machine.atos.oasis_lib_dir, (str, type(None)), "machine.atos.oasis_lib_dir", file)
     _check_type(config.oifs.grid, str, "oifs.grid", file)
+    data = config.oifs.data
+    if data is not None:
+        for name in ("output_dir", "source_grid", "startdate", "climate_version"):
+            _check_type(getattr(data, name), str, f"oifs.data.{name}", file)
+        for name in ("climate_dir", "precomputed_climate_dir", "vertical_grids_dir"):
+            _check_type(getattr(data, name), (str, type(None)), f"oifs.data.{name}", file)
+        for name in ("spectral", "gridpoint", "boundary"):
+            _check_type(getattr(data.steps, name), bool, f"oifs.data.steps.{name}", file)
     _check_type(config.nemo.grid, str, "nemo.grid", file)
 
     domain = config.nemo.domain

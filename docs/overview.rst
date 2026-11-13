@@ -7,7 +7,7 @@ coupler OASIS, runoff-mapper) and replaces their geography-dependent fields with
 Herold et al. (2014). The output tree has the layout and file names of the input tree, so EC-Earth4
 uses it in place of the present-day one.
 
-Two commands do the work:
+Three commands do the work:
 
 ``ecefast eocene run``
    The **Eocene workflow**: six steps that build the Eocene input tree. Runs on a laptop in about
@@ -16,6 +16,10 @@ Two commands do the work:
    The **NEMO domain pipeline**: builds NEMO ocean domains (grid, bathymetry, masks) from
    bathymetries. The DOMAINcfg part runs only on ECMWF Atos; the ``domain`` step of the Eocene
    workflow either uses its result or runs it.
+``ecefast oifs data``
+   The **OIFS generator**: makes the present-day OIFS base data of a resolution (e.g. TL63L31) from a
+   finer one (TL255L91). Its inputs exist on ECMWF Atos only. The Eocene workflow reads its OIFS base
+   from ECE4-DATA, not from this output.
 
 Commands, sections and outputs
 ------------------------------
@@ -42,7 +46,9 @@ only to its own ``output_dir``. A later run reads the output of an earlier one t
      oifs, oasis                                     provenance.yml
 
    oifs:                   ecefast oifs data       oifs.data.output_dir     = OUTPUT/oifs-data/
-     grid                  (task 8.2)
+     grid                  (Atos inputs)             oifs/<grid>/<startdate>/    initial state
+     data: ...                                       oifs/<grid>/<climate>/      climate file
+                                                     work/                       intermediates
 
 On a laptop ``eocene.domain.from`` points at the Eocene domain copied from Atos; on Atos at the
 output of ``ecefast nemo domain``, or ``eocene.domain.build: true`` runs the domain pipeline inside

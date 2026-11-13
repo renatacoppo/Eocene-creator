@@ -373,21 +373,21 @@ oifs:
     steps: {spectral: true, gridpoint: true, boundary: false}
 ```
 
-- [ ] Module-level constants become `oifs.data`, with today's values as defaults where they are not paths;
+- [x] Module-level constants become `oifs.data`, with today's values as defaults where they are not paths;
       the generation logic does not change.
-- [ ] Writes only under `oifs.data.output_dir` (never `inputs.ece4_data`), through `atomic_write`; temporary
+- [x] Writes only under `oifs.data.output_dir` (never `inputs.ece4_data`), through `atomic_write`; temporary
       files in `<output_dir>/work/` or `tmpdir`; logging, not `print`; preflight of every input with one error.
-- [ ] `ecefast oifs data -c CONFIG [--dry-run]` in `cli/`; `docs/workflow.rst` section; `overview.rst`.
-- [ ] Unit tests where synthetic GRIB allows; `tests/hpc`: generate TL63L31 on Atos and compare with
+- [x] `ecefast oifs data -c CONFIG [--dry-run]` in `cli/`; `docs/workflow.rst` section; `overview.rst`.
+- [x] Unit tests where synthetic GRIB allows; `tests/hpc`: generate TL63L31 on Atos and compare with
       `{inputs.ece4_data}/oifs/TL63L31` with `scripts/compare_outputs.py`.
-- [ ] AGENTS.md "Out of scope": drop "reworking the OIFS generator" (needs Renata's agreement).
+- [x] AGENTS.md "Out of scope": drop "reworking the OIFS generator" (needs Renata's agreement).
 - Not in scope: `create_corners.py`, `descriptor_generator.py`, `convert_aka_bika.py` stay scripts (documented
   as the tools that make `vertical_grids_dir` and the grid descriptions). Making `eocene` read its OIFS base
   from `{oifs.data.output_dir}` instead of ECE4-DATA is possible with the same placeholders but not planned.
 
 ### Open points
 
-- Renata agrees to wire in the OIFS generator (AGENTS.md lists its rework as out of scope).
+- Renata agrees to wire in the OIFS generator: agreed (task 8.2).
 - Whether the generator output matches `ECE4-DATA-V3/oifs/TL63L31` can only be checked on Atos (7.1).
 
 ## Later

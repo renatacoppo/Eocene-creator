@@ -15,6 +15,14 @@ Unreleased
 Added
 ~~~~~
 
+- ``ecefast oifs data -c CONFIG [--dry-run]`` (task 8.2): the OIFS generator as a command. It makes the OIFS base
+  data of ``oifs.grid`` from ``oifs.data.source_grid`` (spectral truncation, gridpoint remapping, optional climate
+  file, vertical interpolation), with its former module-level constants in ``oifs.data`` (``source_grid``,
+  ``startdate``, ``climate_version`` with today's values as defaults; ``climate_dir``,
+  ``precomputed_climate_dir``, ``vertical_grids_dir``; ``steps``). It writes only to ``oifs.data.output_dir``
+  (final files through ``atomic_write``, intermediates in ``work/``), logs instead of printing, and checks every
+  input first. The generation logic is unchanged; ``tests/hpc/test_oifs_data_hpc.py`` compares an Atos run with
+  ECE4-DATA (#47).
 - ``ecefast nemo domain --dry-run``: checks the inputs of the enabled steps and logs the plan, writing
   nothing. A normal run does the same checks first and lists every missing input at once
   (``NEMOWorkflow.plan`` and ``check``, ``BathymetryProcessor.reads``).
@@ -176,6 +184,8 @@ Fixed
 Removed
 ~~~~~~~
 
+- The OIFS generator's hardcoded Atos paths, its own argument parser (``-t``, ``--clean``) and its option to
+  delete the intermediate files: they stay in ``<oifs.data.output_dir>/work/`` (the default before) (#47).
 - Config key ``nemo_domain.aliases`` and the pipeline-internal placeholders (``{output_dir}``,
   ``{coordsdir}``, ...) in ``bathymetries`` entries: use ``{section.key}`` placeholders (#46).
 - Config key ``nemo_domain.mesh_mask`` and the ``data/eORCA1/mesh_mask.nc`` input: the source grid of the
