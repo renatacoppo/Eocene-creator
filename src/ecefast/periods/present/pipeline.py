@@ -1,8 +1,10 @@
-"""The present-day pipeline: the OIFS base data and the NEMO domain of the model grids, used by
-``ecefast present run`` and by ``ecefast <component> run`` (``--period present`` is the default).
+"""The present-day pipeline: a copy of the input tree, then the OIFS base data and the NEMO domain of the model
+grids, used by ``ecefast present run`` and by ``ecefast <component> run`` (``--period present`` is the default).
 
-Both steps use the component tools on the present-day input tree (``present.input``) and write their final files
-into ``present.output``, laid out as in ECE4-DATA; intermediate files go to ``<machine.tmpdir>/present/<component>``.
+``stage`` copies the base files of the present-day input tree (``present.input``) into ``present.output``, so the
+output is a complete tree the Eocene can start from (``eocene.input: "{present.output}"``). The component steps
+write their final files into it, laid out as in ECE4-DATA; intermediate files go to
+``<machine.tmpdir>/present/<component>``.
 """
 
 import logging
@@ -12,7 +14,7 @@ from ecefast.components.nemo.domain.pipeline import NEMOWorkflow
 from ecefast.components.oifs.generator import OIFSData
 from ecefast.core.runner import run_period
 from ecefast.core.steps import ComponentStep
-from ecefast.core.workspace import Context, pause_before_overwrite
+from ecefast.core.workspace import Context, Stage, pause_before_overwrite
 from ecefast.periods.present.bathymetry import PresentDayBathymetry
 from ecefast.tools.ecearth import get_backend
 
@@ -26,6 +28,7 @@ class PresentOIFS(ComponentStep):
 
     name = "oifs"
     component = "oifs"
+    needs = ["stage"]
     # reads and writes depend on present.oifs.steps: checked by OIFSData.check in from_context
 
     def __init__(self, generator: OIFSData, replaces: list[str]):
@@ -55,6 +58,7 @@ class PresentNEMO(ComponentStep):
 
     name = "nemo"
     component = "nemo"
+    needs = ["stage"]
     # reads and writes depend on present.nemo.steps: checked by NEMOWorkflow.check in from_context
 
     def __init__(self, workflow: NEMOWorkflow, replaces: list[str]):
@@ -80,7 +84,7 @@ class PresentNEMO(ComponentStep):
         return [path for _, _, writes in self.workflow.plan() for path in writes]
 
 
-PIPELINE: list[type[ComponentStep]] = [PresentOIFS, PresentNEMO]
+PIPELINE: list[type[ComponentStep]] = [Stage, PresentOIFS, PresentNEMO]
 
 
 def run(
@@ -98,7 +102,7 @@ def run(
     config_file : str
         Configuration file (schema 2) with a ``present`` section.
     select : list of str, optional
-        Names of the steps to run (``oifs``, ``nemo``). ``None`` runs both.
+        Names of the steps to run (``stage``, ``oifs``, ``nemo``). ``None`` runs all of them.
     component : str, optional
         Run only the step of this component (``ecefast <component> run``).
     substeps : dict, optional
@@ -106,7 +110,8 @@ def run(
     dry_run : bool
         Only check the inputs and log the plan; write nothing.
     overwrite : bool
-        Replace final files that exist already (after a warning and a pause).
+        With ``stage``: replace an output tree that holds files. Without: replace final files that exist already.
+        Both after a warning and a pause.
 
     Returns
     -------

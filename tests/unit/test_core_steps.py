@@ -236,6 +236,18 @@ def test_write_into_input_is_refused_before_start(ctx: Context) -> None:
     assert ran == []
 
 
+def test_eocene_starting_from_present_output(tmp_path: Path) -> None:
+    """With ``eocene.input: "{present.output}"`` the present day still writes its own output, and the Eocene may
+    not write into it."""
+    config = make_config(tmp_path)
+    config.eocene.input = config.present.output
+    present = Context(config, "present")
+    present.check_writable(present.expand("{output}/a.txt"))
+    eocene = Context(config, "eocene")
+    with pytest.raises(PipelineError, match="read-only 'eocene.input'"):
+        eocene.check_writable(present.expand("{output}/a.txt"))
+
+
 def test_base_class_must_be_overridden() -> None:
     with pytest.raises(NotImplementedError):
         ComponentStep.from_context(None)
@@ -331,6 +343,7 @@ def test_stage_copies_the_subset(ctx: Context, caplog: pytest.LogCaptureFixture,
         "oasis/PALEORCA2/f.txt",
         "oifs/TL63L31/f.txt",
         "oifs/ifsdata/f.txt",
+        "runoff-mapper/f.txt",
     ]
     assert (out / "cmip6-data").is_symlink()
     assert (out / "cmip6-data" / "f.txt").read_text() == "cmip6-data"
@@ -363,5 +376,18 @@ def test_stage_refuses_output_containing_input(tmp_path: Path) -> None:
 
 
 def test_stage_preflight_reports_missing_input(ctx: Context) -> None:
-    with pytest.raises(PipelineError, match="3 input files are missing"):
+    with pytest.raises(PipelineError, match="4 input files are missing"):
         run_pipeline([Stage], ctx)
+
+
+def test_stage_follows_symlinks(ctx: Context) -> None:
+    """A link to a file outside the copied folders (oasis/<grid>/rstos.nc -> initial_state/ in ECE4-DATA 4.1.10)
+    becomes a real file in the output."""
+    root = Path(ctx.section.input)
+    input_tree(root)
+    (root / "initial_state").mkdir()
+    (root / "initial_state" / "rstos.nc").write_text("rstos")
+    (root / "oasis" / "PALEORCA2" / "rstos.nc").symlink_to("../../initial_state/rstos.nc")
+    run_pipeline([Stage], ctx)
+    copied = Path(ctx.section.output) / "oasis" / "PALEORCA2" / "rstos.nc"
+    assert not copied.is_symlink() and copied.read_text() == "rstos"

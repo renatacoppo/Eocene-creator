@@ -32,7 +32,7 @@ grids:
 # Present-day period: `ecefast present run`, or `ecefast oifs run` and `ecefast nemo run`
 present:
   input: /path/to/ECE4-DATA-V3        # EC-Earth4 input tree, read-only (required)
-  output: /path/to/OUTPUT/present     # nemo/domain/<grid>/, oifs/<grid>/ (required)
+  output: /path/to/OUTPUT/present     # the present-day tree: stage copies the input, then oifs/, nemo/domain/ (required)
   oifs:                               # OIFS base data of grids.oifs made from a finer grid
     # source_grid: TL255L91           # read from {input}/oifs/<source_grid>/<startdate>
     climate_dir: /path/to/climate/climate.v020   # ECMWF monthly climate fields; read by the boundary step
@@ -55,7 +55,7 @@ present:
 
 # Eocene (DeepMIP) period: `ecefast eocene run`
 eocene:
-  input: "{present.input}"            # EC-Earth tree to start from: the present-day one (required)
+  input: "{present.output}"           # EC-Earth tree to start from: the one of `ecefast present run` (required)
   herold: /path/to/herold-et-al-2014/Supp   # Herold et al. (2014) supplementary data, read-only (required)
   output: /path/to/OUTPUT/eocene      # the Eocene EC-Earth tree; --overwrite replaces it (required)
   nemo:

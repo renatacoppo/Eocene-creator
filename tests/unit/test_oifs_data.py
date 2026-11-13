@@ -176,8 +176,10 @@ def test_step_refuses_existing_outputs_without_overwrite(tmp_path: Path) -> None
 
 def test_cli_dry_run_writes_nothing(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     source_files(tmp_path, "TL159L31")
+    for sub in ("nemo", "oasis/PALEORCA2", "runoff-mapper"):  # the rest of the tree stage copies
+        (tmp_path / "input" / sub).mkdir(parents=True)
     config = write_config(tmp_path, {"source_grid": "TL159L31"})
-    cli.main(["oifs", "run", "-c", str(config), "--dry-run"])
+    cli.main(["present", "run", "-c", str(config), "--steps", "stage,oifs", "--dry-run"])
     assert not (tmp_path / "out").exists()
     log = capsys.readouterr().err
     assert "Dry run" in log

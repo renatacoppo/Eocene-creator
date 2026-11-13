@@ -54,12 +54,22 @@ have steps (``eocene.nemo.steps`` are used with ``eocene.nemo.domain: build``):
    ecefast nemo run -c configs/laptop.yml --nemo coordinates,bathymetry
    ecefast eocene run -c configs/atos.yml --steps stage,domain --nemo configure_domain,domain_cfg,generate_mask
 
-``stage`` copies the base files into ``eocene.output``. If that directory holds files, ``stage``
-stops with an error unless ``--overwrite`` is given: then it logs a warning, waits 5 s (Ctrl-C to
-stop) and removes the whole Eocene tree before copying. ``--steps`` without ``stage`` runs on an
-existing output directory: a needed step that is not selected (here ``stage``) must have run
-before, i.e. all its ``writes`` exist. The present-day steps refuse final files that exist already
-unless ``--overwrite`` is given, with the same warning and pause.
+Both periods start with ``stage``, which copies the base files into the period's ``output``. A run
+with ``stage`` makes a new output tree atomically: every step writes into ``<output>.partial``,
+next to the output, which replaces ``output`` only when all the steps have succeeded. A failed run
+leaves ``output`` as it was and keeps the partial tree for inspection; the next run removes it. If
+``output`` holds files, the run stops with an error unless ``--overwrite`` is given: then it logs a
+warning, waits 5 s (Ctrl-C to stop), and the old tree is replaced at the end.
+
+``--steps`` without ``stage`` (and ``ecefast <component> run``) runs on an existing output
+directory, writing each file atomically in place: a needed step that is not selected (here
+``stage``) must have run before, i.e. all its ``writes`` exist. The present-day steps then refuse
+final files that exist already unless ``--overwrite`` is given, with the same warning and pause.
+
+.. code-block:: bash
+
+   ecefast present run -c configs/atos.yml --steps stage,nemo     # first time: a new present-day tree
+   ecefast nemo run -c configs/atos.yml --overwrite                # later: rerun nemo on that tree
 
 The run logs the CDO version first. On a usage error (bad configuration, missing input, unknown
 step, existing output) the command logs one error and exits with code 1.
@@ -206,11 +216,14 @@ each step.
 The present-day steps
 ---------------------
 
-``ecefast present run`` has two steps. Both read ``present.input`` and write their final files
-into ``present.output``, laid out as in ECE4-DATA; intermediate files go to
-``<machine.tmpdir>/present/<component>/``. They do not declare ``reads`` and ``writes`` (they
-depend on the configured steps): each checks its inputs, and refuses existing final files without
-``--overwrite``, when it is built, before the first step runs.
+``ecefast present run`` has three steps. ``stage`` copies the base files of ``present.input`` into
+``present.output`` (:ref:`stage-step`), so the output is a complete EC-Earth tree the Eocene can
+start from (``eocene.input: "{present.output}"``). ``oifs`` and ``nemo`` need ``stage``; they read
+``present.input`` and write their final files into ``present.output``, laid out as in ECE4-DATA,
+replacing the copied ones; intermediate files go to ``<machine.tmpdir>/present/<component>/``.
+They do not declare ``reads`` and ``writes`` (they depend on the configured steps): each checks its
+inputs, and on an existing tree refuses existing final files without ``--overwrite``, when it is
+built, before the first step runs.
 
 ``nemo`` (``PresentNEMO``)
    The NEMO domain pipeline (below) with ``PresentDayBathymetry``, the steps of
@@ -221,8 +234,8 @@ depend on the configured steps): each checks its inputs, and refuses existing fi
    and ``{output}/oifs/{grids.oifs.name}/{grids.oifs.climate_version}/``.
 
 ``ecefast present run`` skips a step whose component has no section in ``present``: on a laptop,
-where the template has no ``present.oifs`` (its inputs exist on Atos only), it runs the ``nemo``
-step only, like ``ecefast nemo run``. Selecting ``oifs`` explicitly (``--steps oifs`` or
+where the template has no ``present.oifs`` (its inputs exist on Atos only), it runs ``stage`` and
+``nemo``. Selecting ``oifs`` explicitly (``--steps oifs`` or
 ``ecefast oifs run``) without the section is an error.
 
 NEMO domain pipeline
@@ -456,13 +469,16 @@ checks that all its ``writes`` exist.
 The ``stage`` step
 ------------------
 
-:class:`ecefast.core.workspace.Stage` copies the base files from ``eocene.input`` to
-``eocene.output``, so the later steps modify copies, never the input. It refuses an output
-directory that holds files, unless ``--overwrite`` is given: then, after a warning and a 5 s pause,
-it removes the whole tree first. It copies ``oifs/`` (``composition``, ``ifsdata``, ``vtables``,
-``rtables`` and ``{grids.oifs.name}``), ``nemo/`` (``cfc``, ``climatology``, ``initial``,
-``weights``) and ``oasis/{grids.nemo.name}``, and symlinks ``cmip6-data``. It refuses an output
-directory that is or contains the input directory.
+:class:`ecefast.core.workspace.Stage` copies the base files from the period's ``input`` to its
+``output``, so the later steps modify copies, never the input. It is the first step of both
+periods. It copies ``oifs/`` (``composition``, ``ifsdata``, ``vtables``, ``rtables`` and
+``{grids.oifs.name}``), ``nemo/`` (``cfc``, ``climatology``, ``initial``, ``weights``),
+``oasis/{grids.nemo.name}`` and ``runoff-mapper/``, and symlinks ``cmip6-data``. Symlinks inside the
+copied folders are followed, so the copy holds the files themselves (in ECE4-DATA 4.1.10
+``oasis/<grid>/rstos.nc`` links to ``initial_state/``, which is not copied). It refuses an output
+directory that is or contains the input directory. The runner makes the run atomic: ``stage`` and
+the steps after it write into ``<output>.partial``, moved to ``output`` at the end
+(:func:`ecefast.core.io.replace_directory`).
 
 Atomic writes
 -------------

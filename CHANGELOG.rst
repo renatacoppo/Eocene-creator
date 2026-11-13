@@ -87,6 +87,16 @@ Added
 Changed
 ~~~~~~~
 
+- The present-day period starts with ``stage`` (``[stage, oifs, nemo]``): ``present.output`` is a complete EC-Earth
+  tree, a copy of ``present.input`` with the present-day files, and the Atos template starts the Eocene from it
+  (``eocene.input: "{present.output}"``). ``oifs`` and ``nemo`` need ``stage``: the first run is
+  ``ecefast present run`` or ``--steps stage,...``, and the error says so.
+- A run with ``stage`` is atomic: the steps write into ``<output>.partial``, moved to ``output`` when all of them
+  have succeeded (``core.io.replace_directory``); a failed run leaves ``output`` unchanged. ``--overwrite`` is
+  needed only if ``output`` holds files, and is checked before anything runs.
+- ``stage`` also copies ``runoff-mapper/`` (read by the Eocene ``rnfm`` step when it starts from the present-day
+  tree), follows symlinks inside the copied folders (ECE4-DATA 4.1.10 links ``oasis/<grid>/rstos.nc`` to
+  ``initial_state/``), and always creates ``oifs/``, ``nemo/`` and ``oasis/``.
 - A missing CDO binary stops the command with a one-line error that suggests ``module load cdo`` (HPC) or the
   conda-forge / Homebrew package, instead of a ``FileNotFoundError`` traceback from python-cdo.
 - Configuration by time period (task 8.3), still ``schema: 2``: ``machine`` (with the required ``tmpdir`` for the
@@ -237,6 +247,11 @@ Removed
 Output
 ~~~~~~
 
+- ``present.output`` (``BASELINE/nemo-domain``) now also holds the copy of the input tree made by ``stage``
+  (``oifs/``, ``nemo/``, ``oasis/<grid>/``, ``runoff-mapper/``, the ``cmip6-data`` link); the domain files are
+  unchanged. ``eocene.output`` gains nothing new (``runoff-mapper/`` holds only ``runoff_maps.nc``, which ``rnfm``
+  writes); with ``eocene.input: "{present.output}"`` on Atos, the Eocene starts from the present-day files made by
+  ``ecefast`` instead of ECE4-DATA (e.g. the rebuilt PALEORCA2 domain).
 - Domain pipeline layout (file contents unchanged, checked against the domain baseline): the present-day domain
   goes to ``present.output/nemo/domain/<grid>/`` (no ``<name>/`` folder), the Eocene one built with
   ``eocene.nemo.domain: build`` to ``<tmpdir>/eocene/nemo/domain/<grid>/`` before it is installed;

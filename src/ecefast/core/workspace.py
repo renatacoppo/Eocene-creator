@@ -49,11 +49,15 @@ class Context:
         The running period (``present`` or ``eocene``).
     overwrite : bool
         Allow the steps to replace existing outputs (``--overwrite``).
+    final_output : str, optional
+        Where the output tree goes at the end of a run with ``stage``, which writes into a partial tree first
+        (then ``section.output`` is the partial tree); ``None`` when the steps write in place.
     """
 
     config: Config
     period: str
     overwrite: bool = False
+    final_output: str | None = None
 
     @property
     def section(self) -> Present | Eocene:
@@ -97,6 +101,9 @@ class Context:
     def check_writable(self, path: str, step: str = "") -> None:
         """Refuse a write path inside a read-only directory (every period's ``input``, ``eocene.herold``).
 
+        The running period's own ``output`` is never read-only for it, even when another period starts from it
+        (``eocene.input: "{present.output}"``).
+
         Parameters
         ----------
         path : str
@@ -110,8 +117,11 @@ class Context:
             If ``path`` is a read-only directory or lies inside one.
         """
         real = os.path.realpath(path)
+        own = {os.path.realpath(p) for p in (self.section.output, self.final_output) if p}
         for key, root in self.config.read_only_roots().items():
             root = os.path.realpath(root)
+            if root in own:  # another period's input, but this period's output
+                continue
             if real == root or real.startswith(root + os.sep):
                 who = f"Step '{step}'" if step else "A step"
                 raise PipelineError(f"{who} would write {path}, inside the read-only '{key}' tree {root}")
@@ -150,8 +160,8 @@ class Stage(ComponentStep):
 
     name = "stage"
     needs = []
-    reads = ["{input}/oifs", "{input}/nemo", "{input}/oasis/{grids.nemo.name}"]
-    writes = ["{output}/oifs", "{output}/nemo", "{output}/oasis/{grids.nemo.name}"]
+    reads = ["{input}/oifs", "{input}/nemo", "{input}/oasis/{grids.nemo.name}", "{input}/runoff-mapper"]
+    writes = ["{output}/oifs", "{output}/nemo", "{output}/oasis/{grids.nemo.name}", "{output}/runoff-mapper"]
 
     # subdirectories copied from each component of the input tree
     OIFS_SUBDIRS = ["composition", "ifsdata", "vtables", "rtables"]
@@ -174,7 +184,9 @@ class Stage(ComponentStep):
 
         An output folder that holds files is refused, unless ``overwrite`` is set: then it is removed first, after
         a warning and a pause (:func:`pause_before_overwrite`).
-        ``cmip6-data`` is symlinked, not copied.
+        ``cmip6-data`` is symlinked, not copied. Symlinks inside the copied folders are followed, so the copy holds
+        the files themselves and does not depend on the input tree (e.g. ``oasis/<grid>/rstos.nc`` links to
+        ``initial_state/`` in recent ECE4-DATA releases).
         """
         input_dir, output_dir = self.input_dir, self.output_dir
         logger.info(f"Copying input data from {input_dir} to {output_dir}")
@@ -202,6 +214,7 @@ class Stage(ComponentStep):
         # loop through input directory and copy relevant subdirectories
         for item in os.listdir(input_dir):
             if item in ["oifs", "nemo", "oasis"]:
+                os.makedirs(os.path.join(output_dir, item))  # declared in writes, even if nothing in it is kept
                 for subitem in os.listdir(os.path.join(input_dir, item)):
                     if item == "oasis" and subitem not in [self.nemo_reso]:
                         continue
@@ -212,7 +225,12 @@ class Stage(ComponentStep):
                     src = os.path.join(input_dir, item, subitem)
                     dst = os.path.join(output_dir, item, subitem)
                     logger.debug(f"Copying {src} to {dst}")
-                    shutil.copytree(src, dst, symlinks=True)
+                    shutil.copytree(src, dst)
+            elif item == "runoff-mapper":
+                src = os.path.join(input_dir, item)
+                dst = os.path.join(output_dir, item)
+                logger.debug(f"Copying {src} to {dst}")
+                shutil.copytree(src, dst)
             elif item in ["cmip6-data"]:
                 src = os.path.join(input_dir, item)
                 dst = os.path.join(output_dir, item)

@@ -378,7 +378,9 @@ def test_missing_and_empty_file(tmp_path: Path) -> None:
 def test_templates_load(tmp_path: Path, template: str) -> None:
     """The committed templates are valid, both periods present."""
     config = load_config(REPO / "configs" / template)
-    assert config.eocene.input == config.present.input
+    # on Atos the Eocene starts from the present-day tree of `ecefast present run`; on a laptop from ECE4-DATA
+    start = config.present.output if template == "atos.tmpl" else config.present.input
+    assert config.eocene.input == start
     assert config.present.nemo.source_grid == "eORCA1"
     assert (config.present.oifs is not None) == (template == "atos.tmpl")  # the generator's inputs are on Atos
     assert (config.eocene.nemo.domain == "build") == (template == "atos.tmpl")

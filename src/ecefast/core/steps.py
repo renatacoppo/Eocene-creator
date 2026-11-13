@@ -123,7 +123,8 @@ def _check_unselected_needs(steps: list[type[ComponentStep]], selected: list[typ
             if missing:
                 raise PipelineError(
                     f"Step '{step.name}' needs '{need}', which is not selected and has not run before "
-                    f"(missing: {', '.join(missing)}). Select '{need}' too."
+                    f"(missing: {', '.join(missing)}). Select '{need}' too: "
+                    f"ecefast {ctx.period} run --steps {need},{step.name}"
                 )
 
 
@@ -265,8 +266,9 @@ def files_recap(
         for path in [ctx.expand(t) for t in step.writes] + instance.planned_writes():
             if path not in paths:
                 paths.append(path)
+    shown_output = ctx.final_output or ctx.section.output  # a run with stage builds a partial tree, then moves it
     groups = {
-        f"{ctx.period}.output ({ctx.section.output})": ctx.section.output,
+        f"{ctx.period}.output ({shown_output})": ctx.section.output,
         f"machine.tmpdir ({ctx.config.machine.tmpdir})": ctx.config.machine.tmpdir,
     }
     lines = {label: [] for label in [*groups, "elsewhere"]}

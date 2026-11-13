@@ -228,6 +228,7 @@ READ_WRITERS = {
     "{input}/oifs": _directory,
     "{input}/nemo": lambda path: path.mkdir(parents=True, exist_ok=True),
     "{input}/oasis/{grids.nemo.name}": lambda path: path.mkdir(parents=True, exist_ok=True),
+    "{input}/runoff-mapper": lambda path: path.mkdir(parents=True, exist_ok=True),
     "{input}/nemo/domain/{grids.nemo.name}/domain_cfg.nc": _domain,
     "{input}/oasis/{grids.nemo.name}/rstos.nc": _rstos,
     "{herold}/Green_Huber_eocene_tidal_dissipation_1x1.nc": _tidal_dissipation,
