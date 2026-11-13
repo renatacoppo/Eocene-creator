@@ -93,7 +93,7 @@ eocene:
 Any string may refer to another value with a `{section.key}` placeholder, e.g.
 `from: "{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene"` (the output of an earlier
 `ecefast nemo domain`). Optional sections: `tmpdir`, `machine` (`name: local | atos | fake`), `oifs`
-(`grid: TL63L31`), `nemo` (`grid: PALEORCA2`, and `domain`: the NEMO domain pipeline,
+(`grid: TL63L31`, and `data`: the OIFS generator, `ecefast oifs data -c <file>`, inputs on Atos only), `nemo` (`grid: PALEORCA2`, and `domain`: the NEMO domain pipeline,
 `ecefast nemo domain -c <file>`), and in `eocene`: `oifs.aerosols: false`, `oasis.constant_sst: 290.0`.
 Every key, and the schema 1 → 2 key table, is in `docs/configuration.rst`. Schema 1 files are no longer read:
 the error lists each old key with its new name.

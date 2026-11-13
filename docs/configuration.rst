@@ -129,8 +129,12 @@ Example for Atos:
      atos:
        oasis_lib_dir: /path/to/ecearth4/sources/oasis3-mct-5.2/arch_ecearth/lib
 
-``oifs``
---------
+``oifs`` and ``oifs.data``: the OIFS generator
+-----------------------------------------------
+
+``oifs.data`` is read by ``ecefast oifs data``, which makes the OIFS base data of ``oifs.grid`` from a finer
+grid of the input tree (see :doc:`workflow`); leave it out if you do not run it. Its inputs exist on ECMWF
+Atos only.
 
 .. list-table::
    :header-rows: 1
@@ -143,9 +147,57 @@ Example for Atos:
    * - ``oifs.grid``
      - str
      - ``TL63L31``
-     - OIFS resolution, as the directory name under ``oifs/`` in the input tree.
+     - OIFS resolution, as the directory name under ``oifs/`` in the input tree; also the resolution
+       ``ecefast oifs data`` makes.
+   * - ``oifs.data.output_dir``
+     - str
+     - required
+     - The only output: ``oifs/<oifs.grid>/<startdate>/`` (``ICMSHECE4INIT``, ``ICMGGECE4INIT``,
+       ``ICMGGECE4INIUA``), ``oifs/<oifs.grid>/<climate_version>/`` (climate file) and ``work/``
+       (intermediate files, kept).
+   * - ``oifs.data.source_grid``
+     - str
+     - ``TL255L91``
+     - Grid the data is made from, read from ``{inputs.ece4_data}/oifs/<source_grid>/<startdate>/``. With
+       another number of levels than ``oifs.grid`` the initial state is interpolated vertically.
+   * - ``oifs.data.startdate``
+     - str
+     - ``19900101``
+     - Initial-state date, the directory name. Quote it in YAML (``'19900101'``).
+   * - ``oifs.data.climate_version``
+     - str
+     - ``climate.v020``
+     - Climate files version, the directory name: ``climate.v020`` for cy48, ``climate.v015`` for cy43.
+   * - ``oifs.data.climate_dir``
+     - str
+     - ``null``
+     - ECMWF monthly climate fields (``<N>l_2/month_<var>``), merged into ``ICMCLECE4-1990`` by the
+       ``boundary`` step when no precomputed file exists. Needed only then.
+   * - ``oifs.data.precomputed_climate_dir``
+     - str
+     - ``null``
+     - Ready climate files (``<oifs.grid>/<climate_version>/ICMCLECE4``); the ``boundary`` step copies
+       the file of ``oifs.grid`` when it is there.
+   * - ``oifs.data.vertical_grids_dir``
+     - str
+     - ``null``
+     - Grids with cell corners (``T<kind><N>_grid.nc``, made by ``create_corners.py``), read by the
+       vertical interpolation. Needed only then.
+   * - ``oifs.data.steps.spectral``, ``.gridpoint``, ``.boundary``
+     - bool
+     - ``true``, ``true``, ``false``
+     - Steps to run (see :doc:`workflow`).
 
-``oifs.data`` (``ecefast oifs data``, the OIFS generator) is reserved for task 8.2 and not read yet.
+Example (Atos):
+
+.. code-block:: yaml
+
+   oifs:
+     grid: TL63L31
+     data:
+       output_dir: /path/to/OUTPUT/oifs-data
+       source_grid: TL255L91
+       vertical_grids_dir: /path/to/oifs-grids
 
 ``nemo`` and ``nemo.domain``: the NEMO domain pipeline
 ------------------------------------------------------
@@ -288,7 +340,7 @@ Local folders
 
 The templates and the docs use one naming scheme for the local outputs: ``OUTPUT/<command>`` for
 runs and ``BASELINE/<command>`` for the frozen reference, with ``<command>`` = ``eocene``,
-``nemo-domain`` (and ``oifs-data`` from task 8.2).
+``nemo-domain``, ``oifs-data``.
 
 Migrating from schema 1
 -----------------------

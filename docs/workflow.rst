@@ -195,6 +195,47 @@ imports ``paleo``. A ``processor`` name that is in neither is an error listing t
 add a paleo bathymetry, subclass ``BathymetryProcessor`` under ``ecefast/paleo/<period>/``, export
 it in a mapping like ``EOCENE_PROCESSORS`` and merge that mapping where the pipeline is built.
 
+OIFS generator
+--------------
+
+``ecefast oifs data`` makes the present-day OIFS base data of ``oifs.grid`` from the one of
+``oifs.data.source_grid`` in the input tree, following the ``oifs.data`` section of the configuration
+(:doc:`configuration`). Its inputs (TL255L91, the ECMWF climate fields, the grids with cell corners) exist on
+ECMWF Atos only:
+
+.. code-block:: bash
+
+   ecefast oifs data -c configs/atos.yml --dry-run    # check all inputs and show the plan; write nothing
+   ecefast oifs data -c configs/atos.yml              # run the enabled steps
+
+Its steps, switched on or off in ``oifs.data.steps``:
+
+``spectral`` (on)
+   Truncates ``ICMSHECE4INIT`` to the target spectral resolution (``cdo sp2sp``).
+``gridpoint`` (on)
+   Remaps ``ICMGGECE4INIT`` and ``ICMGGECE4INIUA`` to the target reduced Gaussian grid by nearest neighbour
+   (``cdo remapnn``), GRIB1 and GRIB2 messages separately, then joins them (all GRIB1, then all GRIB2).
+``boundary`` (off)
+   The climate file: copies ``<precomputed_climate_dir>/<grid>/<climate_version>/ICMCLECE4`` if it exists,
+   else merges the monthly albedo and leaf area index fields of ``climate_dir`` into ``ICMCLECE4-1990``.
+
+When ``spectral`` or ``boundary`` is on, the three initial-state files go to
+``<output_dir>/oifs/<grid>/<startdate>/``: moved from ``work/`` when the source and target have the same number of
+levels, else interpolated vertically first (``cdo remapeta`` with the hybrid coefficients of
+``grids/L<levels>.txt``; temperature, divergence and vorticity through the Gaussian grid and back to spectral,
+moisture and cloud fields on the reduced Gaussian grid, orography and surface pressure unchanged). The climate
+file goes to ``<output_dir>/oifs/<grid>/<climate_version>/``. Intermediate files stay in ``<output_dir>/work/``, so
+a step can be rerun alone on the work of an earlier run. Nothing is written into the input tree.
+
+Before the first step the command checks that every file an enabled step reads exists (or is written by an
+earlier step), and lists all missing ones at once; ``--dry-run`` does only this and logs the plan.
+
+The reduced Gaussian grid descriptions (``grids/T<kind><N>.txt``) and hybrid coefficients ship with the package
+in ``ecefast/components/oifs/grids/``. The scripts that made them, and the grids of
+``oifs.data.vertical_grids_dir``, stay scripts: ``create_corners.py`` (grids with cell corners),
+``descriptor_generator.py`` (reduced Gaussian descriptions) and ``convert_aka_bika.py`` (hybrid coefficients
+from the ECMWF tables).
+
 Writing a step
 --------------
 

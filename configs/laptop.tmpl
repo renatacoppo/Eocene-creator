@@ -19,9 +19,11 @@ inputs:
 # machine:
 #   name: local                 # where DOMAINcfg runs: local (not available), atos (ECMWF Atos) or fake (tests)
 
-# OIFS settings
+# OIFS settings and commands
 # oifs:
-#   grid: TL63L31               # OIFS resolution (directory under oifs/)
+#   grid: TL63L31               # OIFS resolution (directory under oifs/); also the target of `ecefast oifs data`
+#   data:                       # OIFS generator (`ecefast oifs data`); its inputs (TL255L91, climate) are on Atos only
+#     output_dir: /path/to/OUTPUT/oifs-data   # see configs/atos.tmpl for the other keys
 
 # NEMO settings and commands
 nemo:

@@ -22,9 +22,23 @@ machine:
     # profile: atos             # HPC modules to load: a profile of ecefast/tools/hpc_profiles.yaml
     oasis_lib_dir: /path/to/ecearth4/sources/oasis3-mct-5.2/arch_ecearth/lib  # added to LD_LIBRARY_PATH (default null)
 
-# OIFS settings
-# oifs:
-#   grid: TL63L31               # OIFS resolution (directory under oifs/)
+# OIFS settings and commands
+oifs:
+  # grid: TL63L31               # OIFS resolution (directory under oifs/); also the target of `ecefast oifs data`
+
+  # OIFS generator (`ecefast oifs data`): base data of oifs.grid made from a finer grid; omit if you do not run it
+  data:
+    output_dir: /path/to/OUTPUT/oifs-data   # only output: oifs/<grid>/<startdate>/, oifs/<grid>/<climate_version>/, work/ (required)
+    # source_grid: TL255L91     # read from {inputs.ece4_data}/oifs/<source_grid>/<startdate>
+    # startdate: '19900101'     # initial-state date (directory name); quote it
+    # climate_version: climate.v020   # climate files version: climate.v020 for cy48, v015 for cy43
+    climate_dir: /path/to/climate/climate.v020   # ECMWF monthly climate fields; read by the boundary step (default null)
+    precomputed_climate_dir: /path/to/oifs48-icmcl # ready ICMCLECE4 files (<grid>/<climate_version>/), copied if there (default null)
+    vertical_grids_dir: /path/to/oifs-grids  # T<kind><N>_grid.nc made by create_corners.py; read by the vertical interpolation (default null)
+    # steps:
+    #   spectral: true          # truncate ICMSHECE4INIT
+    #   gridpoint: true         # remap ICMGGECE4INIT, ICMGGECE4INIUA
+    #   boundary: false         # climate file ICMCLECE4
 
 # NEMO settings and commands
 nemo:
