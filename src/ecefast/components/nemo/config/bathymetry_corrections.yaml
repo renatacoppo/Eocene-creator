@@ -1,14 +1,14 @@
 # Strait Corrections Configuration
 # 
-# Organized by target_grid + remap_method combination.
+# Organized by source_grid + target_grid + remap_method combination (key <source>_to_<target>_<remap>).
 # Each entry specifies which regions to open (set to local average depth)
 # and which regions to close (set to land/0).
 #
-# IMPORTANT: Grid indices are specific to the grid+remap combination.
-# If you change either the target grid or remapping method, you MUST
+# IMPORTANT: Grid indices are specific to the source+target+remap combination.
+# If you change the source grid, the target grid or the remapping method, you MUST
 # verify/recompute these indices or add new entries for the new combination.
 
-PALEORCA2_remapnn:
+eORCA1_to_PALEORCA2_remapnn:
   # Target grid: PALEORCA2, source: eORCA1, remap: nearest-neighbor
   # Open regions: set cells to local average depth (3x3 neighborhood)
   # Close regions: set cells to 0 (land)

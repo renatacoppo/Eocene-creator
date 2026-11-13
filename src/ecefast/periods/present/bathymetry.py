@@ -1,59 +1,66 @@
 """
-PresentDayBathymetry: processor for the eORCA1 present-day bathymetry.
+PresentDayBathymetry: processor for the present-day bathymetry of a NEMO domain of the input tree.
 
-This processor remaps the present-day eORCA1 bathymetry onto PALEORCA2 and then
-applies hand-coded strait corrections (open/close specific grid cells) to produce
-a geographically consistent target grid.
+This processor remaps the bathymetry of ``{input}/nemo/domain/<present.nemo.source_grid>/domain_cfg.nc``
+(eORCA1 by default) onto the target grid and then applies hand-coded strait corrections (open/close specific
+grid cells) to produce a geographically consistent target grid.
 
-IMPORTANT: the strait corrections assume a specific remapping (remapnn to PALEORCA2).
-If the remap method or target grid changes, the cell indices will need to be revised.
+IMPORTANT: the strait corrections assume a specific source grid, target grid and remapping (eORCA1, remapnn to
+PALEORCA2). Another combination needs its own corrections (``bathymetry_corrections.yaml``); without them the
+step stops.
 """
 
+import glob
 import logging
 import os
 
 import xarray as xr
 import matplotlib.pyplot as plt
 
-from .base import BathymetryProcessor
+from ecefast.components.nemo.bathymetry import BathymetryProcessor
 from ecefast.components.nemo.config import get_corrections_for_grid
 
 logger = logging.getLogger(__name__)
 
+# file name of the land-sea mask comparison plot, next to the corrected bathymetry
+PLOT_FILE = "landsea_mask_comparison.png"
+
 
 class PresentDayBathymetry(BathymetryProcessor):
     """
-    Processor for the eORCA1 present-day bathymetry.
+    Processor for the present-day bathymetry of a NEMO domain of the input tree.
 
-    Source: NEMO domain_cfg.nc, variable bathy_metry (positive depth convention).
-    Remap:  nearest-neighbour (remapnn) to PALEORCA2 T-grid.
-    Post:   manual strait corrections + optional land-sea mask plot.
-
-    YAML instance fields
-    --------------------
-    source_file : path to eORCA1 domain_cfg.nc
-    orca2_file  : (optional) path to ORCA2 domain_cfg.nc — enables comparison plot
-    orca1_file  : (optional) path to eORCA1 domain_cfg.nc for plot comparison
+    Source: ``{input}/nemo/domain/<source_grid>/domain_cfg.nc``, variable bathy_metry (positive depth convention).
+    Remap:  nearest-neighbour (remapnn) to the target T-grid.
+    Post:   manual strait corrections + land-sea mask plot, one panel per domain of the input tree.
     """
 
+    name = "present_day"
+    source_file = "{input}/nemo/domain/{nemo.source_grid}/domain_cfg.nc"
+    has_source_grid = True
     variable = "bathy_metry"
     mask_type = "positive_depth"
     remap_method = "remapnn"
-    output_prefix = "eORCA1_T"
 
     def __init__(self, cfg, paths, grids, params, cdo):
         super().__init__(cfg, paths, grids, params, cdo)
-        # Derive setgrid from source-grid coordinates, honouring staggering_source from YAML
+        # Derive setgrid from source-grid coordinates, honouring the source staggering of the config
         src = grids["source"]
         stagg = grids.get("staggering_source", "T")
         self.setgrid = os.path.join(paths["coordsdir"], src, f"coords_bounds_{stagg}.nc")
+        # e.g. eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T.nc
+        self.output_prefix = f"{src}_T"
+
+    def reference_domains(self) -> list[str]:
+        """The ``domain_cfg.nc`` of every NEMO domain of the input tree, shown next to the result in the plot."""
+        return sorted(glob.glob(os.path.join(self.paths["input"], "nemo", "domain", "*", "domain_cfg.nc")))
 
     def reads(self) -> list[str]:
-        """The base files, plus the optional comparison files of the plot (``orca1_file``, ``orca2_file``)."""
-        return super().reads() + [self.cfg[key] for key in ("orca1_file", "orca2_file") if self.cfg.get(key)]
+        """The base files, plus the domains of the input tree shown in the plot."""
+        return super().reads() + [f for f in self.reference_domains() if f not in super().reads()]
 
     # ------------------------------------------------------------------
-    # Postprocessing: strait corrections + optional plot
+    # Postprocessing: strait corrections + plot
     # ------------------------------------------------------------------
 
     def postprocess(self, remap_file, output_dir):
@@ -64,8 +71,10 @@ class PresentDayBathymetry(BathymetryProcessor):
         xfield.load()
         xfield.close()
 
-        # Load strait corrections from config based on target grid and remap method
-        open_regions, close_regions = get_corrections_for_grid(self.grids["target"], self.remap_method)
+        # Load strait corrections from config based on source grid, target grid and remap method
+        open_regions, close_regions = get_corrections_for_grid(
+            self.grids["source"], self.grids["target"], self.remap_method
+        )
 
         # Apply open regions (set to local average depth)
         for region in open_regions.keys():
@@ -75,36 +84,20 @@ class PresentDayBathymetry(BathymetryProcessor):
         for region in close_regions.keys():
             xfield = close_region(xfield, region, close_regions)
 
-        if self.cfg.get("orca2_file") or self.cfg.get("orca1_file"):
-            self._plot(xfield, output_dir)
+        self._plot(xfield, output_dir)
 
         xfield.to_netcdf(corrected)
         return corrected
 
     def _plot(self, xfield, output_dir):
-        mask = xr.where(xfield["bathy_metry"] > 0, 1, 0)
-
-        orca1_mask = None
-        orca2_mask = None
-
-        if self.cfg.get("orca1_file"):
-            with xr.open_dataset(self.cfg["orca1_file"]) as orca1:
-                orca1_mask = xr.where(orca1["bathy_metry"] > 0, 1, 0).load()
-
-        if self.cfg.get("orca2_file"):
-            with xr.open_dataset(self.cfg["orca2_file"]) as orca2:
-                orca2_mask = xr.where(orca2["bathy_metry"] > 0, 1, 0).load()
-
-        panels = []
-        labels = []
-        if orca1_mask is not None:
-            panels.append(orca1_mask)
-            labels.append("eORCA1 (source)")
-        if orca2_mask is not None:
-            panels.append(orca2_mask)
-            labels.append("ORCA2 (reference)")
-        panels.append(mask)
-        labels.append("PALEORCA2 (processed)")
+        """Land-sea mask of every domain of the input tree, then of the processed bathymetry."""
+        panels, labels = [], []
+        for path in self.reference_domains():
+            with xr.open_dataset(path) as domain:
+                panels.append(xr.where(domain["bathy_metry"] > 0, 1, 0).load())
+            labels.append(f"{os.path.basename(os.path.dirname(path))} (input tree)")
+        panels.append(xr.where(xfield["bathy_metry"] > 0, 1, 0))
+        labels.append(f"{self.grids['target']} (processed)")
 
         fig, axes = plt.subplots(1, len(panels), figsize=(10 * len(panels), 6))
         if len(panels) == 1:
@@ -117,17 +110,7 @@ class PresentDayBathymetry(BathymetryProcessor):
             ax.set_ylabel("Latitude")
 
         plt.tight_layout()
-
-        if orca1_mask is not None and orca2_mask is not None:
-            fname = "landsea_mask_comparison_orca1_orca2_paleorca2.png"
-        elif orca2_mask is not None:
-            fname = "landsea_mask_comparison_orca2_paleorca2.png"
-        elif orca1_mask is not None:
-            fname = "landsea_mask_comparison_orca1_paleorca2.png"
-        else:
-            fname = "landsea_mask.png"
-
-        plot_file = os.path.join(output_dir, fname)
+        plot_file = os.path.join(output_dir, PLOT_FILE)
         plt.savefig(plot_file, dpi=150, bbox_inches="tight")
         logger.info("Plot saved: %s", plot_file)
         plt.close()

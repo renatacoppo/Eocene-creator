@@ -1,8 +1,8 @@
 """Pipeline steps and the runner.
 
-A step is a class that subclasses :class:`ComponentStep`: it declares its ``name``, the steps it ``needs``, the
-paths it ``reads`` and ``writes`` (templates expanded by :meth:`ecefast.core.workspace.Context.expand`), and
-implements :meth:`~ComponentStep.from_context` and :meth:`~ComponentStep.run`. A pipeline is an ordered list of
+A step is a class that subclasses :class:`ComponentStep`: it declares its ``name``, its ``component``, the steps it
+``needs``, the paths it ``reads`` and ``writes`` (templates expanded by :meth:`ecefast.core.workspace.Context.expand`),
+and implements :meth:`~ComponentStep.from_context` and :meth:`~ComponentStep.run`. A pipeline is an ordered list of
 step classes, run by :func:`run_pipeline`.
 """
 
@@ -30,6 +30,9 @@ class ComponentStep:
     ----------
     name : str
         Short name, used by ``needs`` and to select steps (``oifs``, ``nemo``, ...).
+    component : str or None
+        The model component it makes files for (``oifs``, ``nemo``, ``oasis``, ``rnfm``), used by
+        ``ecefast <component> run``; ``None`` for a step of the whole tree (``stage``).
     needs : list of str
         Names of the steps that must run before this one.
     reads : list of str
@@ -43,6 +46,7 @@ class ComponentStep:
     """
 
     name: str = ""
+    component: str | None = None
     needs: list[str] = []
     reads: list[str] = []
     writes: list[str] = []
@@ -56,6 +60,9 @@ class ComponentStep:
     def run(self) -> None:
         """Do the work: call the ``create_*`` methods."""
         raise NotImplementedError(f"{type(self).__name__} does not implement run()")
+
+    def dry_run(self) -> None:
+        """Log what :meth:`run` would do beyond the declared ``writes`` (default: nothing)."""
 
 
 def step_summary(step: type[ComponentStep]) -> str:
@@ -200,6 +207,8 @@ def run_pipeline(
         for step in selected:
             outputs = ", ".join(ctx.expand(t) for t in step.writes)
             logger.info("  %-*s  %s%s", width, step.name, step_summary(step), f"  → {outputs}" if outputs else "")
+        for instance in instances:
+            instance.dry_run()
         return names
 
     for step, instance in zip(selected, instances):

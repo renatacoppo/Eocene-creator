@@ -10,64 +10,74 @@ the paths:
    cp configs/atos.tmpl configs/atos.yml       # ECMWF Atos (runs DOMAINcfg too)
 
 ``configs/*.yml`` is ignored by git. The file is checked when it is read: an unknown or missing
-key, a value of the wrong type, a bad placeholder or a missing input directory stops the run with
-an error naming the key and the file.
+key, a value of the wrong type or a bad placeholder stops the run with an error naming the key and
+the file. The read-only directories of a period are checked when that period runs.
 
 Layout
 ------
 
-The sections follow the components, and one rule ties commands to sections:
-``ecefast <component> <command>`` reads section ``<component>.<command>``
-(``ecefast nemo domain`` reads ``nemo.domain``); ``ecefast eocene run`` reads ``eocene``.
+The sections follow the **time periods**; the components are subsections of each period.
 
-- ``inputs`` and ``tmpdir`` are shared by every command; ``inputs`` are read-only.
-- ``machine`` says where the EC-Earth tools (DOMAINcfg) run.
-- ``oifs`` and ``nemo`` hold what is specific to a component: its grid and its commands.
-- ``eocene`` holds the Eocene (DeepMIP) run.
-- **Every command writes only to its own** ``output_dir`` (the same key name everywhere). Final
-  products are laid out as in ECE4-DATA inside it (``nemo/domain/<grid>/<name>/...``), so a later
-  run finds them where an EC-Earth tree has them; intermediate files go to ``<output_dir>/work/``.
-- A run uses the output of an earlier one by referring to it with a placeholder (below).
+- ``machine``: where the EC-Earth tools (DOMAINcfg) run, and ``tmpdir``, where every command keeps
+  its intermediate files.
+- ``grids``: the model resolution, the same for every period (a paleo period modifies the
+  present-day files of the same grids).
+- one section per period, ``present`` and ``eocene``. Each has ``input`` (the EC-Earth tree it
+  starts from, read-only), ``output`` (the tree it makes, laid out as in ECE4-DATA) and one
+  subsection per component (``oifs``, ``nemo``, ``oasis``). Datasets of a period have their own
+  key (``eocene.herold``), never ``input``.
+
+Two kinds of commands read it:
+
+.. code-block:: bash
+
+   ecefast <period> run -c CONFIG [--steps a,b]           # every step of a period: present, eocene
+   ecefast <component> run -c CONFIG [--period eocene]    # one component of one period (default: present)
+
+The smallest file for ``ecefast eocene run`` on a laptop:
 
 .. code-block:: yaml
 
    schema: 2
-   inputs:
-     ece4_data: /path/to/ECE4-DATA-V3
-     herold: /path/to/herold-et-al-2014/Supp
+   machine:
+     tmpdir: /path/to/tmp/ecefast
    eocene:
-     output_dir: /path/to/OUTPUT/eocene
-     domain:
-       from: /path/to/data/domain/PALEORCA2/eocene
+     input: /path/to/ECE4-DATA-V3
+     herold: /path/to/herold-et-al-2014/Supp
+     output: /path/to/OUTPUT/eocene
+     nemo:
+       domain: /path/to/data/domain/PALEORCA2/eocene
+       minimum_depth: 30
 
-This is enough for ``ecefast eocene run -c configs/laptop.yml``. Only ``schema`` and ``inputs``
-are always required; a command stops with an error if its own section is missing.
+Only ``schema`` and ``machine.tmpdir`` are always required; a command stops with an error if the
+section of its period (or of its component in that period) is missing.
 
 Placeholders
 ------------
 
 Any string value may contain ``{section.key}`` placeholders that refer to another value of the
-same file, defaults included: ``{inputs.herold}``, ``{nemo.grid}``, ``{tmpdir}``,
-``{nemo.domain.output_dir}``. They are replaced when the file is read; a value may refer to a value
-that has placeholders itself.
+same file, defaults included: ``{present.input}``, ``{grids.nemo.name}``, ``{machine.tmpdir}``.
+They are replaced when the file is read; a value may refer to a value that has placeholders itself.
 
 .. code-block:: yaml
 
    eocene:
-     domain:
-       from: "{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene"   # output of `ecefast nemo domain`
+     input: "{present.input}"     # start from the present-day tree
 
 A placeholder that names an unknown key, a key set to ``null`` or a section, or placeholders that
 refer to each other in a cycle, stop the run with an error naming the key. Quote values that start
-with ``{`` (YAML would read them as a mapping). The steps' ``reads`` and ``writes`` use the same
-placeholders (see :doc:`workflow`).
+with ``{`` (YAML would read them as a mapping).
 
-``schema``, ``inputs``, ``tmpdir``
-----------------------------------
+The steps' ``reads`` and ``writes`` (see :doc:`workflow`) use the same placeholders, plus the keys
+of the running period without its name: ``{input}``, ``{output}``, ``{herold}``,
+``{nemo.source_grid}``.
+
+``schema`` and ``machine``
+--------------------------
 
 .. list-table::
    :header-rows: 1
-   :widths: 22 10 10 58
+   :widths: 24 10 10 56
 
    * - Key
      - Type
@@ -77,31 +87,13 @@ placeholders (see :doc:`workflow`).
      - int
      - required
      - Version of the configuration format. Must be ``2``.
-   * - ``inputs.ece4_data``
+   * - ``machine.tmpdir``
      - str
      - required
-     - EC-Earth4 input tree (ECE4-DATA-V3). Must exist. Read-only: nothing is ever written here.
-   * - ``inputs.herold``
-     - str
-     - required
-     - Herold et al. (2014) supplementary data. Must exist. Read-only.
-   * - ``tmpdir``
-     - str
-     - ``null``
-     - Scratch directory of every command. ``ecefast eocene run`` keeps the OIFS intermediate
-       files in ``<tmpdir>/oifs`` (with ``null``: a temporary directory, deleted afterwards).
-
-``machine``: where the EC-Earth tools run
------------------------------------------
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 10 10 58
-
-   * - Key
-     - Type
-     - Default
-     - Meaning
+     - Intermediate files of every command, in ``<tmpdir>/<period>/<component>/`` (e.g. the remapped
+       bathymetry, the DOMAINcfg namelist, the OIFS work files). Kept between runs, so a step can
+       rerun on the files of an earlier one. It must not lie inside an ``input``, ``herold`` or
+       ``output`` directory.
    * - ``machine.name``
      - str
      - ``local``
@@ -113,12 +105,12 @@ placeholders (see :doc:`workflow`).
      - ``atos``
      - ``atos``: the HPC profile of ``ecefast/tools/hpc_profiles.yaml`` whose modules are loaded
        before DOMAINcfg is compiled and run.
-   * - ``machine.atos.oasis_lib_dir``
+   * - ``machine.atos.ecearth4_sources``
      - str
      - ``null``
-     - ``atos``: directory added to ``LD_LIBRARY_PATH`` when DOMAINcfg runs, for the OASIS
-       libraries of the EC-Earth build (e.g. ``<ecearth4>/sources/oasis3-mct-5.2/arch_ecearth/lib``).
-       Not added when ``null``.
+     - ``atos``: the EC-Earth4 source tree. DOMAINcfg is compiled and runs in its
+       ``nemo-4.2/tools/DOMAINcfg/`` (the namelists are written there), and its
+       ``oasis3-mct-5.2/arch_ecearth/lib`` is added to ``LD_LIBRARY_PATH``. Needed to run DOMAINcfg.
 
 Example for Atos:
 
@@ -126,190 +118,177 @@ Example for Atos:
 
    machine:
      name: atos
+     tmpdir: /path/to/tmp/ecefast
      atos:
-       oasis_lib_dir: /path/to/ecearth4/sources/oasis3-mct-5.2/arch_ecearth/lib
+       ecearth4_sources: /path/to/ecearth4/sources
 
-``oifs`` and ``oifs.data``: the OIFS generator
------------------------------------------------
-
-``oifs.data`` is read by ``ecefast oifs data``, which makes the OIFS base data of ``oifs.grid`` from a finer
-grid of the input tree (see :doc:`workflow`); leave it out if you do not run it. Its inputs exist on ECMWF
-Atos only.
+``grids``: the model resolution
+-------------------------------
 
 .. list-table::
    :header-rows: 1
-   :widths: 22 10 10 58
+   :widths: 24 10 10 56
 
    * - Key
      - Type
      - Default
      - Meaning
-   * - ``oifs.grid``
+   * - ``grids.oifs.name``
      - str
      - ``TL63L31``
-     - OIFS resolution, as the directory name under ``oifs/`` in the input tree; also the resolution
-       ``ecefast oifs data`` makes.
-   * - ``oifs.data.output_dir``
-     - str
-     - required
-     - The only output: ``oifs/<oifs.grid>/<startdate>/`` (``ICMSHECE4INIT``, ``ICMGGECE4INIT``,
-       ``ICMGGECE4INIUA``), ``oifs/<oifs.grid>/<climate_version>/`` (climate file) and ``work/``
-       (intermediate files, kept).
-   * - ``oifs.data.source_grid``
-     - str
-     - ``TL255L91``
-     - Grid the data is made from, read from ``{inputs.ece4_data}/oifs/<source_grid>/<startdate>/``. With
-       another number of levels than ``oifs.grid`` the initial state is interpolated vertically.
-   * - ``oifs.data.startdate``
+     - OIFS resolution, as the directory name under ``oifs/``; also the resolution the OIFS
+       generator makes.
+   * - ``grids.oifs.startdate``
      - str
      - ``19900101``
-     - Initial-state date, the directory name. Quote it in YAML (``'19900101'``).
-   * - ``oifs.data.climate_version``
+     - Initial-state folder under ``oifs/<name>/``. Quote it in YAML (``'19900101'``).
+   * - ``grids.oifs.climate_version``
      - str
      - ``climate.v020``
-     - Climate files version, the directory name: ``climate.v020`` for cy48, ``climate.v015`` for cy43.
-   * - ``oifs.data.climate_dir``
-     - str
-     - ``null``
-     - ECMWF monthly climate fields (``<N>l_2/month_<var>``), merged into ``ICMCLECE4-1990`` by the
-       ``boundary`` step when no precomputed file exists. Needed only then.
-   * - ``oifs.data.precomputed_climate_dir``
-     - str
-     - ``null``
-     - Ready climate files (``<oifs.grid>/<climate_version>/ICMCLECE4``); the ``boundary`` step copies
-       the file of ``oifs.grid`` when it is there.
-   * - ``oifs.data.vertical_grids_dir``
-     - str
-     - ``null``
-     - Grids with cell corners (``T<kind><N>_grid.nc``, made by ``create_corners.py``), read by the
-       vertical interpolation. Needed only then.
-   * - ``oifs.data.steps.spectral``, ``.gridpoint``, ``.boundary``
-     - bool
-     - ``true``, ``true``, ``false``
-     - Steps to run (see :doc:`workflow`).
-
-Example (Atos):
-
-.. code-block:: yaml
-
-   oifs:
-     grid: TL63L31
-     data:
-       output_dir: /path/to/OUTPUT/oifs-data
-       source_grid: TL255L91
-       vertical_grids_dir: /path/to/oifs-grids
-
-``nemo`` and ``nemo.domain``: the NEMO domain pipeline
-------------------------------------------------------
-
-``nemo.domain`` is read by ``ecefast nemo domain``, and by the Eocene ``domain`` step when
-``eocene.domain.build`` is ``true``; leave it out if you use neither.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 10 10 58
-
-   * - Key
-     - Type
-     - Default
-     - Meaning
-   * - ``nemo.grid``
+     - Climate files folder under ``oifs/<name>/``: ``climate.v020`` for cy48, ``climate.v015`` for
+       cy43.
+   * - ``grids.nemo.name``
      - str
      - ``PALEORCA2``
      - NEMO grid, as the directory name under ``oasis/`` and ``nemo/domain/``; also the grid the
        domain pipeline builds.
-   * - ``nemo.domain.output_dir``
-     - str
-     - required
-     - The only output of the pipeline: the final ``domain_cfg.nc``, ``maskutil.nc`` and
-       ``subbasins.nc`` of each bathymetry in ``nemo/domain/<nemo.grid>/<name>/``; the intermediate
-       files in ``work/`` (``coordinates/``, ``bathymetry/``, and ``domaincfg/`` with the DOMAINcfg
-       namelists and raw output when ``tools_dir`` is ``null``).
-   * - ``nemo.domain.tools_dir``
+   * - ``grids.nemo.coords_ori``
      - str
      - ``null``
-     - NEMO tools directory holding ``DOMAINcfg/`` (Atos). When set, the namelists are written to
-       its ``DOMAINcfg/``, where DOMAINcfg runs; with ``null`` (laptop) to ``output_dir/work/domaincfg``.
-   * - ``nemo.domain.coords_ori``
-     - str
-     - required
-     - PALEORCA2 coordinates with halo (NEMO 3.6); the pipeline removes the halo.
-   * - ``nemo.domain.source_grid``
-     - str
-     - required
-     - Grid of the present-day bathymetry (``eORCA1``). Its horizontal grid is read from
-       ``{inputs.ece4_data}/nemo/domain/<source_grid>/domain_cfg.nc``.
-   * - ``nemo.domain.staggering.source``, ``.target``
+     - Coordinates of the grid with halo (NEMO 3.6); the domain pipeline removes the halo. Needed to
+       build a domain.
+   * - ``grids.nemo.staggering``
      - str
      - ``T``
-     - Staggering (``T`` or ``F``) of the coordinate bounds of the source grid (used in ``setgrid``)
-       and of the target grid (used in remapping).
-   * - ``nemo.domain.minimum_depth``
-     - float
-     - required
-     - Minimum ocean depth (m): depths ``0 < d < minimum_depth`` are raised to it (``30``).
-   * - ``nemo.domain.steps``
-     - mapping
-     - required
-     - ``true``/``false`` per step: ``coordinates``, ``bathymetry``, ``configure_domain``,
-       ``domain_cfg``, ``generate_mask``, ``generate_subbasins``. A missing step is off. The last
-       three need DOMAINcfg output: ``domain_cfg`` runs it on ``machine.name`` (``atos`` on Atos,
-       ``fake`` in tests) and stops before the first step with ``local``.
-   * - ``nemo.domain.bathymetries``
-     - list
-     - required
-     - One entry per bathymetry: ``name``, ``enabled``, ``processor`` (a ``BathymetryProcessor``
-       class name: ``PresentDayBathymetry`` or ``EoceneBathymetry``; an unknown name is an error
-       that lists the known ones) and ``source_file``. ``PresentDayBathymetry`` also takes
-       ``orca2_file`` for a comparison plot.
+     - Staggering (``T`` or ``F``) of the grid's coordinate bounds used in remapping.
 
-Example (laptop part of the pipeline):
+``present``: the present-day period
+-----------------------------------
 
-.. code-block:: yaml
-
-   nemo:
-     domain:
-       output_dir: /path/to/OUTPUT/nemo-domain
-       coords_ori: /path/to/data/PALEORCA2/coords_ori.nc
-       source_grid: eORCA1
-       minimum_depth: 30
-       steps: {coordinates: true, bathymetry: true, configure_domain: true}
-       bathymetries:
-         - name: eocene
-           enabled: true
-           processor: EoceneBathymetry
-           source_file: "{inputs.herold}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc"
-
-``eocene``: the Eocene (DeepMIP) run
-------------------------------------
-
-Read by ``ecefast eocene run``.
+Read by ``ecefast present run``, ``ecefast oifs run`` and ``ecefast nemo run``. Its final files go
+to ``present.output`` as in ECE4-DATA (``oifs/<grid>/<startdate>/``,
+``oifs/<grid>/<climate_version>/``, ``nemo/domain/<grid>/``). A run stops if one of them exists
+already, unless ``--overwrite`` is given.
 
 .. list-table::
    :header-rows: 1
-   :widths: 22 10 10 58
+   :widths: 24 10 10 56
 
    * - Key
      - Type
      - Default
      - Meaning
-   * - ``eocene.output_dir``
+   * - ``present.input``
      - str
      - required
-     - The Eocene EC-Earth input tree. The ``stage`` step refuses it if it is not empty, unless
-       ``--overwrite`` is given: then it deletes and recreates it.
-   * - ``eocene.domain.from``
+     - EC-Earth4 input tree (ECE4-DATA-V3). Read-only: nothing is ever written here.
+   * - ``present.output``
      - str
      - required
-     - Directory with the Eocene ``domain_cfg.nc`` and ``maskutil.nc`` that the ``domain`` step
-       installs: on a laptop the domain built on Atos; on Atos the output of
-       ``ecefast nemo domain``, ``"{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene"``.
-   * - ``eocene.domain.build``
+     - Tree of the present-day files made by ``ecefast``.
+   * - ``present.oifs.source_grid``
+     - str
+     - ``TL255L91``
+     - OIFS generator: the grid the data is made from, read from
+       ``{input}/oifs/<source_grid>/<startdate>/``. With another number of levels than
+       ``grids.oifs.name`` the initial state is interpolated vertically.
+   * - ``present.oifs.climate_dir``
+     - str
+     - ``null``
+     - ECMWF monthly climate fields (``<N>l_2/month_<var>``), merged into ``ICMCLECE4-1990`` by the
+       ``boundary`` step when no precomputed file exists. Needed only then.
+   * - ``present.oifs.precomputed_climate_dir``
+     - str
+     - ``null``
+     - Ready climate files (``<grid>/<climate_version>/ICMCLECE4``); the ``boundary`` step copies
+       the file of ``grids.oifs.name`` when it is there.
+   * - ``present.oifs.vertical_grids_dir``
+     - str
+     - ``null``
+     - Grids with cell corners (``T<kind><N>_grid.nc``, made by ``create_corners.py``), read by the
+       vertical interpolation. Needed only then.
+   * - ``present.oifs.steps.spectral``, ``.gridpoint``, ``.boundary``
      - bool
-     - ``false``
-     - ``true``: the ``domain`` step first builds the Eocene domain with the NEMO domain pipeline
-       (``nemo.domain``, bathymetry ``eocene`` only, its steps). ``from`` must then be the path above.
-       Needs DOMAINcfg: ``true`` with ``machine.name: local`` is an error.
+     - ``true``, ``true``, ``false``
+     - Steps of the OIFS generator (see :doc:`workflow`); ``--oifs a,b`` overrides them for one run.
+   * - ``present.nemo.source_grid``
+     - str
+     - ``eORCA1``
+     - NEMO grid of the present-day bathymetry: ``{input}/nemo/domain/<source_grid>/domain_cfg.nc``
+       holds both the bathymetry and its horizontal grid. The strait corrections are defined per
+       source grid, target grid and remapping: a source grid without them is an error.
+   * - ``present.nemo.source_staggering``
+     - str
+     - ``T``
+     - Staggering (``T`` or ``F``) of the source-grid coordinate bounds (used in ``setgrid``).
+   * - ``present.nemo.minimum_depth``
+     - float
+     - required
+     - Minimum ocean depth (m): depths ``0 < d < minimum_depth`` are raised to it (``30``).
+   * - ``present.nemo.steps.<step>``
+     - bool
+     - ``true``
+     - Steps of the domain pipeline: ``coordinates``, ``bathymetry``, ``configure_domain``,
+       ``domain_cfg``, ``generate_mask``, ``generate_subbasins``. The last three need DOMAINcfg
+       output: ``domain_cfg`` runs it on ``machine.name`` and stops before the first step with
+       ``local``, so a laptop turns them off. ``--nemo a,b`` overrides them for one run.
+
+Example (laptop):
+
+.. code-block:: yaml
+
+   present:
+     input: /path/to/ECE4-DATA-V3
+     output: /path/to/OUTPUT/present
+     nemo:
+       source_grid: eORCA1
+       minimum_depth: 30
+       steps: {domain_cfg: false, generate_mask: false, generate_subbasins: false}
+
+``eocene``: the Eocene (DeepMIP) period
+---------------------------------------
+
+Read by ``ecefast eocene run`` and by ``ecefast <component> run --period eocene``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 10 10 56
+
+   * - Key
+     - Type
+     - Default
+     - Meaning
+   * - ``eocene.input``
+     - str
+     - required
+     - The EC-Earth tree to start from, read-only: the present-day one, written
+       ``"{present.input}"`` in the templates. ``stage`` copies its base files to ``output``; the
+       ``domain`` step checks the vertical grid against its ``nemo/domain/<grid>/domain_cfg.nc``.
+   * - ``eocene.herold``
+     - str
+     - required
+     - Herold et al. (2014) supplementary data (Eocene boundary conditions). Read-only.
+   * - ``eocene.output``
+     - str
+     - required
+     - The Eocene EC-Earth input tree. The ``stage`` step refuses it if it holds files, unless
+       ``--overwrite`` is given: then it warns, waits 5 s (Ctrl-C to stop) and recreates it.
+   * - ``eocene.nemo.domain``
+     - str
+     - required
+     - Where the Eocene domain comes from: a directory holding its ``domain_cfg.nc`` and
+       ``maskutil.nc`` (on a laptop, the domain built on Atos), or ``build``: the ``domain`` step
+       first builds it with the domain pipeline and the Eocene bathymetry, in
+       ``<tmpdir>/eocene/nemo``. ``build`` needs DOMAINcfg: with ``machine.name: local`` it is an
+       error.
+   * - ``eocene.nemo.minimum_depth``
+     - float
+     - required
+     - Minimum ocean depth (m) of the Eocene domain, used with ``build`` (``30``).
+   * - ``eocene.nemo.steps.<step>``
+     - bool
+     - ``true``
+     - Steps of the domain pipeline with ``build``, as in ``present.nemo.steps``.
    * - ``eocene.oifs.aerosols``
      - bool
      - ``false``
@@ -326,27 +305,77 @@ Example (Atos, building the Eocene domain inside the run):
 .. code-block:: yaml
 
    eocene:
-     output_dir: /path/to/OUTPUT/eocene
-     domain:
-       from: "{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene"
-       build: true
+     input: "{present.input}"
+     herold: /path/to/herold-et-al-2014/Supp
+     output: /path/to/OUTPUT/eocene
+     nemo:
+       domain: build
+       minimum_depth: 30
      oifs:
        aerosols: false
      oasis:
        constant_sst: 290.0
 
+Overriding steps for one run
+----------------------------
+
+The configured ``steps`` of a component can be replaced for one run with ``--<component>``; every
+step not listed is off:
+
+.. code-block:: bash
+
+   ecefast nemo run -c configs/laptop.yml --nemo coordinates,bathymetry
+   ecefast eocene run -c configs/atos.yml --steps stage,domain --nemo configure_domain,domain_cfg,generate_mask
+
 Local folders
 -------------
 
-The templates and the docs use one naming scheme for the local outputs: ``OUTPUT/<command>`` for
-runs and ``BASELINE/<command>`` for the frozen reference, with ``<command>`` = ``eocene``,
-``nemo-domain``, ``oifs-data``.
+The templates and the docs use one naming scheme for the local outputs: ``OUTPUT/<period>`` for
+runs and ``BASELINE/<period>`` for the frozen reference, with ``<period>`` = ``present``,
+``eocene``.
 
-Migrating from schema 1
------------------------
+Migrating
+---------
 
-A schema 1 file is no longer read: loading one stops with an error that lists each old key found
-in it and its new name. Move the keys by hand, starting from a template:
+Files in an older layout are not read: loading one stops with an error that lists each old key
+found in it and its new name. Move the keys by hand, starting from a template.
+
+From the first schema 2 (sections by component):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
+
+   * - Old key
+     - New key
+   * - ``inputs.ece4_data``
+     - ``present.input``, and ``eocene.input: "{present.input}"``
+   * - ``inputs.herold``
+     - ``eocene.herold``
+   * - ``tmpdir``
+     - ``machine.tmpdir`` (required)
+   * - ``machine.atos.oasis_lib_dir``, ``nemo.domain.tools_dir``
+     - ``machine.atos.ecearth4_sources`` (the EC-Earth4 source tree holding both)
+   * - ``oifs.grid``, ``nemo.grid``
+     - ``grids.oifs.name``, ``grids.nemo.name``
+   * - ``oifs.data``
+     - ``present.oifs``; ``output_dir`` → ``present.output``; ``startdate`` and
+       ``climate_version`` → ``grids.oifs``
+   * - ``nemo.domain``
+     - ``present.nemo`` (present-day domain) and ``eocene.nemo`` (Eocene domain);
+       ``coords_ori`` and ``staggering.target`` → ``grids.nemo``; ``staggering.source`` →
+       ``present.nemo.source_staggering``; ``output_dir`` → each period's ``output`` (final files)
+       and ``machine.tmpdir`` (intermediate files)
+   * - ``nemo.domain.bathymetries``
+     - removed: each period uses its own bathymetry
+   * - ``eocene.output_dir``
+     - ``eocene.output``
+   * - ``eocene.domain.from``, ``eocene.domain.build``
+     - ``eocene.nemo.domain``: ``build``, or the directory
+   * - ``ecefast oifs data``, ``ecefast nemo domain [--bathymetry ...]``
+     - ``ecefast oifs run``, ``ecefast nemo run [--period eocene]``
+
+From schema 1:
 
 .. list-table::
    :header-rows: 1
@@ -354,42 +383,20 @@ in it and its new name. Move the keys by hand, starting from a template:
 
    * - Schema 1
      - Schema 2
-   * - ``paths.input``, ``paths.herold``
-     - ``inputs.ece4_data``, ``inputs.herold``
-   * - ``paths.output``
-     - ``eocene.output_dir``
-   * - ``paths.tmpdir``
-     - ``tmpdir``
-   * - ``tools.backend``
-     - ``machine.name``
-   * - ``tools.atos.*``
-     - ``machine.atos.*``
+   * - ``paths.input``
+     - ``present.input``, and ``eocene.input: "{present.input}"``
+   * - ``paths.herold``, ``paths.output``, ``paths.tmpdir``
+     - ``eocene.herold``, ``eocene.output``, ``machine.tmpdir``
+   * - ``tools.backend``, ``tools.atos.*``
+     - ``machine.name``, ``machine.atos.*``
    * - ``tools.precomputed.domain``
-     - ``eocene.domain.from`` (``build: false``). The backend no longer decides: with
-       ``tools.backend: atos`` or ``fake`` the step used to build the domain, now set
-       ``eocene.domain.build: true`` and ``from: "{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene"``
-   * - ``grids.oifs``
-     - ``oifs.grid``
-   * - ``grids.nemo``, ``nemo_domain.grids.target``
-     - ``nemo.grid`` (one key for both)
+     - ``eocene.nemo.domain``
+   * - ``grids.oifs``, ``grids.nemo``
+     - ``grids.oifs.name``, ``grids.nemo.name``
    * - ``nemo_domain``
-     - ``nemo.domain``
-   * - ``nemo_domain.output_dir``
-     - ``nemo.domain.output_dir``; the layout inside changes: ``domain/<grid>/<name>/`` →
-       ``nemo/domain/<grid>/<name>/``, ``coordinates/``, ``bathymetry/`` → ``work/...``, the
-       laptop namelists ``domain/namelist_cfg_*`` → ``work/domaincfg/``
-   * - ``nemo_domain.domaincfg_dir``
-     - ``nemo.domain.tools_dir``
-   * - ``nemo_domain.grids.source``
-     - ``nemo.domain.source_grid``
-   * - ``nemo_domain.grids.staggering_source``, ``staggering_target``
-     - ``nemo.domain.staggering.source``, ``.target``
-   * - ``nemo_domain.parameters.minimum_depth``
-     - ``nemo.domain.minimum_depth``
-   * - ``nemo_domain.aliases``
-     - removed: use ``{section.key}`` placeholders
-   * - placeholders ``{input}``, ``{herold}``, ``{output}``, ``{tmpdir}``
-     - ``{inputs.ece4_data}``, ``{inputs.herold}``, ``{eocene.output_dir}``, ``{tmpdir}``
+     - ``present.nemo``, ``eocene.nemo`` and ``grids.nemo``, as above
+   * - placeholders ``{input}``, ``{herold}``, ``{output}``
+     - ``{present.input}``, ``{eocene.herold}``, ``{eocene.output}``
 
 The older ``dirs:`` (``eocene`` command) and ``profiles:`` (domain pipeline) files are not read
 either.

@@ -1,44 +1,79 @@
-"""The run context and the ``stage`` step.
+"""The run context, the overwrite pause and the ``stage`` step.
 
-:class:`Context` gives steps the configuration and expands path templates; it refuses write paths inside the
-read-only roots (``inputs.ece4_data``, ``inputs.herold``). :class:`Stage` copies the base files from the input tree to the output
-tree, so the later steps can modify them.
+:class:`Context` gives steps the configuration and the running period, and expands path templates; it refuses
+write paths inside the read-only directories (every period's ``input``, ``eocene.herold``). :class:`Stage` copies
+the base files from the input tree to the output tree, so the later steps can modify them.
 """
 
 import logging
 import os
 import shutil
+import time
 from dataclasses import dataclass
 
-from .config import Config
+from .config import PLACEHOLDER, Config, ConfigError, Eocene, Present
 from .steps import ComponentStep, PipelineError
 
 logger = logging.getLogger(__name__)
 
+# Seconds a run waits after announcing what --overwrite replaces, so the user can stop it (Ctrl-C).
+OVERWRITE_PAUSE = 5
+
+
+def pause_before_overwrite(paths: list[str], step: str) -> None:
+    """Log what ``step`` is about to replace, then wait :data:`OVERWRITE_PAUSE` seconds (Ctrl-C to stop).
+
+    Parameters
+    ----------
+    paths : list of str
+        Files or directories that will be replaced or removed.
+    step : str
+        Step name, for the message.
+    """
+    shown = ", ".join(paths[:5]) + (f" and {len(paths) - 5} more" if len(paths) > 5 else "")
+    logger.warning(
+        "Step '%s' (--overwrite) replaces %s. Starting in %d s, Ctrl-C to stop.", step, shown, OVERWRITE_PAUSE
+    )
+    time.sleep(OVERWRITE_PAUSE)
+
 
 @dataclass
 class Context:
-    """What a step gets from the run: the configuration and path expansion.
+    """What a step gets from the run: the configuration, the running period and path expansion.
 
     Parameters
     ----------
     config : Config
         The validated configuration.
+    period : str
+        The running period (``present`` or ``eocene``).
     overwrite : bool
-        Allow ``stage`` to replace an output directory that is not empty.
+        Allow the steps to replace existing outputs (``--overwrite``).
     """
 
     config: Config
+    period: str
     overwrite: bool = False
+
+    @property
+    def section(self) -> Present | Eocene:
+        """The configuration section of the running period."""
+        return self.config.period(self.period)
+
+    def tmpdir(self, component: str) -> str:
+        """Directory of the intermediate files of ``component`` in this period: ``<machine.tmpdir>/<period>/<component>``."""
+        return os.path.join(self.config.machine.tmpdir, self.period, component)
 
     def expand(self, template: str) -> str:
         """Expand a path template.
 
+        A placeholder is first looked up in the running period (``{input}``, ``{output}``, ``{herold}``,
+        ``{nemo.source_grid}``), then in the whole file (``{grids.nemo.name}``, ``{present.input}``).
+
         Parameters
         ----------
         template : str
-            Path with ``{section.key}`` placeholders of the configuration, e.g.
-            ``"{inputs.ece4_data}/oasis/{nemo.grid}/rstos.nc"`` (see :meth:`ecefast.core.config.Config.expand`).
+            Path with placeholders, e.g. ``"{input}/oasis/{grids.nemo.name}/rstos.nc"``.
 
         Returns
         -------
@@ -48,12 +83,19 @@ class Context:
         Raises
         ------
         ConfigError
-            If the template names a key that does not exist or is not set (e.g. ``{tmpdir}`` with ``tmpdir: null``).
+            If a placeholder names a key that does not exist in the period or the file, or is not set.
         """
-        return self.config.expand(template)
+
+        def value(name: str) -> str:
+            try:
+                return str(self.config.lookup(f"{self.period}.{name}"))
+            except ConfigError:
+                return str(self.config.lookup(name))
+
+        return PLACEHOLDER.sub(lambda m: value(m.group(1)), template)
 
     def check_writable(self, path: str, step: str = "") -> None:
-        """Refuse a write path inside a read-only root (``inputs.ece4_data`` or ``inputs.herold``).
+        """Refuse a write path inside a read-only directory (every period's ``input``, ``eocene.herold``).
 
         Parameters
         ----------
@@ -65,15 +107,42 @@ class Context:
         Raises
         ------
         PipelineError
-            If ``path`` is ``inputs.ece4_data``, ``inputs.herold`` or lies inside one of them.
+            If ``path`` is a read-only directory or lies inside one.
         """
         real = os.path.realpath(path)
-        for name in ("ece4_data", "herold"):
-            root_name = f"inputs.{name}"
-            root = os.path.realpath(getattr(self.config.inputs, name))
+        for key, root in self.config.read_only_roots().items():
+            root = os.path.realpath(root)
             if real == root or real.startswith(root + os.sep):
                 who = f"Step '{step}'" if step else "A step"
-                raise PipelineError(f"{who} would write {path}, inside the read-only '{root_name}' tree {root}")
+                raise PipelineError(f"{who} would write {path}, inside the read-only '{key}' tree {root}")
+
+    def check_overwrite(self, paths: list[str], step: str) -> list[str]:
+        """The outputs of ``step`` that exist already; refused unless ``--overwrite``.
+
+        Parameters
+        ----------
+        paths : list of str
+            Final files the step writes.
+        step : str
+            Step name, for the error message.
+
+        Returns
+        -------
+        list of str
+            The paths that exist (to pass to :func:`pause_before_overwrite` when the step runs).
+
+        Raises
+        ------
+        PipelineError
+            If some exist and ``overwrite`` is off.
+        """
+        existing = [p for p in paths if os.path.exists(p)]
+        if existing and not self.overwrite:
+            raise PipelineError(
+                f"Step '{step}': {len(existing)} output file(s) exist already, e.g. {existing[0]}. Nothing was "
+                "written. Use --overwrite to replace them."
+            )
+        return existing
 
 
 class Stage(ComponentStep):
@@ -81,8 +150,8 @@ class Stage(ComponentStep):
 
     name = "stage"
     needs = []
-    reads = ["{inputs.ece4_data}/oifs", "{inputs.ece4_data}/nemo", "{inputs.ece4_data}/oasis/{nemo.grid}"]
-    writes = ["{eocene.output_dir}/oifs", "{eocene.output_dir}/nemo", "{eocene.output_dir}/oasis/{nemo.grid}"]
+    reads = ["{input}/oifs", "{input}/nemo", "{input}/oasis/{grids.nemo.name}"]
+    writes = ["{output}/oifs", "{output}/nemo", "{output}/oasis/{grids.nemo.name}"]
 
     # subdirectories copied from each component of the input tree
     OIFS_SUBDIRS = ["composition", "ifsdata", "vtables", "rtables"]
@@ -97,19 +166,14 @@ class Stage(ComponentStep):
 
     @classmethod
     def from_context(cls, ctx: Context) -> "Stage":
-        config = ctx.config
-        return cls(
-            config.inputs.ece4_data,
-            config.eocene.output_dir,
-            config.oifs.grid,
-            config.nemo.grid,
-            overwrite=ctx.overwrite,
-        )
+        grids = ctx.config.grids
+        return cls(ctx.section.input, ctx.section.output, grids.oifs.name, grids.nemo.name, overwrite=ctx.overwrite)
 
     def run(self) -> None:
         """Copy the input folder to the output folder to preserve original data.
 
-        An output folder that is not empty is refused, unless ``overwrite`` is set: then it is removed first.
+        An output folder that holds files is refused, unless ``overwrite`` is set: then it is removed first, after
+        a warning and a pause (:func:`pause_before_overwrite`).
         ``cmip6-data`` is symlinked, not copied.
         """
         input_dir, output_dir = self.input_dir, self.output_dir
@@ -122,13 +186,16 @@ class Stage(ComponentStep):
                 f"Output directory {output_dir} is or contains the input directory {input_dir}. "
                 "Refusing to overwrite it."
             )
-        if os.path.isdir(output_dir) and os.listdir(output_dir) and not self.overwrite:
+        # files only: the preflight of later steps may have created empty folders in it already
+        has_files = os.path.isdir(output_dir) and any(files for _, _, files in os.walk(output_dir))
+        if has_files and not self.overwrite:
             raise PipelineError(
                 f"Step 'stage': output directory {output_dir} is not empty. Nothing was written. "
                 "Use --overwrite to replace it, or select steps without 'stage' to rerun them on it."
             )
+        if has_files:
+            pause_before_overwrite([output_dir], self.name)
         if os.path.exists(output_dir):
-            logger.info(f"Output directory {output_dir} already exists. It will be overwritten.")
             shutil.rmtree(output_dir)
         os.makedirs(output_dir)
 

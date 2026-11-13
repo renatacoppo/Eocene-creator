@@ -30,37 +30,46 @@ class EoceneOIFS(ComponentStep):
 
     ``reads`` lists the files opened from the input tree and the Herold folder; ``writes`` the files replaced in
     the output tree (copied there before by ``stage``). Intermediate files (Herold fields remapped to the model
-    grid) go to ``tmpdir``, never into the Herold folder.
+    grid) go to ``<machine.tmpdir>/eocene/oifs``, never into the Herold folder.
 
     The optional aerosol climatology (``eocene.oifs.aerosols``, off by default) is not declared in ``reads`` and
     ``writes``, because they cannot depend on the config: with it on, the step also reads
-    ``{inputs.herold}/herold_etal_eocene_CAM4_BAM_aerosols.nc`` and ``{inputs.ece4_data}/oifs/ifsdata/IFS_aerosol_climatology_PI.nc``
-    and writes ``{eocene.output_dir}/oifs/ifsdata/IFS_aerosol_climatology_PI.nc``.
+    ``{herold}/herold_etal_eocene_CAM4_BAM_aerosols.nc`` and ``{input}/oifs/ifsdata/IFS_aerosol_climatology_PI.nc``
+    and writes ``{output}/oifs/ifsdata/IFS_aerosol_climatology_PI.nc``.
     """
 
     name = "oifs"
+    component = "oifs"
     needs = ["stage"]
-    # initial-condition date of the ECE4-DATA tree (directory name under oifs/<resolution>/)
-    STARTDATE = "19900101"
     reads = [
-        "{inputs.ece4_data}/oifs/{oifs.grid}/19900101/ICMGGECE4INIT",
-        "{inputs.ece4_data}/oifs/{oifs.grid}/19900101/ICMGGECE4INIUA",
-        "{inputs.ece4_data}/oifs/{oifs.grid}/19900101/ICMSHECE4INIT",
-        "{inputs.ece4_data}/oifs/{oifs.grid}/climate.v020/ICMCLECE4",
-        "{inputs.ece4_data}/oifs/{oifs.grid}/climate.v020/bare_soil_albedos.grb",
-        "{inputs.herold}/herold_etal_eocene_topo_1x1.nc",
-        "{inputs.herold}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc",
-        "{inputs.herold}/herold_etal_eocene_biome_1x1.nc",
+        "{input}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMGGECE4INIT",
+        "{input}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMGGECE4INIUA",
+        "{input}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMSHECE4INIT",
+        "{input}/oifs/{grids.oifs.name}/{grids.oifs.climate_version}/ICMCLECE4",
+        "{input}/oifs/{grids.oifs.name}/{grids.oifs.climate_version}/bare_soil_albedos.grb",
+        "{herold}/herold_etal_eocene_topo_1x1.nc",
+        "{herold}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc",
+        "{herold}/herold_etal_eocene_biome_1x1.nc",
     ]
     writes = [
-        "{eocene.output_dir}/oifs/{oifs.grid}/19900101/ICMGGECE4INIT",
-        "{eocene.output_dir}/oifs/{oifs.grid}/19900101/ICMGGECE4INIUA",
-        "{eocene.output_dir}/oifs/{oifs.grid}/19900101/ICMSHECE4INIT",
-        "{eocene.output_dir}/oifs/{oifs.grid}/climate.v020/ICMCLECE4",
-        "{eocene.output_dir}/oifs/{oifs.grid}/climate.v020/bare_soil_albedos.grb",
+        "{output}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMGGECE4INIT",
+        "{output}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMGGECE4INIUA",
+        "{output}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMSHECE4INIT",
+        "{output}/oifs/{grids.oifs.name}/{grids.oifs.climate_version}/ICMCLECE4",
+        "{output}/oifs/{grids.oifs.name}/{grids.oifs.climate_version}/bare_soil_albedos.grb",
     ]
 
-    def __init__(self, idir, odir, herold, startdate, resolution="TL63L31", tmpdir=None, build_aerosols=False):
+    def __init__(
+        self,
+        idir,
+        odir,
+        herold,
+        startdate,
+        resolution="TL63L31",
+        tmpdir=None,
+        build_aerosols=False,
+        climate_version="climate.v020",
+    ):
         """
         Initialize the EoceneOIFS class.
 
@@ -71,6 +80,7 @@ class EoceneOIFS(ComponentStep):
             tmpdir (str, optional): Directory for intermediate files (created if missing). If None, a new
                 temporary directory is created; :meth:`run` removes it at the end.
             build_aerosols (bool): Whether :meth:`run` also builds the aerosol climatology (:meth:`aerosols`).
+            climate_version (str): Folder of the climate files under ``oifs/<resolution>/`` (``grids.oifs``).
         """
 
         # main dirs
@@ -101,8 +111,8 @@ class EoceneOIFS(ComponentStep):
         self.idir_init = os.path.join(self.idir, "oifs", resolution, startdate)
         self.odir_init = os.path.join(self.odir, "oifs", resolution, startdate)
 
-        self.idir_climate = os.path.join(self.idir, "oifs", resolution, "climate.v020")
-        self.odir_climate = os.path.join(self.odir, "oifs", resolution, "climate.v020")
+        self.idir_climate = os.path.join(self.idir, "oifs", resolution, climate_version)
+        self.odir_climate = os.path.join(self.odir, "oifs", resolution, climate_version)
 
         # self.idir_amip = os.path.join(self.idir, 'amip-forcing')
         # self.odir_amip = os.path.join(self.odir, 'amip-forcing')
@@ -114,20 +124,19 @@ class EoceneOIFS(ComponentStep):
 
     @classmethod
     def from_context(cls, ctx: "Context") -> "EoceneOIFS":
-        """Build the step from the run context: intermediate files go to ``{tmpdir}/oifs``."""
-        config = ctx.config
-        tmpdir = None
-        if config.tmpdir is not None:
-            tmpdir = os.path.join(config.tmpdir, "oifs")
-            ctx.check_writable(tmpdir, cls.name)
+        """Build the step from the run context: intermediate files go to ``<machine.tmpdir>/eocene/oifs``."""
+        tmpdir = ctx.tmpdir("oifs")
+        ctx.check_writable(tmpdir, cls.name)
+        grid = ctx.config.grids.oifs
         return cls(
-            idir=config.inputs.ece4_data,
-            odir=config.eocene.output_dir,
-            herold=config.inputs.herold,
-            startdate=cls.STARTDATE,
-            resolution=config.oifs.grid,
+            idir=ctx.section.input,
+            odir=ctx.section.output,
+            herold=ctx.section.herold,
+            startdate=grid.startdate,
+            resolution=grid.name,
             tmpdir=tmpdir,
-            build_aerosols=ctx.config.eocene.oifs.aerosols,
+            build_aerosols=ctx.section.oifs.aerosols,
+            climate_version=grid.climate_version,
         )
 
     def run(self) -> None:

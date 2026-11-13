@@ -58,7 +58,8 @@ disjoint files and can run in parallel sessions; "serial" tasks touch files that
 | 6.3 ✅ | Tutorials from `plots.ipynb`, `quickstart.rst` | `notebooks/tutorials/`, docs | 4.4 | ‖ 6.1 |
 | 8.1 | Config schema 2: component sections (`oifs:`, `nemo:`, `eocene:`), one `output_dir` per command, `{section.key}` placeholders, explicit `eocene.domain`; homogeneous local folder names (see Phase 8) | `core/config.py`, `core/workspace.py`, every `from_context`, `components/nemo/domain/`, `tools/ecearth.py`, `configs/`, docs, tutorials, tests, `.gitignore` | 6.1–6.3 | serial |
 | 8.2 | `ecefast oifs data`: the OIFS generator as a command, its constants in `oifs.data`, output only to `oifs.data.output_dir` | `components/oifs/generator.py`, `cli/`, `configs/`, docs, tests | 8.1 | serial |
-| 7.1 | Atos validation (DOMAINcfg contract, full run, OIFS generator vs ECE4-DATA TL63L31) | Atos | 8.2 | Paolo |
+| 8.3 | Config by time period: `machine` (with `tmpdir`), `grids`, `present`, `eocene`; `paleo/` → `periods/`; `ecefast <component> run [--period]` and `ecefast <period> run` (see Phase 8) | `core/`, `tools/ecearth.py`, `components/`, `periods/`, `cli/`, `configs/`, docs, tutorials, tests | 8.2 | serial |
+| 7.1 | Atos validation (DOMAINcfg contract, full run, OIFS generator vs ECE4-DATA TL63L31) | Atos | 8.3 | Paolo |
 | 7.2 | `refactor` → `main`, baseline regenerated, release, issue #16 updated | — | 7.1 | Renata reviews |
 
 ```
@@ -70,7 +71,7 @@ W3  3.0 ─→ 3.1 ‖ 3.2 ‖ 3.3
 W4  4.0 ─→ 4.1 ‖ 4.2 ‖ 4.3 ‖ 5.1  ─→ 4.4
 W5  5.2 ─→ 5.3 ‖ 5.4 ‖ 6.2
 W6  6.1 ‖ 6.3
-W8  8.1 config schema 2 ─→ 8.2 oifs data
+W8  8.1 config schema 2 ─→ 8.2 oifs data ─→ 8.3 config by period
 W7  7.1 Atos ─→ 7.2 merge to main
 ```
 
@@ -385,6 +386,96 @@ oifs:
   as the tools that make `vertical_grids_dir` and the grid descriptions). Making `eocene` read its OIFS base
   from `{oifs.data.output_dir}` instead of ECE4-DATA is possible with the same placeholders but not planned.
 
+### 8.3 Configuration by time period
+
+Why (Paolo, 2026-11-13): the schema 2 of 8.1 still mixes the time periods. `inputs.herold` is required by every
+command although only the Eocene steps read it; `nemo.domain` holds both the grid tooling and the period choice
+(the `bathymetries` list with its `eocene` entry); `source_grid` and `staggering.source` belong to the present-day
+bathymetry only; the EC-Earth4 source tree is given twice (`machine.atos.oasis_lib_dir`, `nemo.domain.tools_dir`);
+`EoceneOIFS` and `EoceneNEMO` hardcode `19900101`, `climate.v020` and `PALEORCA2`. This replaces the 8.1
+decision "sections follow the components": sections follow the **time periods**, and the components are
+subsections of each period.
+
+Decisions (Paolo, 2026-11-13):
+
+- **Two axes.** A component (`components/`) is *how*: tools that know nothing about a period (the domain
+  pipeline for one bathymetry, the OIFS generator). A period (`periods/`) is *what*: its datasets, its choices,
+  its output tree. Every paleo period starts from an EC-Earth tree (`input`), usually the present-day one.
+- **Sections:** `machine` (where: backend, `tmpdir`, Atos options), `grids` (the model resolution, shared by
+  every period), one section per period: `present`, `eocene`. Each period has `input` (the EC-Earth tree it
+  starts from, read-only), `output` (the tree it makes) and one subsection per component. Datasets of a period
+  have their own key (`eocene.herold`), never `input`.
+- **`machine.tmpdir`** (required): intermediate files of every command, in `<tmpdir>/<period>/<component>/`, kept
+  between runs. No `work/` inside an output tree. Must not lie inside an `input`, `herold` or `output`.
+- **`machine.atos.ecearth4_sources`** replaces `oasis_lib_dir` and `tools_dir`; the subfolders
+  (`oasis3-mct-5.2/arch_ecearth/lib`, `nemo-4.2/tools`) are constants of the atos backend.
+- **`grids.oifs`**: `name`, `startdate`, `climate_version` (used by the generator and by `EoceneOIFS`).
+  **`grids.nemo`**: `name`, `coords_ori`, `staggering` (target grid).
+- **Bathymetries are not configured:** each period's pipeline uses its own processor class
+  (`PresentDayBathymetry`, `EoceneBathymetry`), which declares its source files; the name registry
+  (`PROCESSORS`, `EOCENE_PROCESSORS`) goes. Only `present.nemo.source_grid` (default `eORCA1`) and
+  `source_staggering` stay visible, because the source of the present-day bathymetry matters; its file is
+  `{input}/nemo/domain/<source_grid>/domain_cfg.nc`. The strait corrections are looked up by source grid,
+  target grid and remap method; a source grid without corrections is a config error.
+- **`minimum_depth`** per period (`present.nemo`, `eocene.nemo`).
+- **Mask comparison plot** always on: one panel per `{input}/nemo/domain/*/domain_cfg.nc` found, plus the new
+  domain.
+- **`eocene.nemo.domain`**: `build` (run the domain pipeline with the Eocene bathymetry; not with
+  `machine.name: local`) or a directory holding `domain_cfg.nc` and `maskutil.nc`. Replaces `from` + `build`.
+- **`eocene.input`** is written explicitly in the templates: `"{present.input}"`.
+- **Steps:** `steps:` stays in the config (`present.oifs.steps`, `present.nemo.steps`, `eocene.nemo.steps`); the
+  command line overrides them for one run with `--oifs a,b` and `--nemo c,d`. `--steps` selects pipeline steps.
+- **CLI:** `ecefast <component> run -c CONFIG [--period present|eocene]` (default `present`) runs that
+  component's steps of one period; `ecefast <period> run -c CONFIG [--steps ...]` runs the whole period. Each step
+  declares its `component`. Replaces `ecefast oifs data`, `ecefast nemo domain` and `--bathymetry`.
+- **Overwrite:** `--overwrite` on every run. `stage` refuses a non-empty Eocene tree without it; a present-day
+  run refuses final files that already exist without it. With it, the command logs what it replaces and waits
+  5 s (Ctrl-C to stop), then replaces it. No other protection.
+- **Placeholders in step templates:** `{input}`, `{output}`, `{herold}` are keys of the running period;
+  dotted names (`{grids.nemo.name}`, `{present.input}`) are keys of the file. The config file itself uses
+  dotted names only.
+- **Code:** `paleo/` → `periods/eocene/`, new `periods/present/` (with `PresentDayBathymetry`); layers
+  `core` → `tools` → `components` → `periods` → `cli`.
+- Stays `schema: 2` (not released). One PR. Local folders: `OUTPUT/{present,eocene}`,
+  `BASELINE/{present,eocene}`; the domain baseline is regenerated (its intermediate files move to `tmpdir`).
+
+```yaml
+schema: 2
+
+machine:
+  name: atos                      # local | atos | fake
+  tmpdir: /path/to/tmp/ecefast
+  atos:
+    profile: atos
+    ecearth4_sources: /path/to/ecearth4/sources
+
+grids:
+  oifs: {name: TL63L31, startdate: '19900101', climate_version: climate.v020}
+  nemo: {name: PALEORCA2, coords_ori: /path/to/coords_ori.nc, staggering: T}
+
+present:
+  input: /path/to/ECE4-DATA-V3
+  output: /path/to/OUTPUT/present
+  oifs: {source_grid: TL255L91, climate_dir: ..., precomputed_climate_dir: ..., vertical_grids_dir: ..., steps: {...}}
+  nemo: {source_grid: eORCA1, minimum_depth: 30, steps: {...}}
+
+eocene:
+  input: "{present.input}"
+  herold: /path/to/herold-et-al-2014/Supp
+  output: /path/to/OUTPUT/eocene
+  nemo: {domain: build, minimum_depth: 30, steps: {...}}
+  oifs: {aerosols: false}
+  oasis: {constant_sst: 290.0}
+```
+
+- [ ] `core/config.py`: the layout above; `core/workspace.py`: `Context` knows the running period.
+- [ ] `tools/ecearth.py`: `ecearth4_sources`, namelist folder from the backend.
+- [ ] Domain pipeline for one bathymetry; intermediates to `tmpdir`; final files to the given folder.
+- [ ] `periods/present` (oifs, nemo steps), `periods/eocene` (moved); grid names and dates from `grids`.
+- [ ] CLI, overwrite pause; templates, docs, tutorials, AGENTS.md, CHANGELOG; tests.
+- Done when: `pytest -m "unit or integration"` and `local_data` pass, the Eocene output gives 0 differences
+  against the baseline, and the domain intermediates are equal to the baseline ones (same files, moved).
+
 ### Open points
 
 - Renata agrees to wire in the OIFS generator: agreed (task 8.2).
@@ -394,7 +485,6 @@ oifs:
 
 - WEIGHTS driver (`tools.ecearth.weights()`, templated namelists).
 - OIFS generator: constants → config, pipeline, tests.
-- Finer steps, other HPC profiles, new palaeo periods under `paleo/`.
-- `create_ocean_init`/`create_runoff` hardcode `PALEORCA2`: follow `grids.nemo` (found in #33).
+- Finer steps, other HPC profiles, new palaeo periods under `periods/`.
 - Dead code to remove or fix: `vegetation.prepare_vegetation` (undefined `NC4`), `EoceneOIFS.create_sic`/`create_sst`
   (undefined `idir_amip`), `fields.modify_grib` (unused) (found in #25, #34).

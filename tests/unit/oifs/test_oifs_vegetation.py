@@ -13,8 +13,8 @@ import pytest
 import xarray as xr
 from oifs_helpers import needs_cdo
 
-from ecefast.paleo.eocene.oifs.biomes import hp_dict, land_cover_types
-from ecefast.paleo.eocene.oifs.vegetation import prepare_vegetation, vegetation_zhang
+from ecefast.periods.eocene.oifs.biomes import hp_dict, land_cover_types
+from ecefast.periods.eocene.oifs.vegetation import prepare_vegetation, vegetation_zhang
 
 pytestmark = pytest.mark.unit
 

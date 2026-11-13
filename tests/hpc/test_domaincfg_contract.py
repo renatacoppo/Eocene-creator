@@ -6,8 +6,9 @@ dimensions (names, order, sizes) and dtype, and the 1-D vertical grid must be th
 vertical grid are not compared: the fake does no partial steps, closed seas or north fold (see
 ``docs/external_tools.rst``).
 
-Run after ``ecefast nemo domain -c configs/atos.yml`` with ``machine.name: atos``. Set ``ECEFAST_HPC_DOMAINCFG_DIR``
-to the folder holding the namelists and the raw outputs (``<nemo.domain.tools_dir>/DOMAINcfg``), then::
+Run after ``ecefast nemo run -c configs/atos.yml`` with ``machine.name: atos``. Set ``ECEFAST_HPC_DOMAINCFG_DIR``
+to the folder holding the namelists and the raw outputs (``<machine.atos.ecearth4_sources>/nemo-4.2/tools/DOMAINcfg``),
+then::
 
     pytest -m hpc tests/hpc
 
@@ -22,7 +23,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from ecefast.paleo.eocene.nemo.domain import VERTICAL_GRID_ATOL
+from ecefast.periods.eocene.nemo.domain import VERTICAL_GRID_ATOL
 from ecefast.tools.ecearth import FakeBackend, output_files, read_namelist
 
 DOMAINCFG_DIR = os.environ.get("ECEFAST_HPC_DOMAINCFG_DIR")

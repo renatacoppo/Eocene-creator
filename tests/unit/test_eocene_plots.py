@@ -13,7 +13,7 @@ import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 import xarray as xr  # noqa: E402
 
-from ecefast.paleo.eocene.plots.helper_functions import load_grib_var_spec, plot_before_after  # noqa: E402
+from ecefast.periods.eocene.plots.helper_functions import load_grib_var_spec, plot_before_after  # noqa: E402
 
 pytestmark = pytest.mark.unit
 

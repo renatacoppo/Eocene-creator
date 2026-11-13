@@ -1,11 +1,11 @@
-"""Unit tests for the configuration loader (schema 2) and its ``{section.key}`` placeholders."""
+"""Unit tests for the configuration loader (schema 2, sections by time period) and its placeholders."""
 
 from pathlib import Path
 
 import pytest
 import yaml
 
-from ecefast.core.config import ConfigError, load_config, resolve_placeholders
+from ecefast.core.config import ConfigError, load_config, override_steps, resolve_placeholders
 
 pytestmark = pytest.mark.unit
 
@@ -13,27 +13,24 @@ REPO = Path(__file__).parents[2]
 
 
 def minimal(tmp_path: Path) -> dict:
-    """Smallest valid configuration, with existing input directories."""
+    """Smallest valid configuration: the machine and its scratch directory."""
+    return {"schema": 2, "machine": {"tmpdir": str(tmp_path / "tmp")}}
+
+
+def present(tmp_path: Path) -> dict:
+    (tmp_path / "input").mkdir(exist_ok=True)
+    return {"input": str(tmp_path / "input"), "output": str(tmp_path / "out" / "present")}
+
+
+def eocene(tmp_path: Path) -> dict:
     (tmp_path / "input").mkdir(exist_ok=True)
     (tmp_path / "herold").mkdir(exist_ok=True)
-    return {"schema": 2, "inputs": {"ece4_data": str(tmp_path / "input"), "herold": str(tmp_path / "herold")}}
-
-
-def nemo_domain() -> dict:
     return {
-        "output_dir": "/out/nemo-domain",
-        "coords_ori": "/data/coords_ori.nc",
-        "source_grid": "eORCA1",
-        "minimum_depth": 30,
-        "steps": {"coordinates": True, "bathymetry": True},
-        "bathymetries": [
-            {"name": "eocene", "enabled": True, "processor": "EoceneBathymetry", "source_file": "{inputs.herold}/x.nc"}
-        ],
+        "input": str(tmp_path / "input"),
+        "herold": str(tmp_path / "herold"),
+        "output": str(tmp_path / "out" / "eocene"),
+        "nemo": {"domain": "/data/domain/PALEORCA2/eocene", "minimum_depth": 30},
     }
-
-
-def eocene() -> dict:
-    return {"output_dir": "/out/eocene", "domain": {"from": "/data/domain/PALEORCA2/eocene"}}
 
 
 def write(tmp_path: Path, config: dict) -> Path:
@@ -44,31 +41,29 @@ def write(tmp_path: Path, config: dict) -> Path:
 
 def test_minimal_config_loads_with_defaults(tmp_path: Path) -> None:
     config = load_config(write(tmp_path, minimal(tmp_path)))
-    assert config.inputs.ece4_data == str(tmp_path / "input")
-    assert config.tmpdir is None
+    assert config.machine.tmpdir == str(tmp_path / "tmp")
     assert config.machine.name == "local"
-    assert (config.machine.atos.profile, config.machine.atos.oasis_lib_dir) == ("atos", None)
-    assert config.oifs.grid == "TL63L31"
-    assert config.nemo.grid == "PALEORCA2"
-    assert config.nemo.domain is None
-    assert config.eocene is None
+    assert (config.machine.atos.profile, config.machine.atos.ecearth4_sources) == ("atos", None)
+    oifs, nemo = config.grids.oifs, config.grids.nemo
+    assert (oifs.name, oifs.startdate, oifs.climate_version) == ("TL63L31", "19900101", "climate.v020")
+    assert (nemo.name, nemo.coords_ori, nemo.staggering) == ("PALEORCA2", None, "T")
+    assert config.present is None and config.eocene is None
 
 
-def test_nemo_domain_section_loads_with_defaults(tmp_path: Path) -> None:
-    raw = minimal(tmp_path) | {"nemo": {"domain": nemo_domain()}}
-    domain = load_config(write(tmp_path, raw)).nemo.domain
-    assert domain.output_dir == "/out/nemo-domain"
-    assert domain.tools_dir is None
-    assert (domain.staggering.source, domain.staggering.target) == ("T", "T")
-    assert domain.minimum_depth == 30
-    assert domain.bathymetries[0]["source_file"] == f"{tmp_path / 'herold'}/x.nc"
+def test_present_section_loads_with_defaults(tmp_path: Path) -> None:
+    raw = minimal(tmp_path) | {"present": present(tmp_path) | {"oifs": {}, "nemo": {"minimum_depth": 30}}}
+    section = load_config(write(tmp_path, raw)).present
+    assert section.oifs.source_grid == "TL255L91"
+    assert (section.oifs.climate_dir, section.oifs.vertical_grids_dir) == (None, None)
+    assert vars(section.oifs.steps) == {"spectral": True, "gridpoint": True, "boundary": False}
+    assert (section.nemo.source_grid, section.nemo.source_staggering, section.nemo.minimum_depth) == ("eORCA1", "T", 30)
+    assert all(vars(section.nemo.steps).values())
 
 
 def test_eocene_section_loads_with_defaults(tmp_path: Path) -> None:
-    config = load_config(write(tmp_path, minimal(tmp_path) | {"eocene": eocene()}))
-    assert config.eocene.output_dir == "/out/eocene"
-    assert config.eocene.domain.from_ == "/data/domain/PALEORCA2/eocene"
-    assert config.eocene.domain.build is False
+    config = load_config(write(tmp_path, minimal(tmp_path) | {"eocene": eocene(tmp_path)}))
+    assert config.eocene.output == str(tmp_path / "out" / "eocene")
+    assert config.eocene.nemo.domain == "/data/domain/PALEORCA2/eocene"
     assert config.eocene.oifs.aerosols is False
     assert config.eocene.oasis.constant_sst == 290.0
 
@@ -76,62 +71,61 @@ def test_eocene_section_loads_with_defaults(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "section, value, read, expected",
     [
-        ("tmpdir", "/tmp/x", lambda c: c.tmpdir, "/tmp/x"),
         ("machine", {"name": "fake"}, lambda c: c.machine.name, "fake"),
-        ("machine", {"atos": {"oasis_lib_dir": "/lib"}}, lambda c: c.machine.atos.oasis_lib_dir, "/lib"),
-        ("oifs", {"grid": "TL159L91"}, lambda c: c.oifs.grid, "TL159L91"),
-        ("nemo", {"grid": "ORCA2"}, lambda c: c.nemo.grid, "ORCA2"),
-        ("eocene", eocene() | {"oifs": {"aerosols": True}}, lambda c: c.eocene.oifs.aerosols, True),
-        ("eocene", eocene() | {"oasis": {"constant_sst": 285.5}}, lambda c: c.eocene.oasis.constant_sst, 285.5),
+        ("machine", {"atos": {"ecearth4_sources": "/src"}}, lambda c: c.machine.atos.ecearth4_sources, "/src"),
+        ("grids", {"oifs": {"name": "TL159L91"}}, lambda c: c.grids.oifs.name, "TL159L91"),
+        ("grids", {"oifs": {"startdate": "20000101"}}, lambda c: c.grids.oifs.startdate, "20000101"),
+        ("grids", {"nemo": {"name": "ORCA2", "staggering": "F"}}, lambda c: c.grids.nemo.staggering, "F"),
     ],
 )
 def test_override_default(tmp_path: Path, section, value, read, expected) -> None:
-    assert read(load_config(write(tmp_path, minimal(tmp_path) | {section: value}))) == expected
+    raw = minimal(tmp_path)
+    raw[section] = raw.get(section, {}) | value
+    assert read(load_config(write(tmp_path, raw))) == expected
 
 
-def test_nemo_domain_overrides(tmp_path: Path) -> None:
-    domain = nemo_domain() | {"tools_dir": "/tools", "staggering": {"source": "F"}}
-    loaded = load_config(write(tmp_path, minimal(tmp_path) | {"nemo": {"domain": domain}})).nemo.domain
-    assert loaded.tools_dir == "/tools"
-    assert (loaded.staggering.source, loaded.staggering.target) == ("F", "T")
+@pytest.mark.parametrize(
+    "value, read, expected",
+    [
+        ({"oifs": {"aerosols": True}}, lambda c: c.eocene.oifs.aerosols, True),
+        ({"oasis": {"constant_sst": 285.5}}, lambda c: c.eocene.oasis.constant_sst, 285.5),
+    ],
+)
+def test_override_eocene_option(tmp_path: Path, value, read, expected) -> None:
+    raw = minimal(tmp_path) | {"eocene": eocene(tmp_path) | value}
+    assert read(load_config(write(tmp_path, raw))) == expected
 
 
 # --- placeholders ---------------------------------------------------------------------------------------------------
 
 
-def test_placeholders_across_sections_and_defaults(tmp_path: Path) -> None:
-    """A path may refer to another section's value, to a default and to a value that has placeholders itself."""
+def test_eocene_input_from_present(tmp_path: Path) -> None:
+    """``eocene.input`` written as ``"{present.input}"``, as in the templates; defaults count as values."""
     raw = minimal(tmp_path) | {
-        "nemo": {"domain": nemo_domain() | {"output_dir": "{tmpdir}/nemo-domain"}},
-        "tmpdir": str(tmp_path / "work"),
-        "eocene": {
-            "output_dir": "{tmpdir}/eocene",
-            "domain": {"from": "{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene"},
-        },
+        "present": present(tmp_path),
+        "eocene": eocene(tmp_path) | {"input": "{present.input}", "output": "{present.output}/../eocene"},
     }
     config = load_config(write(tmp_path, raw))
-    assert config.nemo.domain.output_dir == f"{tmp_path}/work/nemo-domain"
-    assert config.eocene.domain.from_ == f"{tmp_path}/work/nemo-domain/nemo/domain/PALEORCA2/eocene"
-    assert config.eocene.output_dir == f"{tmp_path}/work/eocene"
-    assert config.expand("{eocene.domain.from}/domain_cfg.nc") == f"{config.eocene.domain.from_}/domain_cfg.nc"
+    assert config.eocene.input == config.present.input
+    assert config.expand("{eocene.input}/oifs/{grids.oifs.name}") == f"{tmp_path / 'input'}/oifs/TL63L31"
 
 
 def test_placeholder_with_number_value() -> None:
-    values = {"nemo": {"domain": {"minimum_depth": 30, "note": "min {nemo.domain.minimum_depth} m"}}}
-    assert resolve_placeholders(values)["nemo"]["domain"]["note"] == "min 30 m"
+    values = {"eocene": {"nemo": {"minimum_depth": 30, "note": "min {eocene.nemo.minimum_depth} m"}}}
+    assert resolve_placeholders(values)["eocene"]["nemo"]["note"] == "min 30 m"
 
 
 @pytest.mark.parametrize(
     "value, match",
     [
-        ("{nemo.domain.outptu_dir}/x", r"unknown key 'nemo.domain.outptu_dir' in placeholder"),
+        ("{present.outptu}/x", r"unknown key 'present.outptu' in placeholder"),
         ("{input}/x", r"unknown key 'input'"),
-        ("{tmpdir}/x", r"'tmpdir', which is not set"),
-        ("{inputs}/x", r"refers to a section"),
+        ("{grids.nemo.coords_ori}/x", r"'grids.nemo.coords_ori', which is not set"),
+        ("{grids}/x", r"refers to a section"),
     ],
 )
 def test_bad_placeholder(tmp_path: Path, value: str, match: str) -> None:
-    raw = minimal(tmp_path) | {"eocene": eocene() | {"output_dir": value}}
+    raw = minimal(tmp_path) | {"present": present(tmp_path) | {"output": value}}
     with pytest.raises(ConfigError, match=match) as err:
         load_config(write(tmp_path, raw))
     assert "config.yml" in str(err.value)
@@ -139,46 +133,127 @@ def test_bad_placeholder(tmp_path: Path, value: str, match: str) -> None:
 
 def test_placeholder_cycle(tmp_path: Path) -> None:
     raw = minimal(tmp_path) | {
-        "tmpdir": "{eocene.output_dir}/tmp",
-        "eocene": {"output_dir": "{tmpdir}/out", "domain": {"from": "/d"}},
+        "present": present(tmp_path) | {"input": "{present.output}", "output": "{present.input}"}
     }
-    with pytest.raises(
-        ConfigError,
-        match=r"cycle: (tmpdir -> eocene\.output_dir -> tmpdir|eocene\.output_dir -> tmpdir -> eocene\.output_dir)",
-    ):
+    with pytest.raises(ConfigError, match=r"cycle: present\.(input|output) -> present\.(output|input)"):
         load_config(write(tmp_path, raw))
+
+
+# --- tmpdir -----------------------------------------------------------------------------------------------------------
+
+
+def test_missing_machine_section(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="missing section 'machine'.*tmpdir"):
+        load_config(write(tmp_path, {"schema": 2}))
+
+
+def test_missing_tmpdir(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match=r"machine\.tmpdir"):
+        load_config(write(tmp_path, {"schema": 2, "machine": {"name": "local"}}))
+
+
+@pytest.mark.parametrize("key", ["input", "output", "herold"])
+def test_tmpdir_outside_inputs_and_outputs(tmp_path: Path, key: str) -> None:
+    raw = minimal(tmp_path) | {"eocene": eocene(tmp_path)}
+    raw["machine"]["tmpdir"] = raw["eocene"][key] + "/tmp"
+    with pytest.raises(ConfigError, match=rf"machine\.tmpdir.*'eocene\.{key}'"):
+        load_config(write(tmp_path, raw))
+
+
+# --- periods ----------------------------------------------------------------------------------------------------------
+
+
+def test_period_section_missing(tmp_path: Path) -> None:
+    config = load_config(write(tmp_path, minimal(tmp_path)))
+    with pytest.raises(ConfigError, match="needs a 'present' section"):
+        config.period("present")
+    with pytest.raises(ConfigError, match="Unknown period 'miocene'"):
+        config.period("miocene")
+
+
+@pytest.mark.parametrize("key", ["input", "herold"])
+def test_check_inputs(tmp_path: Path, key: str) -> None:
+    """Read-only directories are checked for the running period only: a missing Herold folder does not stop the
+    present-day commands."""
+    raw = minimal(tmp_path) | {"present": present(tmp_path), "eocene": eocene(tmp_path) | {key: str(tmp_path / "no")}}
+    config = load_config(write(tmp_path, raw))
+    config.check_inputs("present")
+    with pytest.raises(ConfigError, match=rf"'eocene\.{key}' is not a directory"):
+        config.check_inputs("eocene")
+
+
+def test_read_only_roots(tmp_path: Path) -> None:
+    raw = minimal(tmp_path) | {"present": present(tmp_path), "eocene": eocene(tmp_path)}
+    roots = load_config(write(tmp_path, raw)).read_only_roots()
+    assert set(roots) == {"present.input", "eocene.input", "eocene.herold"}
+
+
+def test_build_needs_a_machine_that_runs_domaincfg(tmp_path: Path) -> None:
+    raw = minimal(tmp_path) | {"eocene": eocene(tmp_path)}
+    raw["eocene"]["nemo"]["domain"] = "build"
+    with pytest.raises(ConfigError, match="'eocene.nemo.domain: build' runs DOMAINcfg"):
+        load_config(write(tmp_path, raw))
+    raw["machine"]["name"] = "fake"
+    assert load_config(write(tmp_path, raw)).eocene.nemo.domain == "build"
+
+
+# --- step overrides (--oifs, --nemo) -----------------------------------------------------------------------------------
+
+
+def test_override_steps(tmp_path: Path) -> None:
+    raw = minimal(tmp_path) | {"present": present(tmp_path) | {"nemo": {"minimum_depth": 30}}}
+    config = load_config(write(tmp_path, raw))
+    override_steps(config, "present", "nemo", ["coordinates", "bathymetry"])
+    steps = vars(config.present.nemo.steps)
+    assert [name for name, on in steps.items() if on] == ["coordinates", "bathymetry"]
+
+
+@pytest.mark.parametrize(
+    "period, component, names, match",
+    [
+        ("present", "nemo", ["bathymetri"], r"Unknown present\.nemo step\(s\): bathymetri \(known: coordinates"),
+        ("eocene", "oifs", ["spectral"], r"'eocene\.oifs' has no steps"),
+        ("present", "oifs", ["spectral"], r"'present\.oifs', which is missing"),
+    ],
+)
+def test_override_steps_errors(tmp_path: Path, period, component, names, match) -> None:
+    raw = minimal(tmp_path) | {
+        "present": present(tmp_path) | {"nemo": {"minimum_depth": 30}},
+        "eocene": eocene(tmp_path),
+    }
+    config = load_config(write(tmp_path, raw))
+    with pytest.raises(ConfigError, match=match):
+        override_steps(config, period, component, names)
 
 
 # --- errors -----------------------------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("key", ["ece4_data", "herold"])
-def test_missing_inputs_key(tmp_path: Path, key: str) -> None:
-    raw = minimal(tmp_path)
-    del raw["inputs"][key]
-    with pytest.raises(ConfigError, match=rf"inputs\.{key}") as err:
-        load_config(write(tmp_path, raw))
+@pytest.mark.parametrize("key", ["input", "output"])
+def test_missing_present_key(tmp_path: Path, key: str) -> None:
+    section = present(tmp_path)
+    del section[key]
+    with pytest.raises(ConfigError, match=rf"missing key.*present\.{key}") as err:
+        load_config(write(tmp_path, minimal(tmp_path) | {"present": section}))
     assert "config.yml" in str(err.value)
 
 
-@pytest.mark.parametrize("key", ["output_dir", "coords_ori", "source_grid", "minimum_depth", "steps", "bathymetries"])
-def test_missing_nemo_domain_key(tmp_path: Path, key: str) -> None:
-    domain = nemo_domain()
-    del domain[key]
-    with pytest.raises(ConfigError, match=rf"nemo\.domain\.{key}"):
-        load_config(write(tmp_path, minimal(tmp_path) | {"nemo": {"domain": domain}}))
-
-
 @pytest.mark.parametrize(
-    "drop, key", [(("output_dir",), "eocene.output_dir"), (("domain",), "eocene.domain"), (("domain", "from"), "from")]
+    "drop", [("input",), ("herold",), ("output",), ("nemo",), ("nemo", "domain"), ("nemo", "minimum_depth")]
 )
-def test_missing_eocene_key(tmp_path: Path, drop: tuple, key: str) -> None:
-    raw = minimal(tmp_path) | {"eocene": eocene()}
+def test_missing_eocene_key(tmp_path: Path, drop: tuple) -> None:
+    raw = minimal(tmp_path) | {"eocene": eocene(tmp_path)}
     section = raw["eocene"]
     for name in drop[:-1]:
         section = section[name]
     del section[drop[-1]]
-    with pytest.raises(ConfigError, match=rf"missing key.*{key}"):
+    with pytest.raises(ConfigError, match=rf"missing key.*eocene\.{'.'.join(drop)}"):
+        load_config(write(tmp_path, raw))
+
+
+def test_missing_present_nemo_minimum_depth(tmp_path: Path) -> None:
+    raw = minimal(tmp_path) | {"present": present(tmp_path) | {"nemo": {"source_grid": "eORCA1"}}}
+    with pytest.raises(ConfigError, match=r"present\.nemo\.minimum_depth"):
         load_config(write(tmp_path, raw))
 
 
@@ -187,11 +262,6 @@ def test_missing_schema(tmp_path: Path) -> None:
     del raw["schema"]
     with pytest.raises(ConfigError, match="schema"):
         load_config(write(tmp_path, raw))
-
-
-def test_missing_inputs_section(tmp_path: Path) -> None:
-    with pytest.raises(ConfigError, match="inputs"):
-        load_config(write(tmp_path, {"schema": 2}))
 
 
 def test_wrong_schema_version(tmp_path: Path) -> None:
@@ -205,22 +275,47 @@ def test_schema_1_lists_the_new_keys(tmp_path: Path) -> None:
         "schema": 1,
         "paths": {"input": "/i", "output": "/o", "herold": "/h"},
         "tools": {"backend": "atos", "precomputed": {"domain": "/d"}},
-        "nemo_domain": {"output_dir": "/x", "domaincfg_dir": "/t", "grids": {"target": "PALEORCA2"}},
+        "nemo_domain": {"output_dir": "/x"},
     }
     with pytest.raises(ConfigError) as err:
         load_config(write(tmp_path, raw))
     message = str(err.value)
     assert "schema 1 configuration, no longer read" in message
     for old, new in [
-        ("paths.input", "inputs.ece4_data"),
-        ("paths.output", "eocene.output_dir"),
+        ("paths.input", "present.input"),
+        ("paths.output", "eocene.output"),
+        ("paths.herold", "eocene.herold"),
         ("tools.backend", "machine.name"),
-        ("tools.precomputed.domain", "eocene.domain.from"),
-        ("nemo_domain.domaincfg_dir", "nemo.domain.tools_dir"),
-        ("nemo_domain.grids.target", "nemo.grid"),
+        ("tools.precomputed.domain", "eocene.nemo.domain"),
+        ("nemo_domain", "present.nemo"),
     ]:
         assert any(old in line and new in line for line in message.splitlines()), (old, new)
     assert "grids.oifs " not in message  # only the keys of this file
+
+
+def test_component_layout_lists_the_new_keys(tmp_path: Path) -> None:
+    """A file in the first schema 2 layout (sections by component) fails naming each old key and the new one."""
+    raw = {
+        "schema": 2,
+        "inputs": {"ece4_data": "/i", "herold": "/h"},
+        "machine": {"name": "atos", "atos": {"oasis_lib_dir": "/lib"}},
+        "nemo": {"grid": "PALEORCA2", "domain": {"output_dir": "/x", "tools_dir": "/t", "bathymetries": []}},
+        "eocene": {"output_dir": "/o", "domain": {"from": "/d"}},
+    }
+    with pytest.raises(ConfigError) as err:
+        load_config(write(tmp_path, raw))
+    message = str(err.value)
+    assert "configuration with component sections, no longer read" in message
+    for old, new in [
+        ("inputs.ece4_data", "present.input"),
+        ("inputs.herold", "eocene.herold"),
+        ("machine.atos.oasis_lib_dir", "machine.atos.ecearth4_sources"),
+        ("nemo.domain.tools_dir", "machine.atos.ecearth4_sources"),
+        ("nemo.grid", "grids.nemo.name"),
+        ("eocene.output_dir", "eocene.output"),
+        ("eocene.domain", "eocene.nemo.domain"),
+    ]:
+        assert any(old in line and new in line for line in message.splitlines()), (old, new)
 
 
 @pytest.mark.parametrize("old", [{"dirs": {"input": "/x"}}, {"profile": "local", "profiles": {"local": {}}}])
@@ -237,32 +332,17 @@ def test_unknown_top_level_key(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "section, value, where",
     [
-        ("inputs", {"inptu": "/x"}, "inputs"),
-        ("nemo", {"atmosphere": "TL63L31"}, "nemo"),
         ("machine", {"atos": {"modules": []}}, "machine.atos"),
-        ("eocene", eocene() | {"oasis": {"sst": 1.0}}, "eocene.oasis"),
-        ("eocene", eocene() | {"domain": {"from": "/d", "biuld": True}}, "eocene.domain"),
+        ("grids", {"nemo": {"atmosphere": "TL63L31"}}, "grids.nemo"),
+        ("present", {"inptu": "/x"}, "present"),
+        ("present", {"nemo": {"minimum_depth": 30, "steps": {"bathymetri": True}}}, "present.nemo.steps"),
+        ("eocene", {"oasis": {"sst": 1.0}}, "eocene.oasis"),
     ],
 )
 def test_unknown_key_in_section(tmp_path: Path, section: str, value: dict, where: str) -> None:
-    raw = minimal(tmp_path)
+    raw = minimal(tmp_path) | {"present": present(tmp_path), "eocene": eocene(tmp_path)}
     raw[section] = raw.get(section, {}) | value
     with pytest.raises(ConfigError, match=rf"unknown key\(s\) in '{where}'"):
-        load_config(write(tmp_path, raw))
-
-
-def test_unknown_nemo_domain_step(tmp_path: Path) -> None:
-    domain = nemo_domain()
-    domain["steps"]["bathymetri"] = True
-    with pytest.raises(ConfigError, match="unknown step.*bathymetri"):
-        load_config(write(tmp_path, minimal(tmp_path) | {"nemo": {"domain": domain}}))
-
-
-@pytest.mark.parametrize("key", ["ece4_data", "herold"])
-def test_read_only_directory_must_exist(tmp_path: Path, key: str) -> None:
-    raw = minimal(tmp_path)
-    raw["inputs"][key] = str(tmp_path / "missing")
-    with pytest.raises(ConfigError, match=rf"inputs\.{key}.*not a directory"):
         load_config(write(tmp_path, raw))
 
 
@@ -271,15 +351,17 @@ def test_read_only_directory_must_exist(tmp_path: Path, key: str) -> None:
     [
         ("machine", {"name": "hpc"}, "machine.name"),
         ("machine", {"atos": {"profile": 1}}, "machine.atos.profile"),
-        ("nemo", {"domain": nemo_domain() | {"staggering": {"source": "U"}}}, "nemo.domain.staggering.source"),
-        ("nemo", {"domain": nemo_domain() | {"minimum_depth": "deep"}}, "nemo.domain.minimum_depth"),
-        ("eocene", eocene() | {"domain": {"from": "/d", "build": "yes"}}, "eocene.domain.build"),
-        ("eocene", eocene() | {"oifs": {"aerosols": "no"}}, "eocene.oifs.aerosols"),
-        ("eocene", eocene() | {"oasis": {"constant_sst": "warm"}}, "eocene.oasis.constant_sst"),
+        ("grids", {"nemo": {"staggering": "U"}}, "grids.nemo.staggering"),
+        ("present", {"nemo": {"minimum_depth": 30, "source_staggering": "U"}}, "present.nemo.source_staggering"),
+        ("present", {"nemo": {"minimum_depth": "deep"}}, "present.nemo.minimum_depth"),
+        ("present", {"oifs": {"steps": {"boundary": "yes"}}}, "present.oifs.steps.boundary"),
+        ("eocene", {"oifs": {"aerosols": "no"}}, "eocene.oifs.aerosols"),
+        ("eocene", {"oasis": {"constant_sst": "warm"}}, "eocene.oasis.constant_sst"),
     ],
 )
 def test_bad_value(tmp_path: Path, section: str, value: dict, key: str) -> None:
-    raw = minimal(tmp_path) | {section: value}
+    raw = minimal(tmp_path) | {"present": present(tmp_path), "eocene": eocene(tmp_path)}
+    raw[section] = raw.get(section, {}) | value
     with pytest.raises(ConfigError, match=key):
         load_config(write(tmp_path, raw))
 
@@ -294,10 +376,9 @@ def test_missing_and_empty_file(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("template", ["laptop.tmpl", "atos.tmpl"])
 def test_templates_load(tmp_path: Path, template: str) -> None:
-    """The committed templates are valid once the read-only directories exist."""
-    raw = yaml.safe_load((REPO / "configs" / template).read_text())
-    raw["inputs"] = minimal(tmp_path)["inputs"]
-    config = load_config(write(tmp_path, raw))
-    assert [b["name"] for b in config.nemo.domain.bathymetries] == ["present_day", "eocene"]
-    assert (config.oifs.data is not None) == (template == "atos.tmpl")  # the generator's inputs are on Atos
-    assert config.eocene.domain.from_.endswith("/nemo/domain/PALEORCA2/eocene") or template == "laptop.tmpl"
+    """The committed templates are valid, both periods present."""
+    config = load_config(REPO / "configs" / template)
+    assert config.eocene.input == config.present.input
+    assert config.present.nemo.source_grid == "eORCA1"
+    assert (config.present.oifs is not None) == (template == "atos.tmpl")  # the generator's inputs are on Atos
+    assert (config.eocene.nemo.domain == "build") == (template == "atos.tmpl")

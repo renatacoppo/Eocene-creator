@@ -1,10 +1,10 @@
-"""Checks of a finished Eocene run, called by :func:`ecefast.paleo.eocene.pipeline.run` after the steps.
+"""Checks of a finished Eocene run, called by :func:`ecefast.periods.eocene.pipeline.run` after the steps.
 
 - every declared ``writes`` path of the steps that ran exists;
 - no NaN in the data variables of the NetCDF files they declare (EC-Earth reads the raw values, so a NaN is an
   error even where ``_FillValue`` is NaN; values equal to a non-NaN ``_FillValue`` are fine);
 - if ``domain`` ran: the vertical grid rule between the present-day and the installed Eocene domain
-  (:func:`ecefast.paleo.eocene.nemo.domain.check_vertical_grid`).
+  (:func:`ecefast.periods.eocene.nemo.domain.check_vertical_grid`).
 """
 
 import logging
@@ -15,7 +15,7 @@ import xarray as xr
 
 from ecefast.core.steps import ComponentStep, PipelineError
 from ecefast.core.workspace import Context
-from ecefast.paleo.eocene.nemo.domain import EoceneDomain, check_vertical_grid
+from ecefast.periods.eocene.nemo.domain import EoceneDomain, check_vertical_grid
 
 logger = logging.getLogger(__name__)
 

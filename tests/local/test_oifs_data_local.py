@@ -1,7 +1,6 @@
-"""``ecefast oifs data`` on the real TL63L31 files of the local input tree.
+"""``ecefast oifs run`` (the OIFS generator) on the real TL63L31 files of the local input tree.
 
-Opt-in, like ``test_regression.py``: set ``ECEFAST_TEST_DATA`` to a directory holding ``ECE4-DATA-V3/`` and
-``herold-et-al-2014/Supp/``. The local tree has no TL255L91, so this makes TL63L31 from TL63L31: the spectral
+Opt-in, like ``test_regression.py``: set ``ECEFAST_TEST_DATA`` to a directory holding ``ECE4-DATA-V3/``. The local tree has no TL255L91, so this makes TL63L31 from TL63L31: the spectral
 truncation and the nearest-neighbour remapping run on real GRIB files, the vertical interpolation does not (same
 number of levels; it is checked on Atos, ``tests/hpc/test_oifs_data_hpc.py``). A few seconds.
 """
@@ -30,16 +29,16 @@ def grib_count(path: Path) -> int:
 
 def test_tl63l31_from_itself(tmp_path: Path) -> None:
     data = Path(DATA)
-    output = tmp_path / "OUTPUT" / "oifs-data"
+    output = tmp_path / "OUTPUT" / "present"
     config = {
         "schema": 2,
-        "inputs": {"ece4_data": str(data / "ECE4-DATA-V3"), "herold": str(data / "herold-et-al-2014" / "Supp")},
-        "oifs": {"grid": "TL63L31", "data": {"output_dir": str(output), "source_grid": "TL63L31"}},
+        "machine": {"tmpdir": str(tmp_path / "tmp")},
+        "present": {"input": str(data / "ECE4-DATA-V3"), "output": str(output), "oifs": {"source_grid": "TL63L31"}},
     }
     config_file = tmp_path / "config.yml"
     config_file.write_text(yaml.safe_dump(config))
 
-    main(["oifs", "data", "-c", str(config_file), "-l", "WARNING"])
+    main(["oifs", "run", "-c", str(config_file), "-l", "WARNING"])
 
     source = data / "ECE4-DATA-V3" / "oifs" / "TL63L31" / "19900101"
     target = output / "oifs" / "TL63L31" / "19900101"

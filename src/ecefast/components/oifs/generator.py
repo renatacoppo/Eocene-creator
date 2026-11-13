@@ -1,18 +1,18 @@
-"""OIFS base data of a resolution, made from a finer one (``ecefast oifs data``).
+"""OIFS base data of a resolution, made from a finer one (the ``oifs`` step of ``ecefast present run``).
 
-Builds the present-day OIFS initial state of ``oifs.grid`` (e.g. TL63L31) from the one of
-``oifs.data.source_grid`` (e.g. TL255L91) in the input tree, and optionally the climate (boundary) file:
+Builds the present-day OIFS initial state of ``grids.oifs`` (e.g. TL63L31) from the one of
+``present.oifs.source_grid`` (e.g. TL255L91) in the input tree, and optionally the climate (boundary) file:
 
 - ``spectral``: spectral truncation of ``ICMSHECE4INIT`` (``cdo sp2sp``);
 - ``gridpoint``: nearest-neighbour remapping of ``ICMGGECE4INIT`` and ``ICMGGECE4INIUA`` to the target reduced
   Gaussian grid, GRIB1 and GRIB2 messages remapped separately;
-- ``boundary``: ``ICMCLECE4``, copied from ``oifs.data.precomputed_climate_dir`` if it is there, else built from
-  the monthly ECMWF climate fields of ``oifs.data.climate_dir`` (``ICMCLECE4-1990``);
+- ``boundary``: ``ICMCLECE4``, copied from ``present.oifs.precomputed_climate_dir`` if it is there, else built from
+  the monthly ECMWF climate fields of ``present.oifs.climate_dir`` (``ICMCLECE4-1990``);
 - vertical interpolation (``cdo remapeta``) when the source and target have a different number of levels.
 
-Inputs exist on ECMWF Atos only. Everything is written under ``oifs.data.output_dir``: the final files as in an
-EC-Earth tree (``oifs/<grid>/<startdate>/``, ``oifs/<grid>/<climate_version>/``), intermediate files in
-``work/``. The generation logic is the one of the original script (Paolo Davini, CNR-ISAC, Apr 2024); only its
+Inputs exist on ECMWF Atos only. The final files are written under ``present.output`` as in an EC-Earth tree
+(``oifs/<grid>/<startdate>/``, ``oifs/<grid>/<climate_version>/``), the intermediate files in
+``<machine.tmpdir>/present/oifs``. The generation logic is the one of the original script (Paolo Davini, CNR-ISAC, Apr 2024); only its
 paths come from the configuration.
 
 The reduced Gaussian grid descriptions (``grids/T<kind><N>.txt``) and the hybrid level coefficients
@@ -26,11 +26,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from ecefast.core.cdo import cdo_version, get_cdo
-from ecefast.core.config import Config, ConfigError, load_config
+from ecefast.core.cdo import get_cdo
+from ecefast.core.config import ConfigError, OIFSDataSteps
 from ecefast.core.grib import GRIB2, ecmwf_grid, extract_grid_info, repack_grib_file, unpack_grib_file
 from ecefast.core.io import atomic_write
 from ecefast.core.steps import PipelineError, missing_inputs_message
+from ecefast.core.workspace import Context
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ CLIMATE_VARIABLES = ["alb", "aluvp", "aluvd", "alnip", "alnid", "lail", "laih"]
 # ecCodes tools called directly by the vertical interpolation
 GRIB_TOOLS = ["grib_set", "grib_copy"]
 
-# One line per step of oifs.data.steps, in run order; shown by `ecefast oifs data -h`
+# One line per step of present.oifs.steps, in run order; shown by `ecefast oifs run -h`
 STEP_DESCRIPTIONS = {
     "spectral": "truncate the spectral initial state ICMSHECE4INIT to the target resolution",
     "gridpoint": "remap ICMGGECE4INIT and ICMGGECE4INIUA to the target reduced Gaussian grid",
@@ -106,7 +107,7 @@ def generate_gridpoint_conditions(OIFS_IC, target_spectral, TMPDIR, clean=True):
 def climate_paths(OIFS_BC, target_grid, climate_version, ecmwf_name):
     """Precomputed climate file, and the monthly fields it is built from when it is missing."""
     climfile = f"{OIFS_BC['ready']}/{target_grid}/{climate_version}/ICMCLECE4" if OIFS_BC["ready"] else None
-    compute = OIFS_BC["compute"] or "<oifs.data.climate_dir is not set>"
+    compute = OIFS_BC["compute"] or "<present.oifs.climate_dir is not set>"
     paths = [f"{compute}/{ecmwf_name}/month_{var}" for var in CLIMATE_VARIABLES]
     return climfile, paths
 
@@ -231,54 +232,111 @@ def vertical_interpolation(TMPDIR, GRIDS, target_spectral, vertical, IC_TGT, do_
 
 
 class OIFSData:
-    """``ecefast oifs data``: the OIFS base data of ``oifs.grid``, from ``oifs.data.source_grid``.
+    """The OIFS base data of ``target_grid``, made from ``source_grid`` of the input tree.
 
     Parameters
     ----------
-    config : Config
-        The configuration, with an ``oifs.data`` section.
+    input_dir : str
+        Input tree holding ``oifs/<source_grid>/<startdate>/``.
+    output_dir : str
+        Output tree: ``oifs/<target_grid>/<startdate>/`` and ``oifs/<target_grid>/<climate_version>/``.
+    workdir : str
+        Directory of the intermediate files, kept between runs.
+    target_grid, source_grid : str
+        Grid names like ``TL63L31``.
+    startdate, climate_version : str
+        Folders of the initial state and of the climate files.
+    climate_dir, precomputed_climate_dir, vertical_grids_dir : str or None
+        Monthly ECMWF climate fields, ready ``ICMCLECE4`` files, ``T<kind><N>_grid.nc`` corner grids.
+    steps : OIFSDataSteps
+        Which steps run.
 
     Raises
     ------
     ConfigError
-        If the configuration has no ``oifs.data`` section, or ``oifs.grid`` or ``oifs.data.source_grid`` is not a
-        grid name like ``TL63L31``.
+        If ``target_grid`` or ``source_grid`` is not a grid name like ``TL63L31``.
     """
 
-    def __init__(self, config: Config):
-        data = config.oifs.data
-        if data is None:
-            raise ConfigError(f"{config.file}: `ecefast oifs data` needs an 'oifs.data' section")
-        self.data = data
-        self.target_grid = config.oifs.grid
+    def __init__(
+        self,
+        input_dir: str,
+        output_dir: str,
+        workdir: str,
+        target_grid: str,
+        source_grid: str,
+        startdate: str,
+        climate_version: str,
+        climate_dir: str | None,
+        precomputed_climate_dir: str | None,
+        vertical_grids_dir: str | None,
+        steps: OIFSDataSteps,
+    ):
+        self.target_grid = target_grid
+        self.source_grid = source_grid
+        self.climate_version = climate_version
+        self.vertical_grids_dir = vertical_grids_dir
         grids = {}
-        for key, name in (("oifs.grid", config.oifs.grid), ("oifs.data.source_grid", data.source_grid)):
+        for key, name in (("grids.oifs.name", target_grid), ("present.oifs.source_grid", source_grid)):
             info = extract_grid_info(name)
             if info is None:
-                raise ConfigError(f"{config.file}: '{key}' must be a grid name like TL63L31, got {name!r}")
+                raise ConfigError(f"'{key}' must be a grid name like TL63L31, got {name!r}")
             grids[key] = info
 
         # target grid info
-        grid_type, self.spectral, self.vertical = grids["oifs.grid"]
+        grid_type, self.spectral, self.vertical = grids["grids.oifs.name"]
         self.ecmwf_name = str(self.spectral) + ecmwf_grid(grid_type)
         self.target_spectral = "T" + grid_type + str(self.spectral)
         # source grid info: vertical interpolation when the number of levels differs
-        _, _, ic_vertical = grids["oifs.data.source_grid"]
+        _, _, ic_vertical = grids["present.oifs.source_grid"]
         self.do_vertical = ic_vertical != self.vertical
 
-        target = os.path.join(data.output_dir, "oifs", self.target_grid)
-        self.ic_source = os.path.join(config.inputs.ece4_data, "oifs", data.source_grid, data.startdate)
-        self.ic_target = os.path.join(target, data.startdate)
-        self.bc_target = os.path.join(target, data.climate_version)
-        self.workdir = os.path.join(data.output_dir, "work")
-        self.oifs_bc = {"ready": data.precomputed_climate_dir, "compute": data.climate_dir}
-        self.steps = data.steps
+        target = os.path.join(output_dir, "oifs", target_grid)
+        self.ic_source = os.path.join(input_dir, "oifs", source_grid, startdate)
+        self.ic_target = os.path.join(target, startdate)
+        self.bc_target = os.path.join(target, climate_version)
+        self.workdir = workdir
+        self.oifs_bc = {"ready": precomputed_climate_dir, "compute": climate_dir}
+        self.steps = steps
+
+    @classmethod
+    def from_context(cls, ctx: Context) -> "OIFSData":
+        """Build it for the running period: section ``<period>.oifs``, ``grids.oifs``, ``machine.tmpdir``.
+
+        Raises
+        ------
+        ConfigError
+            If the period has no ``oifs`` section, or see :class:`OIFSData`.
+        """
+        oifs = ctx.section.oifs
+        if oifs is None:
+            raise ConfigError(f"{ctx.config.file}: the OIFS generator needs a '{ctx.period}.oifs' section")
+        grid = ctx.config.grids.oifs
+        workdir = ctx.tmpdir("oifs")
+        ctx.check_writable(workdir, "oifs")
+        ctx.check_writable(ctx.section.output, "oifs")
+        return cls(
+            ctx.section.input,
+            ctx.section.output,
+            workdir,
+            grid.name,
+            oifs.source_grid,
+            grid.startdate,
+            grid.climate_version,
+            oifs.climate_dir,
+            oifs.precomputed_climate_dir,
+            oifs.vertical_grids_dir,
+            oifs.steps,
+        )
+
+    def final_files(self) -> list[str]:
+        """The files the enabled steps write into the output tree."""
+        return [path for _, _, writes in self.plan() for path in writes if not path.startswith(self.workdir + os.sep)]
 
     def plan(self) -> list[tuple[str, list[str], list[str]]]:
         """The enabled steps in run order, each with the files it reads and writes.
 
-        Intermediate files in ``work/`` written by an earlier step count as reads of the later one, so a step can
-        run alone on the ``work/`` of an earlier run.
+        Intermediate files in ``workdir`` written by an earlier step count as reads of the later one, so a step can
+        run alone on the ``workdir`` of an earlier run.
 
         Returns
         -------
@@ -298,7 +356,7 @@ class OIFSData:
                 ("gridpoint", [*sources, grid_file], [f"{work}/{f}" for f in ("ICMGGECE4INIT", "ICMGGECE4INIUA")])
             )
         if steps.boundary:
-            climfile, paths = climate_paths(self.oifs_bc, self.target_grid, self.data.climate_version, self.ecmwf_name)
+            climfile, paths = climate_paths(self.oifs_bc, self.target_grid, self.climate_version, self.ecmwf_name)
             if climfile and os.path.exists(climfile):
                 plan.append(("boundary", [climfile], [f"{self.bc_target}/ICMCLECE4"]))
             else:
@@ -308,7 +366,7 @@ class OIFSData:
             name = "vertical" if self.do_vertical else "install"
             reads = [f"{work}/{f}" for f in IC_FILES]
             if self.do_vertical:
-                grids_dir = self.data.vertical_grids_dir or "<oifs.data.vertical_grids_dir is not set>"
+                grids_dir = self.vertical_grids_dir or "<present.oifs.vertical_grids_dir is not set>"
                 reads += [f"{grids_dir}/{self.target_spectral}_grid.nc", grid_file]
                 reads.append(str(GRIDS_DIR / f"L{self.vertical}.txt"))
             plan.append((name, reads, [f"{ic_target}/{f}" for f in IC_FILES]))
@@ -343,7 +401,7 @@ class OIFSData:
         """
         self.check()
         if dry_run:
-            logger.info("Dry run: nothing is written. %s from %s. Plan:", self.target_grid, self.data.source_grid)
+            logger.info("Dry run: nothing is written. %s from %s. Plan:", self.target_grid, self.source_grid)
             for name, _, writes in self.plan():
                 logger.info("  %-10s  -> %s", name, ", ".join(writes))
             return
@@ -351,7 +409,7 @@ class OIFSData:
         for d in [self.ic_target, self.bc_target, self.workdir]:
             os.makedirs(d, exist_ok=True)
         TMPDIR, steps = self.workdir, self.steps
-        # intermediate files stay in work/ (the original script kept them unless --clean)
+        # intermediate files stay in workdir (the original script kept them unless --clean)
         do_clean = False
 
         if steps.spectral:
@@ -364,7 +422,7 @@ class OIFSData:
         # Boundary condition generation
         if steps.boundary:
             generate_boundary_conditions(
-                self.oifs_bc, self.target_grid, self.data.climate_version, TMPDIR, self.bc_target, self.ecmwf_name
+                self.oifs_bc, self.target_grid, self.climate_version, TMPDIR, self.bc_target, self.ecmwf_name
             )
 
         # move the files to the target directory
@@ -376,28 +434,7 @@ class OIFSData:
                         shutil.move(f"{TMPDIR}/{file}", tmp)
             else:
                 vertical_interpolation(
-                    TMPDIR, self.data.vertical_grids_dir, self.target_spectral, self.vertical, self.ic_target, do_clean
+                    TMPDIR, self.vertical_grids_dir, self.target_spectral, self.vertical, self.ic_target, do_clean
                 )
 
         logger.info("Done")
-
-
-def run(config_file: str, dry_run: bool = False) -> None:
-    """Run ``ecefast oifs data`` from a configuration file (section ``oifs.data``).
-
-    Parameters
-    ----------
-    config_file : str
-        Configuration file with an ``oifs.data`` section.
-    dry_run : bool
-        Only check the inputs and log the plan; write nothing.
-
-    Raises
-    ------
-    ConfigError
-        If the configuration is invalid or has no ``oifs.data`` section.
-    PipelineError
-        If an input of an enabled step is missing.
-    """
-    logger.info("CDO version: %s", cdo_version())
-    OIFSData(load_config(config_file)).run(dry_run=dry_run)

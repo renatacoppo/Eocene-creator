@@ -35,10 +35,35 @@ If an input with a known source is missing, the error of ``ecefast eocene run`` 
 
    cp configs/laptop.tmpl configs/laptop.yml
 
-Then set the paths in ``configs/laptop.yml`` (see :doc:`configuration`): the read-only
-``inputs``, ``eocene.output_dir`` (e.g. ``OUTPUT/eocene``) and ``eocene.domain.from`` (the Eocene
-domain copied from Atos). ``configs/*.yml`` is ignored by git. On ECMWF Atos start from
-``configs/atos.tmpl``.
+Then set the paths in ``configs/laptop.yml`` (see :doc:`configuration`): ``machine.tmpdir``
+(intermediate files), ``grids.nemo.coords_ori``, the read-only ``present.input`` (ECE4-DATA-V3)
+and ``eocene.herold``, the outputs ``present.output`` and ``eocene.output`` (e.g.
+``OUTPUT/present`` and ``OUTPUT/eocene``) and ``eocene.nemo.domain`` (the directory of the Eocene
+domain copied from Atos). ``eocene.input`` stays ``"{present.input}"``. ``configs/*.yml`` is
+ignored by git. On ECMWF Atos start from ``configs/atos.tmpl``.
+
+.. code-block:: yaml
+
+   schema: 2
+   machine:
+     tmpdir: /path/to/tmp/ecefast
+   grids:
+     nemo:
+       coords_ori: /path/to/data/PALEORCA2/coords_ori.nc
+   present:
+     input: /path/to/ECE4-DATA-V3
+     output: /path/to/OUTPUT/present
+     nemo:
+       source_grid: eORCA1
+       minimum_depth: 30
+       steps: {domain_cfg: false, generate_mask: false, generate_subbasins: false}
+   eocene:
+     input: "{present.input}"
+     herold: /path/to/herold-et-al-2014/Supp
+     output: /path/to/OUTPUT/eocene
+     nemo:
+       domain: /path/to/data/domain/PALEORCA2/eocene
+       minimum_depth: 30
 
 3. Run the workflow
 -------------------
@@ -50,7 +75,7 @@ Check that every input exists and see what would run, without writing anything:
    ecefast eocene run -c configs/laptop.yml --dry-run
 
 Copy the input subtree to the output directory and run every step (``--overwrite`` replaces an
-output directory that is not empty):
+output directory that is not empty, after a warning and a 5 s pause):
 
 .. code-block:: bash
 
@@ -69,19 +94,20 @@ Options:
 
    -c, --config      Configuration file (schema 2), section 'eocene'. Required.
    --steps a,b       Comma-separated step names. Default: all steps.
+   --nemo a,b        Run only these steps of eocene.nemo.steps (with eocene.nemo.domain: build).
    --dry-run         Check all inputs and show the plan; write nothing.
-   --overwrite       Let 'stage' replace an output directory that is not empty.
+   --overwrite       Replace existing outputs ('stage' removes the whole Eocene tree), after a 5 s pause.
    -l, --loglevel    Log level. Default: INFO.
 
-To build NEMO domains from the bathymetries of the ``nemo.domain`` section (on a laptop: the
-coordinates, bathymetries and DOMAINcfg namelists, in ``<nemo.domain.output_dir>/work/``; DOMAINcfg
-itself runs on Atos, and the final files go to ``<nemo.domain.output_dir>/nemo/domain/``):
+To build the present-day NEMO domain (section ``present.nemo``; on a laptop only the coordinates,
+the bathymetry and the DOMAINcfg namelist, in ``<machine.tmpdir>/present/nemo/``; DOMAINcfg itself
+runs on Atos, and the final files go to ``<present.output>/nemo/domain/<grid>/``):
 
 .. code-block:: bash
 
-   ecefast nemo domain -c configs/laptop.yml
+   ecefast nemo run -c configs/laptop.yml
 
-``ecefast eocene steps`` lists the steps. The pipeline, the steps and ``provenance.yml`` are
+``ecefast eocene steps`` and ``ecefast present steps`` list the steps. The pipeline, the steps and ``provenance.yml`` are
 described in :doc:`workflow`.
 
 Tutorials
@@ -103,7 +129,7 @@ The notebooks in ``notebooks/tutorials/`` show the workflow step by step, with a
      - The ``oifs`` step: land-sea mask, orography, sub-grid orography, vegetation, albedo and leaf area index.
    * - ``03_nemo.ipynb``
      - The ``domain`` and ``nemo`` steps: Eocene bathymetry, the vertical grid check, tidal mixing, geothermal heat
-       flux, ocean initial state, runoff; the laptop part of ``ecefast nemo domain``.
+       flux, ocean initial state, runoff; the laptop part of ``ecefast nemo run``.
    * - ``04_oasis_rnfm.ipynb``
      - The ``oasis`` and ``rnfm`` steps (both small, so they share a notebook): OASIS restart and river basins.
 
@@ -113,7 +139,7 @@ minutes in all, on the local test data. Two environment variables give the paths
 .. code-block:: bash
 
    export ECEFAST_TEST_DATA=/path/to/data          # holds ECE4-DATA-V3/, herold-et-al-2014/, data/
-   export ECEFAST_TUTORIAL_DIR=/path/to/scratch    # optional; default: ecefast-tutorial in the system temp dir
+   export ECEFAST_TUTORIAL_DIR=/path/to/tmp    # optional; default: ecefast-tutorial in the system temp dir
 
 ``01_quickstart.ipynb`` writes the configuration and the output into ``ECEFAST_TUTORIAL_DIR``; the other notebooks
 read them, so run it first.

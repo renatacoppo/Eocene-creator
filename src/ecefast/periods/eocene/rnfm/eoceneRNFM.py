@@ -478,9 +478,10 @@ class EoceneRNFM(ComponentStep):
     """Write the runoff-mapper basins from the Herold et al. (2014) river flow direction."""
 
     name = "rnfm"
+    component = "rnfm"
     needs = ["stage"]
-    reads = ["{inputs.herold}/herold_etal_eocene_runoff_1x1.nc", "{inputs.ece4_data}/runoff-mapper/runoff_maps.nc"]
-    writes = ["{eocene.output_dir}/runoff-mapper/runoff_maps.nc"]
+    reads = ["{herold}/herold_etal_eocene_runoff_1x1.nc", "{input}/runoff-mapper/runoff_maps.nc"]
+    writes = ["{output}/runoff-mapper/runoff_maps.nc"]
 
     def __init__(self, idir: str, odir: str, herold: str):
         self.idir = idir
@@ -489,8 +490,7 @@ class EoceneRNFM(ComponentStep):
 
     @classmethod
     def from_context(cls, ctx: Context) -> "EoceneRNFM":
-        config = ctx.config
-        return cls(idir=config.inputs.ece4_data, odir=config.eocene.output_dir, herold=config.inputs.herold)
+        return cls(idir=ctx.section.input, odir=ctx.section.output, herold=ctx.section.herold)
 
     def run(self) -> None:
         """Track the river basins and regrid them to the runoff-mapper grid (was ``cli/eocene.py:run_runoff``)."""

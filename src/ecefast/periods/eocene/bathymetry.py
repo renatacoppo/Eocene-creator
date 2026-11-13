@@ -5,23 +5,20 @@ Remaps a negative-elevation field (ocean where value < 0) to PALEORCA2 using
 bilinear interpolation.  No strait corrections are applied.
 """
 
-from ecefast.components.nemo.bathymetry.base import BathymetryProcessor
+from ecefast.components.nemo.bathymetry import BathymetryProcessor
 
 
 class EoceneBathymetry(BathymetryProcessor):
-    """
-    Processor for the Herold et al. Eocene paleotopography.
+    """Processor for the Herold et al. (2014) Eocene paleotopography.
 
-    Source: herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc, variable
-            paleotopo (negative-elevation convention: ocean < 0, land ≥ 0).
-    Remap:  bilinear (remapbil) to PALEORCA2 T-grid.
-    Post:   none (no strait corrections needed for a paleo configuration).
-
-    YAML instance fields
-    --------------------
-    source_file : path to Herold et al. NetCDF file
+    - Source: ``{herold}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc``, variable ``paleotopo``
+      (negative-elevation convention: ocean < 0, land >= 0).
+    - Remap: bilinear (``remapbil``) to the target T-grid.
+    - Post: none (no strait corrections for a paleo geography).
     """
 
+    name = "eocene"
+    source_file = "{herold}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc"
     variable = "paleotopo"
     rename_to = "bathy_metry"
     mask_type = "negative_elevation"
@@ -32,8 +29,3 @@ class EoceneBathymetry(BathymetryProcessor):
     # Australia). Assessment and options: notebooks/analysis/eocene-subbasins.ipynb, PR #39, issue #16.
     regional_subbasins = False
     # setgrid is None — source file already carries a proper grid description
-
-
-# Eocene processors by the name used in nemo.domain.bathymetries; merged with
-# ecefast.components.nemo.bathymetry.PROCESSORS by the callers of NEMOWorkflow
-EOCENE_PROCESSORS: dict[str, type[BathymetryProcessor]] = {"EoceneBathymetry": EoceneBathymetry}

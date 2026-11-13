@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from ecefast.paleo.eocene.oifs.lsmgrd import lsmgrd
-from ecefast.paleo.eocene.oifs.subgrid_orog import compute_slope
+from ecefast.periods.eocene.oifs.lsmgrd import lsmgrd
+from ecefast.periods.eocene.oifs.subgrid_orog import compute_slope
 
 pytestmark = pytest.mark.unit
 
