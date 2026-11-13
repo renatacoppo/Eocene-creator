@@ -22,7 +22,7 @@ machine:
 grids:
   # oifs:
   #   name: TL63L31             # OIFS resolution (directory under oifs/)
-  #   startdate: '19900101'     # initial-state folder under oifs/<name>/; quote it
+  #   startdate: '19900101'     # initial-state folder under initial_state/oifs/<name>/; quote it
   #   climate_version: climate.v020   # climate files folder under oifs/<name>/: climate.v020 for cy48, v015 for cy43
   nemo:
     # name: PALEORCA2           # NEMO grid (directory under oasis/ and nemo/domain/)
@@ -34,7 +34,7 @@ present:
   input: /path/to/ECE4-DATA-V3        # EC-Earth4 input tree, read-only (required)
   output: /path/to/OUTPUT/present     # the present-day tree: stage copies the input, then oifs/, nemo/domain/ (required)
   oifs:                               # OIFS base data of grids.oifs made from a finer grid
-    # source_grid: TL255L91           # read from {input}/oifs/<source_grid>/<startdate>
+    # source_grid: TL255L91           # read from {input}/initial_state/oifs/<source_grid>/<startdate>
     climate_dir: /path/to/climate/climate.v020   # ECMWF monthly climate fields; read by the boundary step
     precomputed_climate_dir: /path/to/oifs48-icmcl # ready ICMCLECE4 files (<grid>/<climate_version>/), copied if there
     # steps:

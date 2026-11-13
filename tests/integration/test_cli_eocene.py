@@ -56,7 +56,7 @@ class NeedsMissing(Dummy):
     """Read a file that does not exist."""
 
     name = "missing"
-    reads = ["{input}/nemo/initial/woa13-levitus-L31.nc", "{herold}/topo.nc"]
+    reads = ["{input}/initial_state/nemo/ts_state/woa13-levitus-L31.nc", "{herold}/topo.nc"]
     writes = ["{output}/missing.txt"]
 
 
@@ -65,10 +65,13 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     """A tiny input tree, a config file, and the pipeline [Stage, Dummy]."""
     data = tmp_path / "input"
     for sub, name in [
-        ("oifs/TL63L31", "ICMGG"),
+        ("oifs/TL63L31/climate.v020", "ICMCL"),
         ("nemo/initial", "woa.nc"),
         ("oasis/PALEORCA2", "rstos.nc"),
         ("runoff-mapper", "runoff_maps.nc"),
+        ("initial_state/oifs/TL63L31/19900101", "ICMGG"),
+        ("initial_state/oasis/PALEORCA2/default", "rstos.nc"),
+        ("initial_state/nemo/ts_state", "woa13.nc"),
     ]:
         (data / sub).mkdir(parents=True)
         (data / sub / name).write_text(name)
@@ -119,8 +122,10 @@ def test_steps_lists_every_step_on_one_line(capsys: pytest.CaptureFixture) -> No
     nemo = lines[4]
     assert "component: nemo" in nemo and "component: -" in lines[0]
     assert "needs: stage" in nemo
-    assert "{input}/nemo/initial/woa13-levitus-L31.nc" in nemo
-    assert "{output}/nemo/initial/woa13-levitus-L31_woa-pi.nc" in nemo
+    assert "{input}/initial_state/nemo/ts_state/woa13-levitus-L31.nc" in nemo
+    assert "{output}/initial_state/nemo/ts_state/woa13-levitus-L31_woa-pi.nc" in nemo
+    assert "{output}/initial_state/nemo/ts_state/deepmip-L31_cold-30.nc" in nemo
+    assert "{output}/initial_state/nemo/ts_state/deepmip-L31_warm-34.nc" in nemo
 
 
 def test_pipeline_order() -> None:

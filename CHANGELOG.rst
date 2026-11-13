@@ -15,6 +15,10 @@ Unreleased
 Added
 ~~~~~
 
+- ``EoceneNEMO`` writes a third ocean initial state, ``initial_state/nemo/ts_state/deepmip-L31_warm-34.nc``
+  (profile ``deepmip_warm``): the deeper DeepMIP-like profile of the original code (``(5000 - z) / 5000 * 19 *
+  cos(lat) + 15`` above 5000 m, 15 °C below; 34 °C at the equator surface), salinity 34.7. The profiles are named
+  constants (``DEEPMIP_PROFILES``); ``deepmip_cold`` is unchanged.
 - Every run and dry run ends with a recap of the files written (or that would be written), grouped by the
   period's ``output``, ``machine.tmpdir`` and other places (e.g. the DOMAINcfg namelists); a dry run marks files
   that exist already, a run marks files that are not there (``ComponentStep.planned_writes``).
@@ -87,6 +91,17 @@ Added
 Changed
 ~~~~~~~
 
+- The OIFS component is split by process: ``generator`` only plans, checks and runs (``OIFSData``);
+  ``initial_state`` holds the spectral truncation, gridpoint remapping, install and vertical interpolation;
+  ``climate`` the climate file; ``grid_files`` the paths of the shipped ``grids/`` files. Logic unchanged.
+- The steps read and write the initial state in ``initial_state/`` (ECE4-DATA 4.1.10 and later), whose paths come
+  from the new ``core/layout.py``: ``initial_state/oifs/<grid>/<startdate>/`` (``EoceneOIFS``, the OIFS generator),
+  ``initial_state/oasis/<grid>/default/rstos.nc`` (``EoceneOASIS``), ``initial_state/nemo/ts_state/``
+  (``EoceneNEMO``). ``stage`` copies ``initial_state/oifs/<oifs grid>``, ``initial_state/oasis/<nemo grid>`` and
+  ``initial_state/nemo/ts_state``, symlinks the other components of ``initial_state/``, and keeps the old paths
+  (``oifs/<grid>/<startdate>``, ``oasis/<grid>/rstos.nc``, ``nemo/initial/woa13-levitus-L*.nc``) as relative links
+  into the copy, as in ECE4-DATA; no step reads them. An input tree without ``initial_state/`` stops in the
+  preflight. ``scripts/get_ece4_data.sh`` fetches the ``initial_state/`` subset and keeps the links.
 - The present-day period starts with ``stage`` (``[stage, oifs, nemo]``): ``present.output`` is a complete EC-Earth
   tree, a copy of ``present.input`` with the present-day files, and the Atos template starts the Eocene from it
   (``eocene.input: "{present.output}"``). ``oifs`` and ``nemo`` need ``stage``: the first run is
@@ -207,6 +222,11 @@ Changed
 Fixed
 ~~~~~
 
+- The present-day ``stage`` (``PresentStage``) also copies ``nemo/domain/ORCA2``: ``EoceneNEMO`` reads it, and with
+  ``eocene.input: "{present.output}"`` the Eocene could not start. A unit test checks that the present-day tree holds
+  every input the Eocene reads.
+- The land-sea mask plot of the present-day bathymetry leaves out, with a warning, an input-tree domain without
+  ``bathy_metry`` (``ORCA1`` in ECE4-DATA 4.1.11 names it ``bathy_meter``) instead of stopping the run.
 - ``load_grib_var_spec`` returned ``lat_bnds`` instead of the field for spectral GRIB files (#43).
 - Tests restore the ``ecefast`` logger after each test, so the ``local_data`` NEMO domain test no longer
   breaks the logger unit test (#41).
@@ -224,6 +244,10 @@ Fixed
 Removed
 ~~~~~~~
 
+- The standalone OIFS scripts ``convert_aka_bika.py``, ``descriptor_generator.py`` and ``create_corners.py``:
+  they are now the functions ``grid_files.write_hybrid_coefficients`` (which rejects a table without the half
+  level ``n=0``, such as ``grids/L19.csv``), ``grid_files.write_grid_descriptions`` and
+  ``corners.create_corner_grid`` (``masked_outfile`` for the masked variant).
 - ``present.oifs.vertical_grids_dir``: the vertical interpolation of the OIFS generator builds the grid with cell
   corners of the target (``T<kind><N>_grid.nc``) itself, in ``<machine.tmpdir>/present/oifs``, from the
   ``ICMGGECE4INIT`` of the ``gridpoint`` step (``corners`` in the plan, ``ecefast.components.oifs.corners``);
@@ -247,6 +271,16 @@ Removed
 Output
 ~~~~~~
 
+- The Eocene initial state moves to ``initial_state/`` with the same values: ``oifs/TL63L31/19900101/*`` to
+  ``initial_state/oifs/TL63L31/19900101/`` (the old folder is a link to it), ``oasis/PALEORCA2/rstos.nc`` to
+  ``initial_state/oasis/PALEORCA2/default/rstos.nc`` (the old file is a link to it). The ocean initial states move
+  to ``initial_state/nemo/ts_state/``; ``woa13-levitus-L31_deepmip-30.nc`` is renamed ``deepmip-L31_cold-30.nc``,
+  since it is an idealised DeepMIP profile, not WOA13 data, and ``woa13-levitus-L31_woa-pi.nc`` keeps its name.
+  The output also holds ``initial_state/nemo/ts_state/woa13-levitus-L{31,75}.nc`` (copied) and links to the other
+  components of ``initial_state/``. Experiments that used ``nemo/initial/woa13-levitus-L31_deepmip-30.nc`` must
+  point to the new file.
+- New file ``initial_state/nemo/ts_state/deepmip-L31_warm-34.nc`` (warm DeepMIP-like ocean initial state, see
+  *Added*).
 - ``present.output`` (``BASELINE/nemo-domain``) now also holds the copy of the input tree made by ``stage``
   (``oifs/``, ``nemo/``, ``oasis/<grid>/``, ``runoff-mapper/``, the ``cmip6-data`` link); the domain files are
   unchanged. ``eocene.output`` gains nothing new (``runoff-mapper/`` holds only ``runoff_maps.nc``, which ``rnfm``

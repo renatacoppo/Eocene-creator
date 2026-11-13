@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from ecefast.core.cdo import get_cdo
 from ecefast.core.grib import extract_grid_info, spectral2gaussian
 from ecefast.core.io import atomic_write
+from ecefast.core.layout import oifs_initial_dir
 from ecefast.core.steps import ComponentStep
 from .fields import modify_single_grib, nullify_grib
 from .fields import modify_value, replace_value, regrid_dataset, truncate_grib_file, flatten_grib_steps
@@ -23,6 +24,11 @@ if TYPE_CHECKING:
     from ecefast.core.workspace import Context
 
 logger = logging.getLogger(__name__)
+
+# initial state of the input and output trees (initial_state/oifs/<grid>/<startdate>; the old path
+# oifs/<grid>/<startdate> is a link to it)
+INITIAL_IN = oifs_initial_dir("{input}", "{grids.oifs.name}", "{grids.oifs.startdate}")
+INITIAL_OUT = oifs_initial_dir("{output}", "{grids.oifs.name}", "{grids.oifs.startdate}")
 
 
 class EoceneOIFS(ComponentStep):
@@ -42,9 +48,9 @@ class EoceneOIFS(ComponentStep):
     component = "oifs"
     needs = ["stage"]
     reads = [
-        "{input}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMGGECE4INIT",
-        "{input}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMGGECE4INIUA",
-        "{input}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMSHECE4INIT",
+        f"{INITIAL_IN}/ICMGGECE4INIT",
+        f"{INITIAL_IN}/ICMGGECE4INIUA",
+        f"{INITIAL_IN}/ICMSHECE4INIT",
         "{input}/oifs/{grids.oifs.name}/{grids.oifs.climate_version}/ICMCLECE4",
         "{input}/oifs/{grids.oifs.name}/{grids.oifs.climate_version}/bare_soil_albedos.grb",
         "{herold}/herold_etal_eocene_topo_1x1.nc",
@@ -52,9 +58,9 @@ class EoceneOIFS(ComponentStep):
         "{herold}/herold_etal_eocene_biome_1x1.nc",
     ]
     writes = [
-        "{output}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMGGECE4INIT",
-        "{output}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMGGECE4INIUA",
-        "{output}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMSHECE4INIT",
+        f"{INITIAL_OUT}/ICMGGECE4INIT",
+        f"{INITIAL_OUT}/ICMGGECE4INIUA",
+        f"{INITIAL_OUT}/ICMSHECE4INIT",
         "{output}/oifs/{grids.oifs.name}/{grids.oifs.climate_version}/ICMCLECE4",
         "{output}/oifs/{grids.oifs.name}/{grids.oifs.climate_version}/bare_soil_albedos.grb",
     ]
@@ -108,8 +114,8 @@ class EoceneOIFS(ComponentStep):
         self.gaussian = spectral2gaussian(spectral, kind)
 
         # defining directories
-        self.idir_init = os.path.join(self.idir, "oifs", resolution, startdate)
-        self.odir_init = os.path.join(self.odir, "oifs", resolution, startdate)
+        self.idir_init = oifs_initial_dir(self.idir, resolution, startdate)
+        self.odir_init = oifs_initial_dir(self.odir, resolution, startdate)
 
         self.idir_climate = os.path.join(self.idir, "oifs", resolution, climate_version)
         self.odir_climate = os.path.join(self.odir, "oifs", resolution, climate_version)

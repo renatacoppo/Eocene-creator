@@ -6,6 +6,7 @@ import netCDF4 as nc
 import numpy as np
 import pytest
 
+from ecefast.components.oifs import corners
 from ecefast.components.oifs.corners import reduced_grid_corners, write_corner_grid
 
 pytestmark = pytest.mark.unit
@@ -57,4 +58,19 @@ def test_write_corner_grid(tmp_path: Path, masked: bool) -> None:
         np.testing.assert_allclose(ds["clat"][:], np.deg2rad(grid[1]))
         np.testing.assert_allclose(ds["clon_bnds"][:], np.deg2rad(grid[2]))
         if masked:
+            np.testing.assert_array_equal(ds["lsm"][:], mask)
+
+
+@pytest.mark.parametrize("masked", [False, True], ids=["grid", "with-masked"])
+def test_create_corner_grid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, masked: bool) -> None:
+    mask = np.arange(12, dtype="f4")
+    monkeypatch.setattr(corners, "read_reduced_grid", lambda *args: (LAT, REDUCED_POINTS, mask))
+    masked_outfile = str(tmp_path / "TL3_grid_masked.nc") if masked else None
+    corners.create_corner_grid("ICMGGECE4INIT", "L", 3, str(tmp_path / "TL3_grid.nc"), str(tmp_path), masked_outfile)
+    expected = ["TL3_grid.nc", "TL3_grid_masked.nc"] if masked else ["TL3_grid.nc"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == expected
+    with nc.Dataset(tmp_path / "TL3_grid.nc") as ds:
+        assert "lml" in ds.variables
+    if masked:
+        with nc.Dataset(tmp_path / "TL3_grid_masked.nc") as ds:
             np.testing.assert_array_equal(ds["lsm"][:], mask)

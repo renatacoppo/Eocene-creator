@@ -7,6 +7,7 @@ import numpy as np
 import xarray as xr
 
 from ecefast.components.nemo.domain.pipeline import NEMOWorkflow
+from ecefast.core.workspace import INITIAL_STATE_COPIES
 from ecefast.core.config import Config, DomainSteps, Eocene, EoceneNEMO, Grids, Machine, NemoGrid, Present
 from ecefast.periods.eocene.bathymetry import EoceneBathymetry
 from ecefast.tools.ecearth import FakeBackend
@@ -229,14 +230,16 @@ READ_WRITERS = {
     "{input}/nemo": lambda path: path.mkdir(parents=True, exist_ok=True),
     "{input}/oasis/{grids.nemo.name}": lambda path: path.mkdir(parents=True, exist_ok=True),
     "{input}/runoff-mapper": lambda path: path.mkdir(parents=True, exist_ok=True),
+    "{input}/nemo/domain/ORCA2": lambda path: path.mkdir(parents=True, exist_ok=True),
+    **{f"{{input}}/{path}": lambda path: path.mkdir(parents=True, exist_ok=True) for path in INITIAL_STATE_COPIES},
     "{input}/nemo/domain/{grids.nemo.name}/domain_cfg.nc": _domain,
-    "{input}/oasis/{grids.nemo.name}/rstos.nc": _rstos,
+    "{input}/initial_state/oasis/{grids.nemo.name}/default/rstos.nc": _rstos,
     "{herold}/Green_Huber_eocene_tidal_dissipation_1x1.nc": _tidal_dissipation,
     "{herold}/herold_etal_eocene_topo_1x1.nc": _herold_topo,
     "{herold}/age_depth_bath_55.xyadb": _age_depth,
     "{input}/nemo/initial/zdfiwm_forcing_r720x360.nc": _zdfiwm,
     "{input}/nemo/initial/Goutorbe_ghflux.nc": _ghflux,
-    "{input}/nemo/initial/woa13-levitus-L31.nc": _woa,
+    "{input}/initial_state/nemo/ts_state/woa13-levitus-L31.nc": _woa,
     "{input}/nemo/domain/ORCA2/domain_cfg.nc": _domain,
     "{input}/nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc": _nemo_runoff,
     "{herold}/herold_etal_eocene_runoff_1x1.nc": _herold_runoff,

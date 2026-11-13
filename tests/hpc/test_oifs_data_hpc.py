@@ -6,7 +6,7 @@ TL255L91``), then::
     ECEFAST_HPC_CONFIG=configs/atos.yml pytest -m hpc tests/hpc/test_oifs_data_hpc.py
 
 ``scripts/compare_outputs.py`` compares the three initial-state files of
-``<present.output>/oifs/TL63L31/<startdate>`` with the same files of ``present.input`` (that folder also
+``<present.output>/initial_state/oifs/TL63L31/<startdate>`` with the same files of ``present.input`` (that folder also
 holds wave-model files the generator does not make). A difference is a finding for task 7.1 (whether the generator still reproduces ECE4-DATA),
 not necessarily a bug: report it in the pull request.
 """
@@ -18,8 +18,9 @@ from pathlib import Path
 
 import pytest
 
-from ecefast.components.oifs.generator import IC_FILES
+from ecefast.components.oifs.initial_state import IC_FILES
 from ecefast.core.config import load_config
+from ecefast.core.layout import oifs_initial_dir
 
 CONFIG = os.environ.get("ECEFAST_HPC_CONFIG")
 REPO = Path(__file__).parents[2]
@@ -34,9 +35,9 @@ def test_generated_initial_state_matches_ece4_data(tmp_path: Path) -> None:
     config = load_config(CONFIG)
     present = config.period("present")
     assert present.oifs is not None, "the configuration has no present.oifs section"
-    relative = Path("oifs") / config.grids.oifs.name / config.grids.oifs.startdate
-    new = Path(present.output) / relative
-    reference = Path(present.input) / relative
+    grid = config.grids.oifs
+    new = Path(oifs_initial_dir(present.output, grid.name, grid.startdate))
+    reference = Path(oifs_initial_dir(present.input, grid.name, grid.startdate))
     assert new.is_dir(), f"run `ecefast oifs run -c {CONFIG}` first: {new} does not exist"
     selected = tmp_path / "reference"
     selected.mkdir()

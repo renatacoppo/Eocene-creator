@@ -166,7 +166,7 @@ Example for Atos:
 -----------------------------------
 
 Read by ``ecefast present run``, ``ecefast oifs run`` and ``ecefast nemo run``. Its final files go
-to ``present.output`` as in ECE4-DATA (``oifs/<grid>/<startdate>/``,
+to ``present.output`` as in ECE4-DATA (``initial_state/oifs/<grid>/<startdate>/``,
 ``oifs/<grid>/<climate_version>/``, ``nemo/domain/<grid>/``). A run stops if one of them exists
 already, unless ``--overwrite`` is given.
 
@@ -192,7 +192,7 @@ already, unless ``--overwrite`` is given.
      - str
      - ``TL255L91``
      - OIFS generator: the grid the data is made from, read from
-       ``{input}/oifs/<source_grid>/<startdate>/``. With another number of levels than
+       ``{input}/initial_state/oifs/<source_grid>/<startdate>/``. With another number of levels than
        ``grids.oifs.name`` the initial state is interpolated vertically.
    * - ``present.oifs.climate_dir``
      - str

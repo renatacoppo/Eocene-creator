@@ -13,7 +13,8 @@ import pytest
 import yaml
 
 from ecefast.cli.main import main
-from ecefast.components.oifs.generator import IC_FILES
+from ecefast.components.oifs.initial_state import IC_FILES
+from ecefast.core.layout import oifs_initial_dir
 
 DATA = os.environ.get("ECEFAST_TEST_DATA")
 
@@ -40,8 +41,8 @@ def test_tl63l31_from_itself(tmp_path: Path) -> None:
 
     main(["oifs", "run", "-c", str(config_file), "-l", "WARNING"])
 
-    source = data / "ECE4-DATA-V3" / "oifs" / "TL63L31" / "19900101"
-    target = output / "oifs" / "TL63L31" / "19900101"
+    source = Path(oifs_initial_dir(str(data / "ECE4-DATA-V3"), "TL63L31", "19900101"))
+    target = Path(oifs_initial_dir(str(output), "TL63L31", "19900101"))
     assert sorted(p.name for p in target.iterdir()) == sorted(IC_FILES)
     for name in IC_FILES:
         assert grib_count(target / name) == grib_count(source / name), name

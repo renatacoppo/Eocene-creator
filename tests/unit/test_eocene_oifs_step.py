@@ -60,7 +60,8 @@ def snapshot(folder: Path) -> dict[str, float]:
 def test_class_attributes() -> None:
     assert (EoceneOIFS.name, EoceneOIFS.component) == ("oifs", "oifs")
     assert EoceneOIFS.needs == ["stage"]
-    assert EoceneOIFS.writes and all(w.startswith("{output}/oifs/") for w in EoceneOIFS.writes)
+    assert EoceneOIFS.writes
+    assert all(w.startswith(("{output}/oifs/", "{output}/initial_state/oifs/")) for w in EoceneOIFS.writes)
     # reads come only from the read-only trees: the step opens the original files, not the staged copies
     assert EoceneOIFS.reads and all(r.startswith(("{input}/", "{herold}/")) for r in EoceneOIFS.reads)
     assert len(set(EoceneOIFS.reads)) == len(EoceneOIFS.reads)
@@ -108,7 +109,8 @@ def test_from_context_maps_config(tmp_path: Path, aerosols: bool) -> None:
     assert step.tmpdir == ctx.tmpdir("oifs") == os.path.join(ctx.config.machine.tmpdir, "eocene", "oifs")
     assert os.path.isdir(step.tmpdir)
     assert not step.own_tmpdir
-    assert step.odir_init == os.path.join(ctx.section.output, "oifs", "TL63L31", "19900101")
+    assert step.idir_init == os.path.join(ctx.section.input, "initial_state", "oifs", "TL63L31", "19900101")
+    assert step.odir_init == os.path.join(ctx.section.output, "initial_state", "oifs", "TL63L31", "19900101")
     assert step.odir_climate == os.path.join(ctx.section.output, "oifs", "TL63L31", "climate.v020")
 
 

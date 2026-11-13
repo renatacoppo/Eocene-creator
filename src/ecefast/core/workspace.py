@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass
 
 from .config import PLACEHOLDER, Config, ConfigError, Eocene, Present
+from .layout import INITIAL_STATE, initial_state_copies
 from .steps import ComponentStep, PipelineError
 
 logger = logging.getLogger(__name__)
@@ -155,17 +156,61 @@ class Context:
         return existing
 
 
+def copy_tree(src: str, dst: str, root: str) -> None:
+    """Copy the folder ``src`` to ``dst``, keeping the relative symlinks that resolve inside ``root``.
+
+    A link kept this way points to the copy in ``root``, as in the input tree (e.g. ``oifs/<grid>/<startdate>`` ->
+    ``../../initial_state/oifs/<grid>/<startdate>``). Any other link (absolute, or to a file outside ``root``) is
+    replaced by a copy of what it points to, so the output never depends on the input tree through it.
+
+    Parameters
+    ----------
+    src : str
+        Folder to copy.
+    dst : str
+        Destination, which must not exist.
+    root : str
+        Root of the output tree.
+    """
+    logger.debug(f"Copying {src} to {dst}")
+    shutil.copytree(src, dst, symlinks=True)
+    root_real = os.path.realpath(root)
+    links = []
+    for folder, dirs, files in os.walk(dst):
+        links += [os.path.join(folder, name) for name in dirs + files if os.path.islink(os.path.join(folder, name))]
+    for link in links:
+        inside = os.path.exists(link) and os.path.realpath(link).startswith(root_real + os.sep)
+        if inside and not os.path.isabs(os.readlink(link)):
+            continue
+        source = os.path.join(src, os.path.relpath(link, dst))
+        os.unlink(link)
+        if os.path.isdir(source):
+            shutil.copytree(source, link)
+        else:
+            shutil.copy2(source, link)
+
+
+# folders of initial_state/ copied by stage (the grids in use); the other components of initial_state/ are linked
+INITIAL_STATE_COPIES = initial_state_copies("{grids.oifs.name}", "{grids.nemo.name}")
+
+
 class Stage(ComponentStep):
     """Copy base files from the input tree to the output tree."""
 
     name = "stage"
     needs = []
-    reads = ["{input}/oifs", "{input}/nemo", "{input}/oasis/{grids.nemo.name}", "{input}/runoff-mapper"]
-    writes = ["{output}/oifs", "{output}/nemo", "{output}/oasis/{grids.nemo.name}", "{output}/runoff-mapper"]
+    reads = ["{input}/oifs", "{input}/nemo", "{input}/oasis/{grids.nemo.name}", "{input}/runoff-mapper"] + [
+        f"{{input}}/{path}" for path in INITIAL_STATE_COPIES
+    ]
+    writes = ["{output}/oifs", "{output}/nemo", "{output}/oasis/{grids.nemo.name}", "{output}/runoff-mapper"] + [
+        f"{{output}}/{path}" for path in INITIAL_STATE_COPIES
+    ]
 
     # subdirectories copied from each component of the input tree
     OIFS_SUBDIRS = ["composition", "ifsdata", "vtables", "rtables"]
     NEMO_SUBDIRS = ["cfc", "climatology", "initial", "weights"]
+    # NEMO domains of the input tree copied too (nemo/domain/<grid>); none by default
+    NEMO_DOMAINS: list[str] = []
 
     def __init__(self, input_dir: str, output_dir: str, oifs_reso: str, nemo_reso: str, overwrite: bool = False):
         self.input_dir = input_dir
@@ -184,9 +229,8 @@ class Stage(ComponentStep):
 
         An output folder that holds files is refused, unless ``overwrite`` is set: then it is removed first, after
         a warning and a pause (:func:`pause_before_overwrite`).
-        ``cmip6-data`` is symlinked, not copied. Symlinks inside the copied folders are followed, so the copy holds
-        the files themselves and does not depend on the input tree (e.g. ``oasis/<grid>/rstos.nc`` links to
-        ``initial_state/`` in recent ECE4-DATA releases).
+        ``initial_state/`` comes first (:meth:`stage_initial_state`), then the other folders, whose relative links
+        into ``initial_state/`` are kept (:func:`copy_tree`). ``cmip6-data`` is symlinked, not copied.
         """
         input_dir, output_dir = self.input_dir, self.output_dir
         logger.info(f"Copying input data from {input_dir} to {output_dir}")
@@ -210,6 +254,8 @@ class Stage(ComponentStep):
         if os.path.exists(output_dir):
             shutil.rmtree(output_dir)
         os.makedirs(output_dir)
+        # first: the links of the other folders point into it
+        self.stage_initial_state()
 
         # loop through input directory and copy relevant subdirectories
         for item in os.listdir(input_dir):
@@ -220,21 +266,40 @@ class Stage(ComponentStep):
                         continue
                     if item == "oifs" and subitem not in self.OIFS_SUBDIRS + [self.oifs_reso]:
                         continue
+                    if item == "nemo" and subitem == "domain":
+                        for grid in self.NEMO_DOMAINS:
+                            src = os.path.join(input_dir, item, subitem, grid)
+                            copy_tree(src, os.path.join(output_dir, item, subitem, grid), output_dir)
+                        continue
                     if item == "nemo" and subitem not in self.NEMO_SUBDIRS:
                         continue
                     src = os.path.join(input_dir, item, subitem)
-                    dst = os.path.join(output_dir, item, subitem)
-                    logger.debug(f"Copying {src} to {dst}")
-                    shutil.copytree(src, dst)
+                    copy_tree(src, os.path.join(output_dir, item, subitem), output_dir)
             elif item == "runoff-mapper":
-                src = os.path.join(input_dir, item)
-                dst = os.path.join(output_dir, item)
-                logger.debug(f"Copying {src} to {dst}")
-                shutil.copytree(src, dst)
+                copy_tree(os.path.join(input_dir, item), os.path.join(output_dir, item), output_dir)
             elif item in ["cmip6-data"]:
                 src = os.path.join(input_dir, item)
                 dst = os.path.join(output_dir, item)
                 logger.debug(f"Copying {src} to {dst}")
                 os.symlink(src, dst)  # use symlink for large CMIP6 data
-            else:
+            elif item != INITIAL_STATE:
                 logger.debug(f"Skipping {item}!")
+
+    def stage_initial_state(self) -> None:
+        """Copy the folders of ``initial_state/`` of the grids in use, and link the other components.
+
+        :func:`~ecefast.core.layout.initial_state_copies` names the copied folders: the OIFS and OASIS ones of the
+        grids in use and the NEMO temperature and salinity states; other grids of those components are left out.
+        The other components (``lpjg``, ``pism``, ...) are links to the real folders of the input tree, so that a
+        tree made from this one does not link to links.
+        """
+        copies = initial_state_copies(self.oifs_reso, self.nemo_reso)
+        for path in copies:
+            copy_tree(os.path.join(self.input_dir, path), os.path.join(self.output_dir, path), self.output_dir)
+        copied_components = {path.split(os.sep)[1] for path in copies}
+        source = os.path.join(self.input_dir, INITIAL_STATE)
+        for item in sorted(os.listdir(source)):
+            if item not in copied_components:
+                target = os.path.realpath(os.path.join(source, item))
+                logger.debug(f"Linking {target}")
+                os.symlink(target, os.path.join(self.output_dir, INITIAL_STATE, item))

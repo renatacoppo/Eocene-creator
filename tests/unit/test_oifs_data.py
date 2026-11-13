@@ -10,9 +10,12 @@ import pytest
 import yaml
 
 from ecefast.cli import main as cli
-from ecefast.components.oifs import generator
-from ecefast.components.oifs.generator import GRIDS_DIR, STEP_DESCRIPTIONS, OIFSData
+from ecefast.components.oifs.climate import CLIMATE_VARIABLES
+from ecefast.components.oifs.generator import STEP_DESCRIPTIONS, OIFSData
+from ecefast.components.oifs.grid_files import GRIDS_DIR
+from ecefast.components.oifs.initial_state import IC_FILES
 from ecefast.core.config import ConfigError, load_config
+from ecefast.core.layout import initial_state_copies
 from ecefast.core.steps import PipelineError
 from ecefast.core.workspace import Context
 from ecefast.periods.present import pipeline
@@ -39,9 +42,9 @@ def generator_of(path: Path) -> OIFSData:
 
 def source_files(tmp_path: Path, grid: str = "TL255L91") -> Path:
     """Empty stand-ins for the source initial state in the input tree."""
-    folder = tmp_path / "input" / "oifs" / grid / "19900101"
+    folder = tmp_path / "input" / "initial_state" / "oifs" / grid / "19900101"
     folder.mkdir(parents=True)
-    for name in generator.IC_FILES:
+    for name in IC_FILES:
         (folder / name).write_text(name)
     return folder
 
@@ -106,7 +109,8 @@ def test_plan_with_vertical_interpolation(tmp_path: Path) -> None:
     plan = {name: (reads, writes) for name, reads, writes in gen.plan()}
     assert list(plan) == ["spectral", "gridpoint", "corners", "vertical"]
     out, work = tmp_path / "out", tmp_path / "tmp" / "present" / "oifs"
-    assert plan["vertical"][1] == [str(out / "oifs" / "TL63L31" / "19900101" / f) for f in generator.IC_FILES]
+    target = out / "initial_state" / "oifs" / "TL63L31" / "19900101"
+    assert plan["vertical"][1] == [str(target / f) for f in IC_FILES]
     assert plan["corners"] == ([str(work / "ICMGGECE4INIT")], [str(work / "TL63_grid.nc")])
     assert str(work / "TL63_grid.nc") in plan["vertical"][0]
     assert str(GRIDS_DIR / "L31.txt") in plan["vertical"][0]
@@ -134,7 +138,7 @@ def test_plan_boundary(tmp_path: Path, precomputed: bool, expected: str) -> None
     assert name == "boundary"
     assert writes == [str(tmp_path / "out" / "oifs" / "TL63L31" / "climate.v020" / expected)]
     if not precomputed:
-        assert reads == [f"/clim/63l_2/month_{var}" for var in generator.CLIMATE_VARIABLES]
+        assert reads == [f"/clim/63l_2/month_{var}" for var in CLIMATE_VARIABLES]
 
 
 def test_check_lists_every_missing_input(tmp_path: Path) -> None:
@@ -142,8 +146,8 @@ def test_check_lists_every_missing_input(tmp_path: Path) -> None:
     with pytest.raises(PipelineError, match="3 input files are missing") as error:
         gen.check()
     message = str(error.value)
-    source = tmp_path / "input" / "oifs" / "TL255L91" / "19900101"
-    for name in generator.IC_FILES:
+    source = tmp_path / "input" / "initial_state" / "oifs" / "TL255L91" / "19900101"
+    for name in IC_FILES:
         assert str(source / name) in message
     assert "TL63_grid.nc" not in message  # built by the corners step
 
@@ -158,13 +162,13 @@ def test_check_passes_with_inputs(tmp_path: Path) -> None:
 
 def test_final_files_exclude_intermediates(tmp_path: Path) -> None:
     gen = generator_of(write_config(tmp_path))
-    target = tmp_path / "out" / "oifs" / "TL63L31" / "19900101"
-    assert gen.final_files() == [str(target / f) for f in generator.IC_FILES]
+    target = tmp_path / "out" / "initial_state" / "oifs" / "TL63L31" / "19900101"
+    assert gen.final_files() == [str(target / f) for f in IC_FILES]
 
 
 def test_step_refuses_existing_outputs_without_overwrite(tmp_path: Path) -> None:
     source_files(tmp_path, "TL159L31")
-    target = tmp_path / "out" / "oifs" / "TL63L31" / "19900101"
+    target = tmp_path / "out" / "initial_state" / "oifs" / "TL63L31" / "19900101"
     target.mkdir(parents=True)
     (target / "ICMSHECE4INIT").write_text("earlier run")
     ctx = Context(load_config(write_config(tmp_path, {"source_grid": "TL159L31"})), "present")
@@ -176,15 +180,22 @@ def test_step_refuses_existing_outputs_without_overwrite(tmp_path: Path) -> None
 
 def test_cli_dry_run_writes_nothing(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     source_files(tmp_path, "TL159L31")
-    for sub in ("nemo", "oasis/PALEORCA2", "runoff-mapper"):  # the rest of the tree stage copies
-        (tmp_path / "input" / sub).mkdir(parents=True)
+    copied = (
+        "oifs",
+        "nemo/domain/ORCA2",
+        "oasis/PALEORCA2",
+        "runoff-mapper",
+        *initial_state_copies("TL63L31", "PALEORCA2"),
+    )
+    for sub in copied:  # the rest of the tree stage copies
+        (tmp_path / "input" / sub).mkdir(parents=True, exist_ok=True)
     config = write_config(tmp_path, {"source_grid": "TL159L31"})
     cli.main(["present", "run", "-c", str(config), "--steps", "stage,oifs", "--dry-run"])
     assert not (tmp_path / "out").exists()
     log = capsys.readouterr().err
     assert "Dry run" in log
     assert f"in present.output ({tmp_path / 'out'}):" in log  # the recap of the files
-    assert "    oifs/TL63L31/19900101/ICMSHECE4INIT\n" in log
+    assert "    initial_state/oifs/TL63L31/19900101/ICMSHECE4INIT\n" in log
 
 
 def test_cli_missing_input_exits(tmp_path: Path) -> None:

@@ -174,14 +174,14 @@ In the paths below ``{input}``, ``{output}`` and ``{herold}`` are ``eocene.input
    not in the preflight.
 
 ``oasis`` (``EoceneOASIS``)
-   Needs ``stage``. Reads ``{input}/oasis/{grids.nemo.name}/rstos.nc``, writes
-   ``{output}/oasis/{grids.nemo.name}/rstos.nc``: the present-day OASIS restart with sea ice
+   Needs ``stage``. Reads ``{input}/initial_state/oasis/{grids.nemo.name}/default/rstos.nc``, writes
+   ``{output}/initial_state/oasis/{grids.nemo.name}/default/rstos.nc``: the present-day OASIS restart with sea ice
    removed (``OIceFrc``, ``OIceTck``, ``OSnwTck``, ``O_AlbIce``, ``O_TepIce`` set to 0) and a
    constant SST (``eocene.oasis.constant_sst``, default 290 K) in ``O_SSTSST``.
 
 ``oifs`` (``EoceneOIFS``)
    Needs ``stage``. Reads the OIFS initial and climate GRIB files of the input tree
-   (``oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMGGECE4INIT``, ``ICMGGECE4INIUA``,
+   (``initial_state/oifs/{grids.oifs.name}/{grids.oifs.startdate}/ICMGGECE4INIT``, ``ICMGGECE4INIUA``,
    ``ICMSHECE4INIT``; ``oifs/{grids.oifs.name}/{grids.oifs.climate_version}/ICMCLECE4``,
    ``bare_soil_albedos.grb``) and the Herold et al. (2014) topography, subgrid orography and
    biomes. Remaps the Herold fields to the model grid (intermediate files in
@@ -193,13 +193,14 @@ In the paths below ``{input}``, ``{output}`` and ``{herold}`` are ``eocene.input
 
 ``nemo`` (``EoceneNEMO``)
    Needs ``stage`` (not ``domain``: it reads only present-day domains, on purpose).
-   Reads the present-day tidal mixing, geothermal flux, WOA13 and runoff files from
-   ``{input}/nemo``, the ``{grids.nemo.name}`` and ORCA2 present-day domains (ORCA2 is always the
+   Reads the present-day tidal mixing, geothermal flux and runoff files from ``{input}/nemo``, WOA13
+   from ``{input}/initial_state/nemo/ts_state``, the ``{grids.nemo.name}`` and ORCA2 present-day domains (ORCA2 is always the
    reference mask of the ``woa-pi`` profile), and the Herold tidal dissipation, topography and
    ocean-age files. Writes ``nemo/initial/zdfiwm_forcing_r720x360.nc`` (Eocene M2 tidal dissipation
    and bathymetry), ``nemo/initial/Goutorbe_ghflux.nc`` (geothermal flux from Eocene ocean-floor
-   age), ``nemo/initial/woa13-levitus-L31_deepmip-30.nc`` and ``_woa-pi.nc`` (two ocean initial
-   states) and ``nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc`` (runoff set to zero;
+   age), the three ocean initial states in ``initial_state/nemo/ts_state/``: ``deepmip-L31_cold-30.nc`` and
+   ``deepmip-L31_warm-34.nc`` (idealised DeepMIP profiles, 30 and 34 °C at the equator surface, 10 and 15 °C at
+   depth) and ``woa13-levitus-L31_woa-pi.nc`` (zonal mean of WOA13), and ``nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc`` (runoff set to zero;
    the runoff mapper handles rivers).
 
 ``rnfm`` (``EoceneRNFM``)
@@ -230,7 +231,7 @@ built, before the first step runs.
    ``present.nemo.steps`` and ``present.nemo.minimum_depth``. Final files:
    ``{output}/nemo/domain/{grids.nemo.name}/domain_cfg.nc``, ``maskutil.nc``, ``subbasins.nc``.
 ``oifs`` (``PresentOIFS``)
-   The OIFS generator (below). Final files: ``{output}/oifs/{grids.oifs.name}/{grids.oifs.startdate}/``
+   The OIFS generator (below). Final files: ``{output}/initial_state/oifs/{grids.oifs.name}/{grids.oifs.startdate}/``
    and ``{output}/oifs/{grids.oifs.name}/{grids.oifs.climate_version}/``.
 
 ``ecefast present run`` skips a step whose component has no section in ``present``: on a laptop,
@@ -321,7 +322,7 @@ Its steps, switched on or off in ``present.oifs.steps`` (or ``--oifs a,b``):
    else merges the monthly albedo and leaf area index fields of ``climate_dir`` into ``ICMCLECE4-1990``.
 
 When ``spectral`` or ``boundary`` is on, the three initial-state files go to
-``<present.output>/oifs/<grid>/<startdate>/``: moved from the intermediate folder when the source and
+``<present.output>/initial_state/oifs/<grid>/<startdate>/``: moved from the intermediate folder when the source and
 target have the same number of levels, else interpolated vertically first (``cdo remapeta`` with the hybrid
 coefficients of ``grids/L<levels>.txt``; the conservative remapping to the reduced Gaussian grid needs the cell
 corners of the target grid, so ``corners`` first writes ``<machine.tmpdir>/present/oifs/T<kind><N>_grid.nc`` from
@@ -335,10 +336,23 @@ Nothing is written into the input tree.
 Before the first step the command checks that every file an enabled step reads exists (or is written by an
 earlier step), and lists all missing ones at once; ``--dry-run`` does only this and logs the plan.
 
-The reduced Gaussian grid descriptions (``grids/T<kind><N>.txt``) and hybrid coefficients ship with the package
-in ``ecefast/components/oifs/grids/``. The scripts that made them stay scripts: ``descriptor_generator.py`` (reduced Gaussian descriptions) and ``convert_aka_bika.py`` (hybrid coefficients
-from the ECMWF tables). ``create_corners.py`` writes the grids with cell corners of an input tree, with their
-masked variants, outside a run.
+The code of the component follows these processes: ``generator`` plans, checks and runs them; ``initial_state``
+holds ``spectral``, ``gridpoint``, the install and the vertical interpolation; ``climate`` holds ``boundary``;
+``corners`` builds the grid with cell corners.
+
+The reduced Gaussian grid descriptions (``grids/T<kind><N>.txt``) and hybrid coefficients (``grids/L<levels>.txt``)
+ship with the package in ``ecefast/components/oifs/grids/``; a run only reads them. ``grid_files`` holds the
+functions that made them, to run by hand when a grid or a vertical resolution is added:
+
+.. code-block:: python
+
+   from ecefast.components.oifs.grid_files import GRIDS_DIR, write_grid_descriptions, write_hybrid_coefficients
+
+   write_grid_descriptions("/path/to/climate.v015", GRIDS_DIR)  # cdo griddes of each grid
+   write_hybrid_coefficients(GRIDS_DIR, levels=[31, 91])         # from the ECMWF tables grids/L<levels>.csv
+
+``corners.create_corner_grid`` writes the grid with cell corners of any ``ICMGGECE4INIT`` outside a run, with its
+masked variant (``masked_outfile``).
 
 Writing a step
 --------------
@@ -373,8 +387,8 @@ the step in the dry run.
        name = "nemo"
        component = "nemo"
        needs = ["stage"]  # run after the base files are copied
-       reads = ["{input}/nemo/initial/woa13-levitus-L31.nc"]
-       writes = ["{output}/nemo/initial/woa13-levitus-L31_woa-pi.nc"]
+       reads = ["{input}/nemo/initial/zdfiwm_forcing_r720x360.nc"]
+       writes = ["{output}/nemo/initial/zdfiwm_forcing_r720x360.nc"]
 
        # __init__ and the create_* methods are unchanged
 
@@ -450,8 +464,8 @@ All missing inputs are reported in one error, and nothing is written:
 .. code-block:: text
 
    Cannot start: 2 input files are missing. Nothing was written.
-     nemo   needs  /path/to/ECE4-DATA-V3/nemo/initial/woa13-levitus-L31.nc
-     oasis  needs  /path/to/ECE4-DATA-V3/oasis/PALEORCA2/rstos.nc
+     nemo   needs  /path/to/ECE4-DATA-V3/initial_state/nemo/ts_state/woa13-levitus-L31.nc
+     oasis  needs  /path/to/ECE4-DATA-V3/initial_state/oasis/PALEORCA2/default/rstos.nc
 
 Then the runner builds every selected step with ``from_context``, before the first one runs. This
 is where a step checks inputs that a class-level ``reads`` list cannot hold because they depend on
@@ -473,9 +487,19 @@ The ``stage`` step
 ``output``, so the later steps modify copies, never the input. It is the first step of both
 periods. It copies ``oifs/`` (``composition``, ``ifsdata``, ``vtables``, ``rtables`` and
 ``{grids.oifs.name}``), ``nemo/`` (``cfc``, ``climatology``, ``initial``, ``weights``),
-``oasis/{grids.nemo.name}`` and ``runoff-mapper/``, and symlinks ``cmip6-data``. Symlinks inside the
-copied folders are followed, so the copy holds the files themselves (in ECE4-DATA 4.1.10
-``oasis/<grid>/rstos.nc`` links to ``initial_state/``, which is not copied). It refuses an output
+``oasis/{grids.nemo.name}`` and ``runoff-mapper/``, and symlinks ``cmip6-data``. The present-day ``stage`` (``PresentStage``) also copies
+``nemo/domain/ORCA2``, which ``EoceneNEMO`` reads when the Eocene starts from the present-day tree.
+
+Since ECE4-DATA 4.1.10 the initial state lives in ``initial_state/``; ``stage`` copies it first. It copies
+the folders of the grids in use (:func:`ecefast.core.layout.initial_state_copies`):
+``initial_state/oifs/{grids.oifs.name}``, ``initial_state/oasis/{grids.nemo.name}`` and
+``initial_state/nemo/ts_state``; other grids of those components are left out. The other components
+(``lpjg``, ``pism``, ``aime``, ...) are symlinks to the real folders of the input tree. In ECE4-DATA the old
+paths are relative links into ``initial_state/`` (``oifs/<grid>/<startdate>``, ``oasis/<grid>/rstos.nc``,
+``nemo/initial/woa13-levitus-L*.nc``): ``stage`` keeps them as relative links to the copy, so EC-Earth finds the
+files at both paths. Any other link (absolute, or to a file the output does not hold) is replaced by a copy of
+its target. The steps read and write only the ``initial_state/`` paths (:mod:`ecefast.core.layout`), never the
+old ones. It refuses an output
 directory that is or contains the input directory. The runner makes the run atomic: ``stage`` and
 the steps after it write into ``<output>.partial``, moved to ``output`` at the end
 (:func:`ecefast.core.io.replace_directory`).

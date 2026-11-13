@@ -165,7 +165,9 @@ def read_reduced_grid(
     return lat, reduced_points, mask
 
 
-def create_corner_grid(icmgg_file: str, kind: str, spectral: int, outfile: str, workdir: str) -> None:
+def create_corner_grid(
+    icmgg_file: str, kind: str, spectral: int, outfile: str, workdir: str, masked_outfile: str | None = None
+) -> None:
     """Write the grid with cell corners (``T<kind><N>_grid.nc``) of the grid of ``icmgg_file``.
 
     Parameters
@@ -178,7 +180,13 @@ def create_corner_grid(icmgg_file: str, kind: str, spectral: int, outfile: str, 
         NetCDF file to write.
     workdir : str
         Directory of the temporary files.
+    masked_outfile : str or None
+        Also write the same grid with the land-sea mask of ``icmgg_file`` (``T<kind><N>_grid_masked.nc``) here.
+        The OIFS generator does not need it.
     """
     logger.info("Creating the grid with cell corners %s from %s", outfile, icmgg_file)
-    lat, reduced_points, _ = read_reduced_grid(icmgg_file, kind, spectral, workdir)
-    write_corner_grid(outfile, *reduced_grid_corners(lat, reduced_points))
+    lat, reduced_points, mask = read_reduced_grid(icmgg_file, kind, spectral, workdir)
+    grid = reduced_grid_corners(lat, reduced_points)
+    write_corner_grid(outfile, *grid)
+    if masked_outfile is not None:
+        write_corner_grid(masked_outfile, *grid, mask=mask)

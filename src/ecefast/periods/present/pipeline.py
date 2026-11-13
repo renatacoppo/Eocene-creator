@@ -84,7 +84,17 @@ class PresentNEMO(ComponentStep):
         return [path for _, _, writes in self.workflow.plan() for path in writes]
 
 
-PIPELINE: list[type[ComponentStep]] = [Stage, PresentOIFS, PresentNEMO]
+class PresentStage(Stage):
+    """Copy base files from the input tree to the output tree, with the ORCA2 domain the Eocene reads."""
+
+    # The Eocene starts from this tree (eocene.input: "{present.output}"), and EoceneNEMO reads the ORCA2 domain
+    # as the present-day ocean mask of the woa-pi profile.
+    NEMO_DOMAINS = ["ORCA2"]
+    reads = Stage.reads + ["{input}/nemo/domain/ORCA2"]
+    writes = Stage.writes + ["{output}/nemo/domain/ORCA2"]
+
+
+PIPELINE: list[type[ComponentStep]] = [PresentStage, PresentOIFS, PresentNEMO]
 
 
 def run(

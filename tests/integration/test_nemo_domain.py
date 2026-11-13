@@ -19,6 +19,7 @@ from ecefast.components.nemo.config import get_corrections_for_grid
 from ecefast.components.nemo.domain import pipeline as domain_pipeline
 from ecefast.components.nemo.domain.pipeline import NEMOWorkflow
 from ecefast.core import workspace
+from ecefast.core.layout import initial_state_copies
 from ecefast.core.config import NEMO_DOMAIN_STEPS, ConfigError, load_config, override_steps
 from ecefast.core.runner import component_steps
 from ecefast.core.steps import PipelineError, run_pipeline
@@ -40,7 +41,14 @@ def write_config(tmp_path: Path, machine: str = "fake", steps: dict | None = Non
     ``local``."""
     for name in ("input", "herold"):
         (tmp_path / name).mkdir(exist_ok=True)
-    for sub in ("oifs", "nemo", "oasis/PALEORCA2", "runoff-mapper"):  # what the present-day stage copies
+    copied = (
+        "oifs",
+        "nemo/domain/ORCA2",
+        "oasis/PALEORCA2",
+        "runoff-mapper",
+        *initial_state_copies("TL63L31", "PALEORCA2"),
+    )
+    for sub in copied:  # what the present stage copies
         (tmp_path / "input" / sub).mkdir(parents=True, exist_ok=True)
     for period in ("present", "eocene"):
         write_domain_work(tmp_path / "tmp" / period / "nemo", period)
@@ -132,6 +140,7 @@ def test_present_nemo_end_to_end(tmp_path: Path) -> None:
     domain_dir = tmp_path / "present" / "nemo" / "domain" / "PALEORCA2"
     assert sorted(p.name for p in domain_dir.iterdir()) == ["domain_cfg.nc", "maskutil.nc"]
     assert sorted(p.name for p in (tmp_path / "present").iterdir()) == [
+        "initial_state",
         "nemo",
         "oasis",
         "oifs",
@@ -246,7 +255,7 @@ def test_bathymetry_reads(tmp_path: Path) -> None:
     input tree (the comparison plot)."""
     config = write_config(tmp_path)
     for grid in ("ORCA2", "eORCA1"):
-        (tmp_path / "input" / "nemo" / "domain" / grid).mkdir(parents=True)
+        (tmp_path / "input" / "nemo" / "domain" / grid).mkdir(parents=True, exist_ok=True)
         (tmp_path / "input" / "nemo" / "domain" / grid / "domain_cfg.nc").write_text("x")
     bounds = tmp_path / "tmp" / "{}" / "nemo" / "coordinates"
     eocene = workflow(config, period="eocene")._make_processor().reads()

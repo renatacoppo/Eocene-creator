@@ -9,8 +9,8 @@ import xarray as xr
 from ecefast.core.steps import PipelineError
 from ecefast.core.workspace import Context
 from ecefast.periods.eocene.nemo.domain import EoceneDomain, check_vertical_grid
-from ecefast.periods.eocene.nemo.eoceneNEMO import EoceneNEMO
-from synthetic import make_config
+from ecefast.periods.eocene.nemo.eoceneNEMO import DEEPMIP_PROFILES, EoceneNEMO
+from synthetic import _woa, make_config
 
 pytestmark = pytest.mark.unit
 
@@ -93,10 +93,45 @@ def test_writes_under_output(step, ctx: Context) -> None:
         ctx.check_writable(ctx.expand(template), step.name)
 
 
-def test_nemo_writes_both_ocean_initial_states() -> None:
+def test_nemo_writes_every_ocean_initial_state() -> None:
     names = [Path(t).name for t in EoceneNEMO.writes]
     assert "woa13-levitus-L31_woa-pi.nc" in names
-    assert "woa13-levitus-L31_deepmip-30.nc" in names
+    assert "deepmip-L31_cold-30.nc" in names
+    assert "deepmip-L31_warm-34.nc" in names
+
+
+@pytest.mark.parametrize(
+    "profile, file, surface_max, deep",
+    [("deepmip_cold", "deepmip-L31_cold-30.nc", 30.0, 10.0), ("deepmip_warm", "deepmip-L31_warm-34.nc", 34.0, 15.0)],
+)
+def test_deepmip_profiles(ctx: Context, profile: str, file: str, surface_max: float, deep: float) -> None:
+    """The idealised profiles follow T = (depth - z) / depth * amplitude * cos(lat) + deep above depth, deep below;
+    their equator surface temperature is the number in the file name."""
+    woa = Path(ctx.expand("{input}/initial_state/nemo/ts_state/woa13-levitus-L31.nc"))
+    woa.parent.mkdir(parents=True)
+    _woa(woa)
+    domain = Path(ctx.expand("{input}/nemo/domain/{grids.nemo.name}/domain_cfg.nc"))
+    domain.parent.mkdir(parents=True)
+    vertical_grid(31, np.full(31, 200.0)).to_netcdf(domain)  # levels at 200, 400, ..., 6200 m
+    EoceneNEMO.from_context(ctx).create_ocean_init(profile=profile)
+
+    out = xr.open_dataset(ctx.expand(f"{{output}}/initial_state/nemo/ts_state/{file}"))
+    p = DEEPMIP_PROFILES[profile]
+    assert p["amplitude"] + p["deep"] == surface_max and p["deep"] == deep
+    z = out["z"].values[:, None]
+    lat = np.deg2rad(out["lat"].values[:, 0])[None, :]
+    expected = np.where(z <= p["depth"], (p["depth"] - z) / p["depth"] * p["amplitude"] * np.cos(lat) + deep, deep)
+    np.testing.assert_allclose(out["thetao"].values[0, :, :, 0], expected, rtol=1e-6)
+    assert float(out["thetao"].min()) == deep
+    np.testing.assert_allclose(out["so"].values, 34.7)
+
+
+def test_nemo_ocean_initial_states_are_in_ts_state() -> None:
+    """The WOA initial state is read from, and its Eocene variants written to, initial_state/nemo/ts_state."""
+    assert "{input}/initial_state/nemo/ts_state/woa13-levitus-L31.nc" in EoceneNEMO.reads
+    ocean = [t for t in EoceneNEMO.writes if "L31" in t]
+    assert ocean and all(t.startswith("{output}/initial_state/nemo/ts_state/") for t in ocean)
+    assert not [t for t in EoceneNEMO.reads + EoceneNEMO.writes if "nemo/initial/woa13" in t]
 
 
 # --- domain step on synthetic files --------------------------------------------------------------------------------
