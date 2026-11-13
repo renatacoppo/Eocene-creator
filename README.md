@@ -96,7 +96,7 @@ and one subsection per component. Minimal structure for `ecefast eocene run`:
 ```yaml
 schema: 2
 machine:
-  tmpdir: /path/to/scratch/ecefast          # intermediate files of every command
+  tmpdir: /path/to/tmp/ecefast          # intermediate files of every command
 present:
   input: /path/to/ECE4-DATA-V3              # EC-Earth input tree, read-only
   output: /path/to/OUTPUT/present

@@ -13,7 +13,7 @@ schema: 2                       # configuration schema version (required)
 
 machine:
   name: atos                    # where DOMAINcfg runs: atos (here), local (laptop, not available) or fake (tests)
-  tmpdir: /path/to/scratch/ecefast   # intermediate files of every command: <tmpdir>/<period>/<component>/ (required)
+  tmpdir: /path/to/tmp/ecefast   # intermediate files of every command: <tmpdir>/<period>/<component>/ (required)
   atos:
     # profile: atos             # HPC modules to load: a profile of ecefast/tools/hpc_profiles.yaml
     ecearth4_sources: /path/to/ecearth4/sources   # EC-Earth4 sources: DOMAINcfg in nemo-4.2/tools, OASIS libraries

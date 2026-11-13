@@ -57,7 +57,7 @@ Select the backend with ``machine.name`` (see :doc:`configuration`):
 
    machine:
      name: atos
-     tmpdir: /path/to/scratch/ecefast
+     tmpdir: /path/to/tmp/ecefast
      atos:
        profile: atos                                 # modules from ecefast/tools/hpc_profiles.yaml
        ecearth4_sources: /path/to/ecearth4/sources   # the EC-Earth4 source tree

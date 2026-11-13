@@ -444,7 +444,7 @@ schema: 2
 
 machine:
   name: atos                      # local | atos | fake
-  tmpdir: /path/to/scratch/ecefast
+  tmpdir: /path/to/tmp/ecefast
   atos:
     profile: atos
     ecearth4_sources: /path/to/ecearth4/sources

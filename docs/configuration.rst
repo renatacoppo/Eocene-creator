@@ -40,7 +40,7 @@ The smallest file for ``ecefast eocene run`` on a laptop:
 
    schema: 2
    machine:
-     tmpdir: /path/to/scratch/ecefast
+     tmpdir: /path/to/tmp/ecefast
    eocene:
      input: /path/to/ECE4-DATA-V3
      herold: /path/to/herold-et-al-2014/Supp
@@ -118,7 +118,7 @@ Example for Atos:
 
    machine:
      name: atos
-     tmpdir: /path/to/scratch/ecefast
+     tmpdir: /path/to/tmp/ecefast
      atos:
        ecearth4_sources: /path/to/ecearth4/sources
 

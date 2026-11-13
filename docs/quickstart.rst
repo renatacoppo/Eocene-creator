@@ -46,7 +46,7 @@ ignored by git. On ECMWF Atos start from ``configs/atos.tmpl``.
 
    schema: 2
    machine:
-     tmpdir: /path/to/scratch/ecefast
+     tmpdir: /path/to/tmp/ecefast
    grids:
      nemo:
        coords_ori: /path/to/data/PALEORCA2/coords_ori.nc
@@ -139,7 +139,7 @@ minutes in all, on the local test data. Two environment variables give the paths
 .. code-block:: bash
 
    export ECEFAST_TEST_DATA=/path/to/data          # holds ECE4-DATA-V3/, herold-et-al-2014/, data/
-   export ECEFAST_TUTORIAL_DIR=/path/to/scratch    # optional; default: ecefast-tutorial in the system temp dir
+   export ECEFAST_TUTORIAL_DIR=/path/to/tmp    # optional; default: ecefast-tutorial in the system temp dir
 
 ``01_quickstart.ipynb`` writes the configuration and the output into ``ECEFAST_TUTORIAL_DIR``; the other notebooks
 read them, so run it first.
