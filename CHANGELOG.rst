@@ -15,6 +15,11 @@ Unreleased
 Added
 ~~~~~
 
+- Every run and dry run ends with a recap of the files written (or that would be written), grouped by the
+  period's ``output``, ``machine.tmpdir`` and other places (e.g. the DOMAINcfg namelists); a dry run marks files
+  that exist already, a run marks files that are not there (``ComponentStep.planned_writes``).
+- Log levels: the steps (and the plan of a dry run) stay at INFO, messages about single files (copied, written,
+  saved, repacked) and the files of each planned step move to DEBUG; ``-l DEBUG`` shows them.
 - ``ecefast oifs data -c CONFIG [--dry-run]`` (task 8.2): the OIFS generator as a command. It makes the OIFS base
   data of ``oifs.grid`` from ``oifs.data.source_grid`` (spectral truncation, gridpoint remapping, optional climate
   file, vertical interpolation), with its former module-level constants in ``oifs.data`` (``source_grid``,
@@ -82,6 +87,8 @@ Added
 Changed
 ~~~~~~~
 
+- A missing CDO binary stops the command with a one-line error that suggests ``module load cdo`` (HPC) or the
+  conda-forge / Homebrew package, instead of a ``FileNotFoundError`` traceback from python-cdo.
 - Configuration by time period (task 8.3), still ``schema: 2``: ``machine`` (with the required ``tmpdir`` for the
   intermediate files of every command, ``<tmpdir>/<period>/<component>/``, and ``atos.ecearth4_sources``, which
   replaces ``oasis_lib_dir`` and ``nemo.domain.tools_dir``), ``grids`` (``oifs``: ``name``, ``startdate``,

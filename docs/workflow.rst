@@ -64,20 +64,32 @@ unless ``--overwrite`` is given, with the same warning and pause.
 The run logs the CDO version first. On a usage error (bad configuration, missing input, unknown
 step, existing output) the command logs one error and exits with code 1.
 
-A dry run checks everything and logs the plan, one line per step with what it writes
-(paths shortened here):
+A dry run checks everything and logs the plan, one line per step. A run and a dry run both end
+with a recap of the files written (or that would be written), grouped by the period's ``output``,
+``machine.tmpdir`` and other places such as the DOMAINcfg directory. A dry run marks files that
+exist already with ``(exists)``; a run marks a file that is not there with ``(not found)``. The
+steps log at INFO; the files of each step, and each file copied or written, at DEBUG
+(``-l DEBUG``). Paths shortened here:
 
 .. code-block:: text
 
    $ ecefast eocene run -c configs/laptop.yml --dry-run
    INFO -> CDO version: 2.6.4
    INFO -> Dry run: nothing is written. Plan:
-   INFO ->   stage   Copy base files from the input tree to the output tree.  → OUTPUT/eocene/oifs, OUTPUT/eocene/nemo, OUTPUT/eocene/oasis/PALEORCA2
-   INFO ->   domain  Install the Eocene NEMO domain (eocene.nemo.domain: a directory, or build) and check its vertical grid.  → OUTPUT/eocene/nemo/domain/PALEORCA2/domain_cfg.nc, ...
-   INFO ->   oasis   Write the OASIS restart rstos.nc: no sea ice, constant SST.  → OUTPUT/eocene/oasis/PALEORCA2/rstos.nc
-   INFO ->   oifs    Modify the OIFS initial and climate files for the Eocene (Herold et al. 2014).  → OUTPUT/eocene/oifs/TL63L31/19900101/ICMGGECE4INIT, ...
-   INFO ->   nemo    Modify NEMO input files for the Eocene: tidal mixing, geothermal flux, ocean initial state, runoff.  → OUTPUT/eocene/nemo/initial/zdfiwm_forcing_r720x360.nc, ...
-   INFO ->   rnfm    Write the runoff-mapper basins from the Herold et al. (2014) river flow direction.  → OUTPUT/eocene/runoff-mapper/runoff_maps.nc
+   INFO ->   stage   Copy base files from the input tree to the output tree.
+   INFO ->   domain  Install the Eocene NEMO domain (eocene.nemo.domain: a directory, or build) and check its vertical grid.
+   INFO ->   oasis   Write the OASIS restart rstos.nc: no sea ice, constant SST.
+   INFO ->   oifs    Modify the OIFS initial and climate files for the Eocene (Herold et al. 2014).
+   INFO ->   nemo    Modify NEMO input files for the Eocene: tidal mixing, geothermal flux, ocean initial state, runoff.
+   INFO ->   rnfm    Write the runoff-mapper basins from the Herold et al. (2014) river flow direction.
+   INFO -> Files that would be written (17):
+     in eocene.output (OUTPUT/eocene):
+       oifs
+       nemo
+       oasis/PALEORCA2
+       nemo/domain/PALEORCA2/domain_cfg.nc
+       ...
+       runoff-mapper/runoff_maps.nc
 
 Provenance
 ~~~~~~~~~~

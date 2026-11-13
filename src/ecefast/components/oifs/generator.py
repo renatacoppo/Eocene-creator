@@ -403,7 +403,9 @@ class OIFSData:
         if dry_run:
             logger.info("Dry run: nothing is written. %s from %s. Plan:", self.target_grid, self.source_grid)
             for name, _, writes in self.plan():
-                logger.info("  %-10s  -> %s", name, ", ".join(writes))
+                logger.info("  %s", name)
+                for path in writes:
+                    logger.debug("      -> %s", path)
             return
 
         for d in [self.ic_target, self.bc_target, self.workdir]:

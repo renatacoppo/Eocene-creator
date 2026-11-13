@@ -112,7 +112,7 @@ class PresentDayBathymetry(BathymetryProcessor):
         plt.tight_layout()
         plot_file = os.path.join(output_dir, PLOT_FILE)
         plt.savefig(plot_file, dpi=150, bbox_inches="tight")
-        logger.info("Plot saved: %s", plot_file)
+        logger.debug("Plot saved: %s", plot_file)
         plt.close()
 
 

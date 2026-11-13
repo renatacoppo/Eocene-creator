@@ -211,12 +211,12 @@ class Stage(ComponentStep):
                         continue
                     src = os.path.join(input_dir, item, subitem)
                     dst = os.path.join(output_dir, item, subitem)
-                    logger.info(f"Copying {src} to {dst}")
+                    logger.debug(f"Copying {src} to {dst}")
                     shutil.copytree(src, dst, symlinks=True)
             elif item in ["cmip6-data"]:
                 src = os.path.join(input_dir, item)
                 dst = os.path.join(output_dir, item)
-                logger.info(f"Copying {src} to {dst}")
+                logger.debug(f"Copying {src} to {dst}")
                 os.symlink(src, dst)  # use symlink for large CMIP6 data
             else:
-                logger.info(f"Skipping {item}!")
+                logger.debug(f"Skipping {item}!")

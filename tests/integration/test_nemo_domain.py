@@ -180,7 +180,8 @@ def test_dry_run_writes_nothing(tmp_path: Path, capsys: pytest.CaptureFixture) -
     assert tree(tmp_path) == before
     log = capsys.readouterr().err
     assert "Dry run" in log
-    assert str(tmp_path / "present" / "nemo" / "domain" / "PALEORCA2" / "maskutil.nc") in log
+    assert f"in present.output ({tmp_path / 'present'}):" in log  # the recap of the files
+    assert "    nemo/domain/PALEORCA2/maskutil.nc\n" in log
 
 
 def test_plan_follows_enabled_steps(tmp_path: Path) -> None:

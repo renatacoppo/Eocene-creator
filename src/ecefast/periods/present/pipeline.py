@@ -46,6 +46,9 @@ class PresentOIFS(ComponentStep):
     def dry_run(self) -> None:
         self.generator.run(dry_run=True)
 
+    def planned_writes(self) -> list[str]:
+        return [path for _, _, writes in self.generator.plan() for path in writes]
+
 
 class PresentNEMO(ComponentStep):
     """Build the present-day NEMO domain of grids.nemo from the domain of present.nemo.source_grid."""
@@ -72,6 +75,9 @@ class PresentNEMO(ComponentStep):
 
     def dry_run(self) -> None:
         self.workflow.run(dry_run=True)
+
+    def planned_writes(self) -> list[str]:
+        return [path for _, _, writes in self.workflow.plan() for path in writes]
 
 
 PIPELINE: list[type[ComponentStep]] = [PresentOIFS, PresentNEMO]

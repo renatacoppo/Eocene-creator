@@ -180,7 +180,8 @@ def test_cli_dry_run_writes_nothing(tmp_path: Path, capsys: pytest.CaptureFixtur
     assert not (tmp_path / "out").exists()
     log = capsys.readouterr().err
     assert "Dry run" in log
-    assert str(tmp_path / "out" / "oifs" / "TL63L31" / "19900101" / "ICMSHECE4INIT") in log
+    assert f"in present.output ({tmp_path / 'out'}):" in log  # the recap of the files
+    assert "    oifs/TL63L31/19900101/ICMSHECE4INIT\n" in log
 
 
 def test_cli_missing_input_exits(tmp_path: Path) -> None:

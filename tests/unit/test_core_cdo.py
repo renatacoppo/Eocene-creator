@@ -13,6 +13,7 @@ pytestmark = pytest.mark.unit
 def test_get_cdo_returns_one_shared_instance(monkeypatch: pytest.MonkeyPatch) -> None:
     created = []
     monkeypatch.setattr(core_cdo, "Cdo", lambda: created.append(object()) or created[-1])
+    monkeypatch.setattr(core_cdo, "find_cdo_binary", lambda: "/usr/bin/cdo")
     core_cdo.get_cdo.cache_clear()
     try:
         first = core_cdo.get_cdo()
@@ -20,6 +21,25 @@ def test_get_cdo_returns_one_shared_instance(monkeypatch: pytest.MonkeyPatch) ->
         assert len(created) == 1
     finally:
         core_cdo.get_cdo.cache_clear()
+
+
+def test_get_cdo_without_binary_suggests_module_load(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CDO", raising=False)
+    monkeypatch.setenv("PATH", "")
+    core_cdo.get_cdo.cache_clear()
+    try:
+        with pytest.raises(core_cdo.PipelineError, match="module load cdo"):
+            core_cdo.get_cdo()
+    finally:
+        core_cdo.get_cdo.cache_clear()
+
+
+def test_find_cdo_binary_prefers_cdo_variable(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    binary = tmp_path / "my-cdo"
+    binary.write_text("")
+    monkeypatch.setenv("CDO", str(binary))
+    monkeypatch.setenv("PATH", "")
+    assert core_cdo.find_cdo_binary() == str(binary)
 
 
 # Modules that used to create a Cdo() at import time.

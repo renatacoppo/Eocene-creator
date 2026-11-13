@@ -109,7 +109,7 @@ def main(args):
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(rendered_content)
 
-    logger.info("Namelist written: %s", args.output)
+    logger.debug("Namelist written: %s", args.output)
 
 
 if __name__ == "__main__":

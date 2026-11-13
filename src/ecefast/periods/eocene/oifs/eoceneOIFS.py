@@ -605,7 +605,7 @@ class EoceneOIFS(ComponentStep):
             new_log_pressure = np.log(aer_paleo.lev)
             ds_interp = ds_new.interp(log_pressure=new_log_pressure, method="linear")
             ds_interp.to_netcdf(ua_file)
-            logger.info("US Standard Atmosphere saved at %s", ua_file)
+            logger.debug("US Standard Atmosphere saved at %s", ua_file)
         else:
             ds_interp = xr.open_dataset(ua_file)
 
@@ -655,5 +655,5 @@ class EoceneOIFS(ComponentStep):
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with atomic_write(output_path) as tmp:
             aer_ifs_paleo.to_netcdf(tmp)
-        logger.info("Eocene aerosol data saved at %s", output_path)
+        logger.debug("Eocene aerosol data saved at %s", output_path)
         return output_path

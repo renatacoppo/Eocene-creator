@@ -140,11 +140,39 @@ def test_read_inside_directory_written_by_earlier_step_is_not_missing(ctx: Conte
 def test_dry_run_writes_nothing(ctx: Context, caplog: pytest.LogCaptureFixture) -> None:
     ran = []
     a = make_step("a", reads=["{input}/a.txt"], writes=["{output}/a.txt"], ran=ran)
-    with caplog.at_level(logging.INFO, logger="ecefast"):
+    with caplog.at_level(logging.DEBUG, logger="ecefast"):
         assert run_pipeline([a], ctx, dry_run=True) == ["a"]
     assert ran == []
     assert outputs(ctx) == []
-    assert f"Dummy step.  → {ctx.section.output}/a.txt" in caplog.text
+    plan = {r.getMessage().strip(): r.levelno for r in caplog.records}
+    assert plan["a  Dummy step."] == logging.INFO  # the step at INFO
+    assert plan[f"→ {ctx.section.output}/a.txt"] == logging.DEBUG  # its files at DEBUG
+
+
+def test_dry_run_recaps_files_by_place(ctx: Context, caplog: pytest.LogCaptureFixture) -> None:
+    a = make_step("a", writes=["{output}/a.txt"])
+    tmpfile = f"{ctx.config.machine.tmpdir}/present/nemo/b.nc"
+    elsewhere = "/somewhere/else/namelist_cfg"
+    a.planned_writes = lambda self: [tmpfile, elsewhere, f"{ctx.section.output}/a.txt"]  # a.txt only once
+    Path(tmpfile).parent.mkdir(parents=True)
+    Path(tmpfile).write_text("x")
+    with caplog.at_level(logging.INFO, logger="ecefast"):
+        run_pipeline([a], ctx, dry_run=True)
+    recap = caplog.text[caplog.text.index("Files that would be written") :]
+    assert "Files that would be written (3):" in recap
+    assert f"in {ctx.period}.output ({ctx.section.output}):\n    a.txt\n" in recap
+    assert f"in machine.tmpdir ({ctx.config.machine.tmpdir}):\n    present/nemo/b.nc  (exists)\n" in recap
+    assert f"elsewhere:\n    {elsewhere}" in recap
+
+
+def test_run_recaps_written_files(ctx: Context, caplog: pytest.LogCaptureFixture) -> None:
+    a = make_step("a", writes=["{output}/a.txt"])
+    a.planned_writes = lambda self: [f"{ctx.section.output}/never.txt"]
+    with caplog.at_level(logging.INFO, logger="ecefast"):
+        run_pipeline([a], ctx)
+    assert "Files written (2):" in caplog.text
+    assert "    a.txt\n" in caplog.text
+    assert "    never.txt  (not found)" in caplog.text
 
 
 def test_dry_run_still_checks_reads(ctx: Context) -> None:
