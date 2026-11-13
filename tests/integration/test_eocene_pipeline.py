@@ -30,10 +30,14 @@ def tree(tmp_path_factory: pytest.TempPathFactory) -> dict:
         (root / name).mkdir()
     config_file = root / "config.yml"
     raw = {
-        "schema": 1,
-        "paths": {"input": str(root / "input"), "output": str(root / "out"), "herold": str(root / "herold")},
-        "tools": {"backend": "fake"},
-        "nemo_domain": nemo_domain_section(root / "domain", root),
+        "schema": 2,
+        "inputs": {"ece4_data": str(root / "input"), "herold": str(root / "herold")},
+        "machine": {"name": "fake"},
+        "nemo": {"domain": nemo_domain_section(root / "domain", root)},
+        "eocene": {
+            "output_dir": str(root / "out"),
+            "domain": {"from": "{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene", "build": True},
+        },
     }
     config_file.write_text(yaml.safe_dump(raw))
     ctx = Context(load_config(config_file))
@@ -51,22 +55,23 @@ def test_input_tree_holds_only_declared_reads(tree: dict) -> None:
     ctx = tree["ctx"]
     declared = {ctx.expand(t) for step in tree["steps"] for t in step.reads}
     assert {str(p) for p in tree["inputs"]} == declared
-    files = set(files_under(Path(ctx.paths.input), Path(ctx.paths.herold)))
+    files = set(files_under(Path(ctx.config.inputs.ece4_data), Path(ctx.config.inputs.herold)))
     assert files <= declared, "files outside the declared reads"
 
 
 def test_dry_run_writes_nothing(tree: dict) -> None:
     main(["eocene", "run", "-c", tree["config"], "--steps", ",".join(STEPS), "--dry-run"])
-    assert not os.path.exists(tree["ctx"].paths.output)
+    assert not os.path.exists(tree["ctx"].config.eocene.output_dir)
 
 
 def test_run_writes_every_declared_output(tree: dict) -> None:
     ctx = tree["ctx"]
-    before = files_under(Path(ctx.paths.input), Path(ctx.paths.herold))
+    before = files_under(Path(ctx.config.inputs.ece4_data), Path(ctx.config.inputs.herold))
     main(["eocene", "run", "-c", tree["config"], "--steps", ",".join(STEPS)])
 
     missing = [p for step in tree["steps"] for p in (ctx.expand(t) for t in step.writes) if not os.path.exists(p)]
     assert missing == []
-    record = yaml.safe_load((Path(ctx.paths.output) / "provenance.yml").read_text())
+    record = yaml.safe_load((Path(ctx.config.eocene.output_dir) / "provenance.yml").read_text())
     assert record["steps"] == STEPS
-    assert files_under(Path(ctx.paths.input), Path(ctx.paths.herold)) == before, "the read-only trees changed"
+    read_only = files_under(Path(ctx.config.inputs.ece4_data), Path(ctx.config.inputs.herold))
+    assert read_only == before, "the read-only trees changed"

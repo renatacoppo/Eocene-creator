@@ -5,9 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from ecefast.core.config import Config, Paths
+from ecefast.core.config import ConfigError
 from ecefast.core.steps import ComponentStep, PipelineError, run_pipeline
 from ecefast.core.workspace import Context, Stage
+from synthetic import make_config
 
 pytestmark = pytest.mark.unit
 
@@ -17,14 +18,8 @@ def ctx(tmp_path: Path) -> Context:
     for name in ("input", "herold"):
         (tmp_path / name).mkdir()
     (tmp_path / "input" / "a.txt").write_text("a")
-    paths = Paths(
-        input=str(tmp_path / "input"),
-        output=str(tmp_path / "out"),
-        herold=str(tmp_path / "herold"),
-        tmpdir=str(tmp_path / "tmp"),
-    )
     (tmp_path / "out").mkdir()
-    return Context(Config(file="test.yml", paths=paths))
+    return Context(make_config(tmp_path, tmpdir=str(tmp_path / "tmp")))
 
 
 def make_step(name: str, needs=(), reads=(), writes=(), ran=None) -> type[ComponentStep]:
@@ -51,7 +46,7 @@ def make_step(name: str, needs=(), reads=(), writes=(), ran=None) -> type[Compon
 
 
 def outputs(ctx: Context) -> list[str]:
-    return sorted(p.name for p in Path(ctx.paths.output).iterdir())
+    return sorted(p.name for p in Path(ctx.config.eocene.output_dir).iterdir())
 
 
 # --- runner --------------------------------------------------------------------------------------------------------
@@ -59,15 +54,15 @@ def outputs(ctx: Context) -> list[str]:
 
 def test_runs_steps_in_order_and_checks_writes(ctx: Context) -> None:
     ran = []
-    a = make_step("a", reads=["{input}/a.txt"], writes=["{output}/a.txt"], ran=ran)
-    b = make_step("b", needs=["a"], reads=["{output}/a.txt"], writes=["{output}/b.txt"], ran=ran)
+    a = make_step("a", reads=["{inputs.ece4_data}/a.txt"], writes=["{eocene.output_dir}/a.txt"], ran=ran)
+    b = make_step("b", needs=["a"], reads=["{eocene.output_dir}/a.txt"], writes=["{eocene.output_dir}/b.txt"], ran=ran)
     assert run_pipeline([a, b], ctx) == ["a", "b"]
     assert ran == ["a", "b"]
     assert outputs(ctx) == ["a.txt", "b.txt"]
 
 
 def test_need_after_step_is_an_error(ctx: Context) -> None:
-    a = make_step("a", writes=["{output}/a.txt"])
+    a = make_step("a", writes=["{eocene.output_dir}/a.txt"])
     b = make_step("b", needs=["a"])
     with pytest.raises(PipelineError, match="'b' needs 'a', which must come before it"):
         run_pipeline([b, a], ctx)
@@ -80,39 +75,44 @@ def test_unknown_need_is_an_error(ctx: Context) -> None:
 
 def test_missing_reads_are_all_listed_and_nothing_is_written(ctx: Context) -> None:
     ran = []
-    a = make_step("a", reads=["{input}/missing1.nc"], writes=["{output}/a.txt"], ran=ran)
-    b = make_step("bb", reads=["{input}/a.txt", "{herold}/missing2.nc"], writes=["{output}/b.txt"], ran=ran)
+    a = make_step("a", reads=["{inputs.ece4_data}/missing1.nc"], writes=["{eocene.output_dir}/a.txt"], ran=ran)
+    b = make_step(
+        "bb",
+        reads=["{inputs.ece4_data}/a.txt", "{inputs.herold}/missing2.nc"],
+        writes=["{eocene.output_dir}/b.txt"],
+        ran=ran,
+    )
     with pytest.raises(PipelineError) as err:
         run_pipeline([a, b], ctx)
     message = str(err.value)
     assert message.splitlines()[0] == "Cannot start: 2 input files are missing. Nothing was written."
-    assert f"  a   needs  {ctx.paths.input}/missing1.nc" in message
-    assert f"  bb  needs  {ctx.paths.herold}/missing2.nc" in message
+    assert f"  a   needs  {ctx.config.inputs.ece4_data}/missing1.nc" in message
+    assert f"  bb  needs  {ctx.config.inputs.herold}/missing2.nc" in message
     assert ran == []
     assert outputs(ctx) == []
 
 
 def test_one_missing_read_is_singular(ctx: Context) -> None:
     with pytest.raises(PipelineError, match="1 input file is missing"):
-        run_pipeline([make_step("a", reads=["{input}/nope"])], ctx)
+        run_pipeline([make_step("a", reads=["{inputs.ece4_data}/nope"])], ctx)
 
 
 def test_missing_read_shows_its_source(ctx: Context) -> None:
     """A missing read listed in ``sources`` gets a line saying where to get it; the others do not."""
-    a = make_step("a", reads=["{herold}/age.xyadb", "{input}/other.nc"])
-    a.sources = {"{herold}/age.xyadb": "https://example.org/age.xyadb.bz2"}
+    a = make_step("a", reads=["{inputs.herold}/age.xyadb", "{inputs.ece4_data}/other.nc"])
+    a.sources = {"{inputs.herold}/age.xyadb": "https://example.org/age.xyadb.bz2"}
     with pytest.raises(PipelineError) as err:
         run_pipeline([a], ctx)
     assert str(err.value).splitlines()[1:] == [
-        f"  a  needs  {ctx.paths.herold}/age.xyadb",
+        f"  a  needs  {ctx.config.inputs.herold}/age.xyadb",
         "     get it from https://example.org/age.xyadb.bz2",
-        f"  a  needs  {ctx.paths.input}/other.nc",
+        f"  a  needs  {ctx.config.inputs.ece4_data}/other.nc",
     ]
 
 
 def test_read_written_by_earlier_step_is_not_missing(ctx: Context) -> None:
-    a = make_step("a", writes=["{output}/a.txt"])
-    b = make_step("b", needs=["a"], reads=["{output}/a.txt"])
+    a = make_step("a", writes=["{eocene.output_dir}/a.txt"])
+    b = make_step("b", needs=["a"], reads=["{eocene.output_dir}/a.txt"])
     run_pipeline([a, b], ctx)
 
 
@@ -120,42 +120,42 @@ def test_read_inside_directory_written_by_earlier_step_is_not_missing(ctx: Conte
     class MakeDir(ComponentStep):
         """Make a directory."""
 
-        name, writes = "dir", ["{output}/d"]
+        name, writes = "dir", ["{eocene.output_dir}/d"]
 
         @classmethod
         def from_context(cls, ctx):
             step = cls()
-            step.path = ctx.expand("{output}/d/x.txt")
+            step.path = ctx.expand("{eocene.output_dir}/d/x.txt")
             return step
 
         def run(self):
             Path(self.path).parent.mkdir()
             Path(self.path).write_text("x")
 
-    b = make_step("b", needs=["dir"], reads=["{output}/d/x.txt"])
+    b = make_step("b", needs=["dir"], reads=["{eocene.output_dir}/d/x.txt"])
     run_pipeline([MakeDir, b], ctx)
 
 
 def test_dry_run_writes_nothing(ctx: Context, caplog: pytest.LogCaptureFixture) -> None:
     ran = []
-    a = make_step("a", reads=["{input}/a.txt"], writes=["{output}/a.txt"], ran=ran)
+    a = make_step("a", reads=["{inputs.ece4_data}/a.txt"], writes=["{eocene.output_dir}/a.txt"], ran=ran)
     with caplog.at_level(logging.INFO, logger="ecefast"):
         assert run_pipeline([a], ctx, dry_run=True) == ["a"]
     assert ran == []
     assert outputs(ctx) == []
-    assert f"Dummy step.  → {ctx.paths.output}/a.txt" in caplog.text
+    assert f"Dummy step.  → {ctx.config.eocene.output_dir}/a.txt" in caplog.text
 
 
 def test_dry_run_still_checks_reads(ctx: Context) -> None:
     with pytest.raises(PipelineError, match="Cannot start"):
-        run_pipeline([make_step("a", reads=["{input}/nope"])], ctx, dry_run=True)
+        run_pipeline([make_step("a", reads=["{inputs.ece4_data}/nope"])], ctx, dry_run=True)
 
 
 def test_select_runs_only_selected(ctx: Context) -> None:
     ran = []
-    a = make_step("a", writes=["{output}/a.txt"], ran=ran)
-    b = make_step("b", writes=["{output}/b.txt"], ran=ran)
-    c = make_step("c", writes=["{output}/c.txt"], ran=ran)
+    a = make_step("a", writes=["{eocene.output_dir}/a.txt"], ran=ran)
+    b = make_step("b", writes=["{eocene.output_dir}/b.txt"], ran=ran)
+    c = make_step("c", writes=["{eocene.output_dir}/c.txt"], ran=ran)
     assert run_pipeline([a, b, c], ctx, select=["c", "a"]) == ["a", "c"]
     assert ran == ["a", "c"]
 
@@ -166,8 +166,8 @@ def test_select_unknown_step_is_an_error(ctx: Context) -> None:
 
 
 def test_unselected_need_without_outputs_is_an_error(ctx: Context) -> None:
-    a = make_step("a", writes=["{output}/a.txt"])
-    b = make_step("b", needs=["a"], writes=["{output}/b.txt"])
+    a = make_step("a", writes=["{eocene.output_dir}/a.txt"])
+    b = make_step("b", needs=["a"], writes=["{eocene.output_dir}/b.txt"])
     with pytest.raises(PipelineError, match="'b' needs 'a', which is not selected and has not run before"):
         run_pipeline([a, b], ctx, select=["b"])
     assert outputs(ctx) == []
@@ -175,9 +175,9 @@ def test_unselected_need_without_outputs_is_an_error(ctx: Context) -> None:
 
 def test_unselected_need_with_outputs_is_allowed(ctx: Context) -> None:
     ran = []
-    a = make_step("a", writes=["{output}/a.txt"], ran=ran)
-    b = make_step("b", needs=["a"], reads=["{output}/a.txt"], writes=["{output}/b.txt"], ran=ran)
-    (Path(ctx.paths.output) / "a.txt").write_text("from an earlier run")
+    a = make_step("a", writes=["{eocene.output_dir}/a.txt"], ran=ran)
+    b = make_step("b", needs=["a"], reads=["{eocene.output_dir}/a.txt"], writes=["{eocene.output_dir}/b.txt"], ran=ran)
+    (Path(ctx.config.eocene.output_dir) / "a.txt").write_text("from an earlier run")
     run_pipeline([a, b], ctx, select=["b"])
     assert ran == ["b"]
 
@@ -186,7 +186,7 @@ def test_missing_write_after_run_is_an_error(ctx: Context) -> None:
     class Lazy(ComponentStep):
         """Writes nothing."""
 
-        name, writes = "lazy", ["{output}/never.txt"]
+        name, writes = "lazy", ["{eocene.output_dir}/never.txt"]
 
         @classmethod
         def from_context(cls, ctx):
@@ -201,8 +201,8 @@ def test_missing_write_after_run_is_an_error(ctx: Context) -> None:
 
 def test_write_into_input_is_refused_before_start(ctx: Context) -> None:
     ran = []
-    a = make_step("a", writes=["{input}/a.txt"], ran=ran)
-    with pytest.raises(PipelineError, match="Step 'a' would write .* read-only 'input'"):
+    a = make_step("a", writes=["{inputs.ece4_data}/a.txt"], ran=ran)
+    with pytest.raises(PipelineError, match="Step 'a' would write .* read-only 'inputs.ece4_data'"):
         run_pipeline([a], ctx)
     assert ran == []
 
@@ -218,42 +218,46 @@ def test_base_class_must_be_overridden() -> None:
 
 
 def test_expand_placeholders(ctx: Context) -> None:
-    p = ctx.paths
-    assert ctx.expand("{input}/oifs/{oifs_grid}/x") == f"{p.input}/oifs/TL63L31/x"
-    assert ctx.expand("{output}/oasis/{nemo_grid}/rstos.nc") == f"{p.output}/oasis/PALEORCA2/rstos.nc"
-    assert ctx.expand("{herold}/h.nc") == f"{p.herold}/h.nc"
-    assert ctx.expand("{tmpdir}/t.nc") == f"{p.tmpdir}/t.nc"
+    c = ctx.config
+    assert ctx.expand("{inputs.ece4_data}/oifs/{oifs.grid}/x") == f"{c.inputs.ece4_data}/oifs/TL63L31/x"
+    out = c.eocene.output_dir
+    assert ctx.expand("{eocene.output_dir}/oasis/{nemo.grid}/rstos.nc") == f"{out}/oasis/PALEORCA2/rstos.nc"
+    assert ctx.expand("{inputs.herold}/h.nc") == f"{c.inputs.herold}/h.nc"
+    assert ctx.expand("{tmpdir}/t.nc") == f"{c.tmpdir}/t.nc"
+    assert ctx.expand("{eocene.domain.from}/x") == f"{c.eocene.domain.from_}/x"
     assert ctx.expand("/plain/path") == "/plain/path"
 
 
 def test_expand_unknown_placeholder(ctx: Context) -> None:
-    with pytest.raises(ValueError, match=r"Unknown placeholder \{inptu\}"):
-        ctx.expand("{inptu}/x")
+    with pytest.raises(ConfigError, match=r"unknown key 'inputs.ece4' in placeholder \{inputs.ece4\}"):
+        ctx.expand("{inputs.ece4}/x")
+    with pytest.raises(ConfigError, match="unknown key 'input'"):
+        ctx.expand("{input}/x")
 
 
 def test_expand_tmpdir_unset(ctx: Context) -> None:
-    ctx.paths.tmpdir = None
-    with pytest.raises(ValueError, match="'paths.tmpdir' is not set"):
+    ctx.config.tmpdir = None
+    with pytest.raises(ConfigError, match="'tmpdir', which is not set"):
         ctx.expand("{tmpdir}/x")
 
 
-@pytest.mark.parametrize("template", ["{input}", "{input}/a.txt", "{herold}/sub/x.nc"])
+@pytest.mark.parametrize("template", ["{inputs.ece4_data}", "{inputs.ece4_data}/a.txt", "{inputs.herold}/sub/x.nc"])
 def test_check_writable_refuses_read_only_roots(ctx: Context, template: str) -> None:
     with pytest.raises(PipelineError, match="read-only"):
         ctx.check_writable(ctx.expand(template), "s")
 
 
 def test_check_writable_allows_output_and_tmpdir(ctx: Context) -> None:
-    ctx.check_writable(ctx.expand("{output}/x.nc"))
+    ctx.check_writable(ctx.expand("{eocene.output_dir}/x.nc"))
     ctx.check_writable(ctx.expand("{tmpdir}/x.nc"))
     # a sibling whose name starts with the root name is not inside it
-    ctx.check_writable(ctx.paths.input + "-copy/x.nc")
+    ctx.check_writable(ctx.config.inputs.ece4_data + "-copy/x.nc")
 
 
 def test_check_writable_follows_symlinks(ctx: Context, tmp_path: Path) -> None:
     link = tmp_path / "link"
-    link.symlink_to(ctx.paths.input)
-    with pytest.raises(PipelineError, match="read-only 'input'"):
+    link.symlink_to(ctx.config.inputs.ece4_data)
+    with pytest.raises(PipelineError, match="read-only 'inputs.ece4_data'"):
         ctx.check_writable(str(link / "x.nc"))
 
 
@@ -278,8 +282,8 @@ def input_tree(root: Path) -> None:
 
 
 def test_stage_copies_the_subset(ctx: Context) -> None:
-    input_tree(Path(ctx.paths.input))
-    out = Path(ctx.paths.output)
+    input_tree(Path(ctx.config.inputs.ece4_data))
+    out = Path(ctx.config.eocene.output_dir)
     (out / "old.txt").write_text("overwritten")
     ctx.overwrite = True
     run_pipeline([Stage], ctx)
@@ -296,8 +300,8 @@ def test_stage_copies_the_subset(ctx: Context) -> None:
 
 
 def test_stage_refuses_non_empty_output_without_overwrite(ctx: Context) -> None:
-    input_tree(Path(ctx.paths.input))
-    out = Path(ctx.paths.output)
+    input_tree(Path(ctx.config.inputs.ece4_data))
+    out = Path(ctx.config.eocene.output_dir)
     (out / "old.txt").write_text("kept")
     with pytest.raises(PipelineError, match="is not empty"):
         run_pipeline([Stage], ctx)

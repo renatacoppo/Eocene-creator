@@ -1,5 +1,5 @@
 #!/bin/bash
-# run_domain_cfg.sh <domaincfg_dir> <name1> [name2 ...]
+# run_domain_cfg.sh <tools_dir> <name1> [name2 ...]
 #
 # HPC-only block: module loading, compilation, and execution of the NEMO
 # DOMAINcfg tool. Called by ecefast.tools.ecearth.AtosBackend.
@@ -14,7 +14,7 @@ NAMES=("$@")
 # --- Load HPC modules ---
 # Module list of the HPC profile (ecefast/tools/hpc_profiles.yaml), read with the Python running ecefast.
 # AtosBackend (ecefast.tools.ecearth) sets ECEFAST_PYTHON to its interpreter and ECEFAST_HPC_PROFILE to
-# tools.atos.profile; the defaults serve direct calls from an activated environment.
+# machine.atos.profile; the defaults serve direct calls from an activated environment.
 MODULES=$("${ECEFAST_PYTHON:-python3}" -m ecefast.tools.ecearth "${ECEFAST_HPC_PROFILE:-atos}")
 
 module reset
@@ -25,7 +25,7 @@ for module in $MODULES; do
 done
 
 # Library directories set by the modules, plus the OASIS libraries of the EC-Earth build if given
-# (ECEFAST_OASIS_LIB_DIR, from tools.atos.oasis_lib_dir).
+# (ECEFAST_OASIS_LIB_DIR, from machine.atos.oasis_lib_dir).
 export LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}:$NETCDF4_PARALLEL_DIR/lib:$ECCODES_DIR/lib:$HDF5_DIR/lib
 if [[ -n "${ECEFAST_OASIS_LIB_DIR:-}" ]]; then
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ECEFAST_OASIS_LIB_DIR

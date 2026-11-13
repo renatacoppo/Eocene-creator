@@ -25,19 +25,12 @@ pytestmark = pytest.mark.unit
 L31 = Path(ecearth.__file__).parents[1] / "components" / "nemo" / "grids" / "L31.txt"
 
 
-def config_file(tmp_path: Path, tools: dict | None = None) -> Path:
+def config_file(tmp_path: Path, machine: dict | None = None) -> Path:
     (tmp_path / "input").mkdir(exist_ok=True)
     (tmp_path / "herold").mkdir(exist_ok=True)
-    raw = {
-        "schema": 1,
-        "paths": {
-            "input": str(tmp_path / "input"),
-            "output": str(tmp_path / "out"),
-            "herold": str(tmp_path / "herold"),
-        },
-    }
-    if tools is not None:
-        raw["tools"] = tools
+    raw = {"schema": 2, "inputs": {"ece4_data": str(tmp_path / "input"), "herold": str(tmp_path / "herold")}}
+    if machine is not None:
+        raw["machine"] = machine
     path = tmp_path / "config.yml"
     path.write_text(yaml.safe_dump(raw))
     return path
@@ -56,30 +49,30 @@ def l31_levels() -> np.ndarray:
     ("backend", "cls"), [(None, LocalBackend), ("local", LocalBackend), ("atos", AtosBackend), ("fake", FakeBackend)]
 )
 def test_get_backend(tmp_path: Path, backend: str | None, cls: type) -> None:
-    tools = None if backend is None else {"backend": backend}
-    assert type(get_backend(load_config(config_file(tmp_path, tools)))) is cls
+    machine = None if backend is None else {"name": backend}
+    assert type(get_backend(load_config(config_file(tmp_path, machine)))) is cls
 
 
 def test_atos_defaults_and_overrides(tmp_path: Path) -> None:
     config = load_config(config_file(tmp_path))
-    assert (config.tools.atos.profile, config.tools.atos.oasis_lib_dir) == ("atos", None)
-    tools = {"backend": "atos", "atos": {"profile": "atos", "oasis_lib_dir": "/path/to/oasis/lib"}}
-    backend = get_backend(load_config(config_file(tmp_path, tools)))
+    assert (config.machine.atos.profile, config.machine.atos.oasis_lib_dir) == ("atos", None)
+    machine = {"name": "atos", "atos": {"profile": "atos", "oasis_lib_dir": "/path/to/oasis/lib"}}
+    backend = get_backend(load_config(config_file(tmp_path, machine)))
     assert (backend.profile, backend.oasis_lib_dir) == ("atos", "/path/to/oasis/lib")
 
 
 @pytest.mark.parametrize(
-    ("tools", "key"),
+    ("machine", "key"),
     [
-        ({"backend": "hpc"}, "tools.backend"),
-        ({"atos": {"profile": 1}}, "tools.atos.profile"),
-        ({"atos": {"oasis_lib_dir": 1}}, "tools.atos.oasis_lib_dir"),
-        ({"atos": {"modules": []}}, "tools.atos"),
+        ({"name": "hpc"}, "machine.name"),
+        ({"atos": {"profile": 1}}, "machine.atos.profile"),
+        ({"atos": {"oasis_lib_dir": 1}}, "machine.atos.oasis_lib_dir"),
+        ({"atos": {"modules": []}}, "machine.atos"),
     ],
 )
-def test_bad_tools_values(tmp_path: Path, tools: dict, key: str) -> None:
+def test_bad_machine_values(tmp_path: Path, machine: dict, key: str) -> None:
     with pytest.raises(ConfigError, match=key):
-        load_config(config_file(tmp_path, tools))
+        load_config(config_file(tmp_path, machine))
 
 
 def test_unknown_hpc_profile() -> None:
@@ -155,7 +148,7 @@ def test_availability(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_local_backend_error(tmp_path: Path) -> None:
-    with pytest.raises(RuntimeError, match=r"'local' backend.*tools\.precomputed\.domain.*tools\.backend: atos"):
+    with pytest.raises(RuntimeError, match=r"'machine\.name: local'.*eocene\.domain\.from.*machine\.name: atos"):
         LocalBackend().domaincfg(tmp_path, ["eocene"])
 
 

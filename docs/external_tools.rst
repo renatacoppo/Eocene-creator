@@ -11,21 +11,22 @@ asks the backend to run DOMAINcfg; every backend leaves the raw ``domain_cfg_<na
 ``mesh_mask_<name>.nc`` next to the namelists, which the pipeline then post-processes into
 ``domain_cfg.nc`` and ``maskutil.nc``.
 
-Two commands use the backend of ``tools.backend``:
+Two commands use the backend of ``machine.name``:
 
 - ``ecefast nemo domain`` (the domain pipeline): its ``domain_cfg`` step runs DOMAINcfg through
   the backend. If the step is on and the backend is not available (``local``, or ``atos`` off
   Atos), the pipeline stops before its first step; on a laptop the step is off.
-- the ``domain`` step of ``ecefast eocene run``: with ``local`` it installs the domain of
-  ``tools.precomputed.domain``; with ``atos`` or ``fake`` it builds the Eocene domain with the
-  domain pipeline (bathymetry ``eocene`` only, the steps of ``nemo_domain.steps``) and installs
-  the post-processed ``domain_cfg.nc`` and ``maskutil.nc``. The vertical grid check runs in both
-  cases (see :doc:`workflow`).
+- the ``domain`` step of ``ecefast eocene run``, only with ``eocene.domain.build: true``: it builds
+  the Eocene domain with the domain pipeline (bathymetry ``eocene`` only, the steps of
+  ``nemo.domain.steps``) and installs the post-processed ``domain_cfg.nc`` and ``maskutil.nc``.
+  With ``build: false`` (the default) it installs the domain of ``eocene.domain.from`` and needs no
+  backend; ``build: true`` with ``machine.name: local`` is a configuration error. The vertical
+  grid check runs in both cases (see :doc:`workflow`).
 
 Backends
 --------
 
-Select the backend with ``tools.backend`` (see :doc:`configuration`):
+Select the backend with ``machine.name`` (see :doc:`configuration`):
 
 .. list-table::
    :header-rows: 1
@@ -41,7 +42,7 @@ Select the backend with ``tools.backend`` (see :doc:`configuration`):
    * - ``local``
      - laptop, workstation (default)
      - Nothing: DOMAINcfg is not available. The ``domain`` step uses the Eocene domain built on
-       Atos, given with ``tools.precomputed.domain``. Asking it to run DOMAINcfg stops with an
+       Atos, given with ``eocene.domain.from``. Asking it to run DOMAINcfg stops with an
        error that says so.
    * - ``fake``
      - tests, CI
@@ -53,16 +54,17 @@ Select the backend with ``tools.backend`` (see :doc:`configuration`):
 
 .. code-block:: yaml
 
-   tools:
-     backend: atos
+   machine:
+     name: atos
      atos:
        profile: atos            # modules from ecefast/tools/hpc_profiles.yaml
        oasis_lib_dir: /path/to/ecearth4/sources/oasis3-mct-5.2/arch_ecearth/lib
-   nemo_domain:
-     domaincfg_dir: /path/to/ecearth4/sources/nemo-4.2/tools
+   nemo:
+     domain:
+       tools_dir: /path/to/ecearth4/sources/nemo-4.2/tools
 
 The namelists must be in the ``DOMAINcfg/`` folder of the NEMO tools directory
-(``nemo_domain.domaincfg_dir``), which holds ``maketools``. The backend runs
+(``nemo.domain.tools_dir``), which holds ``maketools``. The backend runs
 
 .. code-block:: bash
 
@@ -72,7 +74,7 @@ which
 
 1. reads the module list of the profile with the Python running ``ecefast``
    (``python -m ecefast.tools.ecearth atos`` prints it), runs ``module reset`` and loads the modules;
-2. adds the library directories of the modules and ``tools.atos.oasis_lib_dir`` (if set) to
+2. adds the library directories of the modules and ``machine.atos.oasis_lib_dir`` (if set) to
    ``LD_LIBRARY_PATH``;
 3. compiles DOMAINcfg with ``./maketools -m ecearth -n DOMAINcfg`` unless
    ``DOMAINcfg/make_domain_cfg.exe`` exists;
@@ -129,12 +131,12 @@ before it reaches ``main``) by hand. You need:
 
 - the repository (on the branch to check) and the ``eocene`` environment, created from
   ``environment.yaml`` with ``pip install -e ".[dev]"``. For CDO use conda-forge ``cdo`` in that
-  environment with the version recorded in ``EOCENE-BASELINE/BASELINE.txt`` (or the module, if you do
+  environment with the version recorded in ``BASELINE/BASELINE.txt`` (or the module, if you do
   not compare with the baseline): a different CDO changes the remapped bathymetries;
 - the inputs: the ECE4-DATA-V3 tree, the Herold et al. (2014) ``Supp/`` folder and the PALEORCA2
   ``coords_ori.nc``;
-- an EC-Earth4 build: the NEMO tools directory holding ``maketools`` (``nemo_domain.domaincfg_dir``)
-  and the OASIS library directory (``tools.atos.oasis_lib_dir``);
+- an EC-Earth4 build: the NEMO tools directory holding ``maketools`` (``nemo.domain.tools_dir``)
+  and the OASIS library directory (``machine.atos.oasis_lib_dir``);
 - the modules of the ``atos`` profile in ``src/ecefast/tools/hpc_profiles.yaml``: check that each
   one is still available (``module avail <name>``) and update the profile if one was retired;
 - ``configs/atos.yml``, copied from ``configs/atos.tmpl`` with the paths set.
@@ -147,16 +149,17 @@ Run on an interactive or batch node, not on a login node:
    ecefast nemo domain -c configs/atos.yml --dry-run   # every input found, plan shown
    ecefast nemo domain -c configs/atos.yml             # DOMAINcfg through the atos backend
    ECEFAST_HPC_DOMAINCFG_DIR=/path/to/nemo-4.2/tools/DOMAINcfg pytest -m hpc tests/hpc
-   ecefast eocene run -c configs/atos.yml --overwrite  # full run, Eocene domain built here
+   ecefast eocene run -c configs/atos.yml --overwrite  # full run, installs the domain built above
 
 The ``hpc`` test checks that the ``fake`` backend still has the structure of the real DOMAINcfg
 output (variables, dimensions, dtypes, 1-D vertical grid). Then compare the results:
 
-- the Eocene ``domain_cfg.nc`` of ``ecefast nemo domain`` with the reference Eocene domain
-  (``tools.precomputed.domain`` on a laptop);
+- the Eocene ``domain_cfg.nc`` of ``ecefast nemo domain``
+  (``<nemo.domain.output_dir>/nemo/domain/PALEORCA2/eocene/``) with the reference Eocene domain
+  (``eocene.domain.from`` on a laptop);
 - the output of the full run with the baseline:
-  ``python scripts/compare_outputs.py EOCENE-BASELINE/eocene /path/to/output``. The baseline installs
-  the precomputed domain, so differences in ``nemo/domain/`` mean the domain built on Atos differs
+  ``python scripts/compare_outputs.py BASELINE/eocene OUTPUT/eocene``. The baseline installs
+  the Eocene domain built on Atos earlier, so differences in ``nemo/domain/`` mean the domain built on Atos differs
   from it.
 
 Report in the pull request what ran and what differed.

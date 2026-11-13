@@ -22,8 +22,8 @@ class EoceneOASIS(ComponentStep):
 
     name = "oasis"
     needs = ["stage"]
-    reads = ["{input}/oasis/{nemo_grid}/rstos.nc"]
-    writes = ["{output}/oasis/{nemo_grid}/rstos.nc"]
+    reads = ["{inputs.ece4_data}/oasis/{nemo.grid}/rstos.nc"]
+    writes = ["{eocene.output_dir}/oasis/{nemo.grid}/rstos.nc"]
 
     def __init__(self, idir, odir, nemo_resolution="PALEORCA2", constant_sst=290.0):
 
@@ -39,9 +39,9 @@ class EoceneOASIS(ComponentStep):
     @classmethod
     def from_context(cls, ctx: Context) -> "EoceneOASIS":
         return cls(
-            idir=ctx.paths.input,
-            odir=ctx.paths.output,
-            nemo_resolution=ctx.grids.nemo,
+            idir=ctx.config.inputs.ece4_data,
+            odir=ctx.config.eocene.output_dir,
+            nemo_resolution=ctx.config.nemo.grid,
             constant_sst=ctx.config.eocene.oasis.constant_sst,
         )
 

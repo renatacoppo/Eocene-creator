@@ -13,10 +13,13 @@ configs/*.yml
 /ECE4-DATA-V3/
 /ECE4-DATA-EOCENE/
 /herold-et-al-2014/
-/EOCENE-TEST/
+/OUTPUT/
+/BASELINE/
 /eocene_tmp/
-/EOCENE-BASELINE/
 /data/
+# old names of OUTPUT/ and BASELINE/, until the local folders are moved
+/EOCENE-TEST/
+/EOCENE-BASELINE/
 /EOCENE-DOMAIN-TEST/
 
 # build outputs

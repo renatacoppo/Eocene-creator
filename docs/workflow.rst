@@ -23,13 +23,13 @@ Options of ``ecefast eocene run``:
 
 .. code-block:: text
 
-   -c, --config      Configuration file (schema 1, see the configuration page). Required.
+   -c, --config      Configuration file (schema 2, section 'eocene', see the configuration page). Required.
    --steps a,b       Comma-separated step names; they run in pipeline order. Default: all steps.
    --dry-run         Check all inputs and show the plan; write nothing.
    --overwrite       Let 'stage' replace an output directory that is not empty.
    -l, --loglevel    Log level (DEBUG, INFO, WARNING, ...). Default: INFO.
 
-``stage`` copies the base files into ``paths.output``. If that directory exists and is not
+``stage`` copies the base files into ``eocene.output_dir``. If that directory exists and is not
 empty, ``stage`` stops with an error unless ``--overwrite`` is given, which removes and
 recreates it. ``--steps`` without ``stage`` runs on an existing output directory: a needed step
 that is not selected (here ``stage``) must have run before, i.e. all its ``writes`` exist.
@@ -45,12 +45,12 @@ A dry run checks everything and logs the plan, one line per step with what it wr
    $ ecefast eocene run -c configs/laptop.yml --dry-run
    INFO -> CDO version: 2.6.4
    INFO -> Dry run: nothing is written. Plan:
-   INFO ->   stage   Copy base files from the input tree to the output tree.  → EOCENE-TEST/oifs, EOCENE-TEST/nemo, EOCENE-TEST/oasis/PALEORCA2
-   INFO ->   domain  Install the Eocene NEMO domain (precomputed, or built with the backend) and check its vertical grid.  → EOCENE-TEST/nemo/domain/PALEORCA2/domain_cfg.nc, ...
-   INFO ->   oasis   Write the OASIS restart rstos.nc: no sea ice, constant SST.  → EOCENE-TEST/oasis/PALEORCA2/rstos.nc
-   INFO ->   oifs    Modify the OIFS initial and climate files for the Eocene (Herold et al. 2014).  → EOCENE-TEST/oifs/TL63L31/19900101/ICMGGECE4INIT, ...
-   INFO ->   nemo    Modify NEMO input files for the Eocene: tidal mixing, geothermal flux, ocean initial state, runoff.  → EOCENE-TEST/nemo/initial/zdfiwm_forcing_r720x360.nc, ...
-   INFO ->   rnfm    Write the runoff-mapper basins from the Herold et al. (2014) river flow direction.  → EOCENE-TEST/runoff-mapper/runoff_maps.nc
+   INFO ->   stage   Copy base files from the input tree to the output tree.  → OUTPUT/eocene/oifs, OUTPUT/eocene/nemo, OUTPUT/eocene/oasis/PALEORCA2
+   INFO ->   domain  Install the Eocene NEMO domain (from eocene.domain.from, built first if asked) and check its vertical grid.  → OUTPUT/eocene/nemo/domain/PALEORCA2/domain_cfg.nc, ...
+   INFO ->   oasis   Write the OASIS restart rstos.nc: no sea ice, constant SST.  → OUTPUT/eocene/oasis/PALEORCA2/rstos.nc
+   INFO ->   oifs    Modify the OIFS initial and climate files for the Eocene (Herold et al. 2014).  → OUTPUT/eocene/oifs/TL63L31/19900101/ICMGGECE4INIT, ...
+   INFO ->   nemo    Modify NEMO input files for the Eocene: tidal mixing, geothermal flux, ocean initial state, runoff.  → OUTPUT/eocene/nemo/initial/zdfiwm_forcing_r720x360.nc, ...
+   INFO ->   rnfm    Write the runoff-mapper basins from the Herold et al. (2014) river flow direction.  → OUTPUT/eocene/runoff-mapper/runoff_maps.nc
 
 Provenance
 ~~~~~~~~~~
@@ -92,7 +92,7 @@ After ``provenance.yml``, the run checks the outputs of the steps that ran
 .. code-block:: text
 
    ERROR -> Verify: the run finished but its output is wrong:
-     NaN in sorunoff of EOCENE-TEST/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc
+     NaN in sorunoff of OUTPUT/eocene/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc
 
 The Eocene steps
 ----------------
@@ -101,28 +101,29 @@ The Eocene steps
    Copies the base files from the input tree to the output tree; see :ref:`stage-step`.
 
 ``domain`` (``EoceneDomain``)
-   Needs ``stage``. Installs ``domain_cfg.nc`` and ``maskutil.nc`` in ``{output}/nemo/domain/{nemo_grid}/``.
-   Where they come from depends on ``tools.backend`` (:doc:`external_tools`): with ``local`` they are copied from
-   ``tools.precomputed.domain``; with ``atos`` or ``fake`` the step first runs the NEMO domain pipeline (below) for
-   the ``eocene`` bathymetry, with the steps of ``nemo_domain.steps``, and copies its output
-   ``{nemo_domain.output_dir}/domain/{nemo_grid}/eocene/``. Then it checks the vertical grid rule: the installed Eocene domain must have the
+   Needs ``stage``. Installs ``domain_cfg.nc`` and ``maskutil.nc`` in ``{eocene.output_dir}/nemo/domain/{nemo.grid}/``,
+   copied from ``eocene.domain.from``: the domain built on Atos (laptop) or the output of an earlier
+   ``ecefast nemo domain``, ``{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene/``. With
+   ``eocene.domain.build: true`` the step first runs the NEMO domain pipeline (below) for the ``eocene`` bathymetry,
+   with the steps of ``nemo.domain.steps``, on ``machine.name`` (:doc:`external_tools`); ``from`` must then be that
+   output path. Then it checks the vertical grid rule: the installed Eocene domain must have the
    same number of levels as the present-day one, and ``nav_lev`` and ``e3t_1d`` within 1e-6 m (rounding) of the
    present-day
-   ``{input}/nemo/domain/{nemo_grid}/domain_cfg.nc``. On a mismatch the pipeline stops with an error naming both
+   ``{inputs.ece4_data}/nemo/domain/{nemo.grid}/domain_cfg.nc``. On a mismatch the pipeline stops with an error naming both
    files and their number of levels. Why: ``nemo`` builds the ocean initial state on the present-day levels.
-   ``reads`` lists only the present-day domain: what else the step reads depends on the backend, which a
-   class-level list cannot express, so the precomputed files (``local``) and the ``nemo_domain`` section
-   (``atos``, ``fake``) are checked when the step starts, not in the preflight.
+   ``reads`` lists only the present-day domain: what else the step reads depends on ``eocene.domain.build``, which a
+   class-level list cannot express, so the files in ``eocene.domain.from`` (``build: false``) and the inputs of the
+   ``nemo.domain`` pipeline (``build: true``) are checked when the step starts, not in the preflight.
 
 ``oasis`` (``EoceneOASIS``)
-   Needs ``stage``. Reads ``{input}/oasis/{nemo_grid}/rstos.nc``, writes ``{output}/oasis/{nemo_grid}/rstos.nc``:
+   Needs ``stage``. Reads ``{inputs.ece4_data}/oasis/{nemo.grid}/rstos.nc``, writes ``{eocene.output_dir}/oasis/{nemo.grid}/rstos.nc``:
    the present-day OASIS restart with sea ice removed (``OIceFrc``, ``OIceTck``, ``OSnwTck``, ``O_AlbIce``,
    ``O_TepIce`` set to 0) and a constant SST (``eocene.oasis.constant_sst``, default 290 K) in ``O_SSTSST``.
 
 ``oifs`` (``EoceneOIFS``)
    Needs ``stage``. Reads the OIFS initial and climate GRIB files of the input tree
-   (``oifs/{oifs_grid}/19900101/ICMGGECE4INIT``, ``ICMGGECE4INIUA``, ``ICMSHECE4INIT``;
-   ``oifs/{oifs_grid}/climate.v020/ICMCLECE4``, ``bare_soil_albedos.grb``) and the Herold et al. (2014)
+   (``oifs/{oifs.grid}/19900101/ICMGGECE4INIT``, ``ICMGGECE4INIUA``, ``ICMSHECE4INIT``;
+   ``oifs/{oifs.grid}/climate.v020/ICMCLECE4``, ``bare_soil_albedos.grb``) and the Herold et al. (2014)
    topography, subgrid orography and biomes. Remaps the Herold fields to the model grid (intermediate files in
    ``{tmpdir}/oifs``), then writes Eocene versions of the same five files in the output tree: land-sea mask,
    orography, subgrid orography and slope, vegetation, soil type, albedos and LAI, dry atmosphere (humidity and
@@ -131,7 +132,7 @@ The Eocene steps
 
 ``nemo`` (``EoceneNEMO``)
    Needs ``stage`` (not ``domain``: it reads only present-day domains, on purpose).
-   Reads the present-day tidal mixing, geothermal flux, WOA13 and runoff files from ``{input}/nemo``, the
+   Reads the present-day tidal mixing, geothermal flux, WOA13 and runoff files from ``{inputs.ece4_data}/nemo``, the
    PALEORCA2 and ORCA2 present-day domains, and the Herold tidal dissipation, topography and ocean-age files.
    Writes ``nemo/initial/zdfiwm_forcing_r720x360.nc`` (Eocene M2 tidal dissipation and bathymetry),
    ``nemo/initial/Goutorbe_ghflux.nc`` (geothermal flux from Eocene ocean-floor age),
@@ -139,8 +140,8 @@ The Eocene steps
    ``nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc`` (runoff set to zero; the runoff mapper handles rivers).
 
 ``rnfm`` (``EoceneRNFM``)
-   Needs ``stage``. Reads ``{herold}/herold_etal_eocene_runoff_1x1.nc`` and ``{input}/runoff-mapper/runoff_maps.nc``,
-   writes ``{output}/runoff-mapper/runoff_maps.nc``. Tracks river basins on the Herold et al. (2014) 1x1 river
+   Needs ``stage``. Reads ``{inputs.herold}/herold_etal_eocene_runoff_1x1.nc`` and ``{inputs.ece4_data}/runoff-mapper/runoff_maps.nc``,
+   writes ``{eocene.output_dir}/runoff-mapper/runoff_maps.nc``. Tracks river basins on the Herold et al. (2014) 1x1 river
    flow direction, merges small basins, and regrids ``drainage_basin_id``, ``arrival_point_id`` and
    ``calving_point_id`` (nearest neighbour, xESMF) to the runoff-mapper grid. ``calving_point_id`` equals
    ``arrival_point_id`` (no ice sheets in the Eocene).
@@ -150,7 +151,7 @@ The Eocene steps
 NEMO domain pipeline
 --------------------
 
-``ecefast nemo domain`` builds NEMO domains from bathymetries, following the ``nemo_domain``
+``ecefast nemo domain`` builds NEMO domains from bathymetries, following the ``nemo.domain``
 section of the configuration (:doc:`configuration`):
 
 .. code-block:: bash
@@ -160,13 +161,18 @@ section of the configuration (:doc:`configuration`):
    ecefast nemo domain -c configs/laptop.yml -l DEBUG               # more logging
    ecefast nemo domain -c configs/laptop.yml --dry-run              # check all inputs and show the plan; write nothing
 
-Its steps, each switched on or off in ``nemo_domain.steps``: ``coordinates`` (PALEORCA2 without
+Its steps, each switched on or off in ``nemo.domain.steps``: ``coordinates`` (PALEORCA2 without
 halo, cell bounds), ``bathymetry`` (one processor per bathymetry, named by ``processor``),
 ``configure_domain`` (one DOMAINcfg namelist per bathymetry), ``domain_cfg`` (DOMAINcfg, through
-the backend of ``tools.backend``, see :doc:`external_tools`), ``generate_mask``
+the backend of ``machine.name``, see :doc:`external_tools`), ``generate_mask``
 (``domain_cfg.nc`` and ``maskutil.nc`` per bathymetry) and ``generate_subbasins``
 (``subbasins.nc`` per bathymetry: Atlantic, Pacific, Indian, Indo-Pacific and global masks). On a
 laptop the last three are off.
+
+Everything goes to ``nemo.domain.output_dir``: the final files of each bathymetry to
+``nemo/domain/<nemo.grid>/<name>/``, laid out as in an EC-Earth input tree so ``eocene.domain.from``
+can point there, and the intermediate files to ``work/`` (``coordinates/``, ``bathymetry/``, and
+``domaincfg/`` with the namelists and raw DOMAINcfg output when ``nemo.domain.tools_dir`` is not set).
 
 Before the first step, the pipeline checks that every file an enabled step reads exists or is
 written by an earlier enabled step, and lists all missing ones at once. ``--dry-run`` does only
@@ -218,14 +224,19 @@ the step in the dry run.
 
        name = "nemo"
        needs = ["stage"]  # run after the base files are copied
-       reads = ["{input}/nemo/initial/woa13-levitus-L31.nc"]
-       writes = ["{output}/nemo/initial/woa13-levitus-L31_woa-pi.nc"]
+       reads = ["{inputs.ece4_data}/nemo/initial/woa13-levitus-L31.nc"]
+       writes = ["{eocene.output_dir}/nemo/initial/woa13-levitus-L31_woa-pi.nc"]
 
        # __init__ and the create_* methods are unchanged
 
        @classmethod
        def from_context(cls, ctx):
-           return cls(herold_folder=ctx.paths.herold, input_folder=ctx.paths.input, output_folder=ctx.paths.output)
+           config = ctx.config
+           return cls(
+               herold_folder=config.inputs.herold,
+               input_folder=config.inputs.ece4_data,
+               output_folder=config.eocene.output_dir,
+           )
 
        def run(self):
            self.create_tidal_mixing()
@@ -233,20 +244,21 @@ the step in the dry run.
            self.create_ocean_init()
            self.create_runoff()
 
-Path templates use these placeholders, filled from the configuration (:doc:`configuration`):
+Path templates use the ``{section.key}`` placeholders of the configuration (:doc:`configuration`), the
+same ones a config file may use. The Eocene steps use:
 
-=================  ==============================================
-Placeholder        Value
-=================  ==============================================
-``{input}``        ``paths.input`` (ECE4-DATA-V3, read-only)
-``{output}``       ``paths.output``
-``{herold}``       ``paths.herold`` (Herold et al. 2014, read-only)
-``{tmpdir}``       ``paths.tmpdir`` (error if not set)
-``{oifs_grid}``    ``grids.oifs``, e.g. ``TL63L31``
-``{nemo_grid}``    ``grids.nemo``, e.g. ``PALEORCA2``
-=================  ==============================================
+========================  ==============================================
+Placeholder               Value
+========================  ==============================================
+``{inputs.ece4_data}``    ECE4-DATA-V3, read-only
+``{inputs.herold}``       Herold et al. (2014), read-only
+``{eocene.output_dir}``   the Eocene output tree
+``{tmpdir}``              scratch directory (error if not set)
+``{oifs.grid}``           e.g. ``TL63L31``
+``{nemo.grid}``           e.g. ``PALEORCA2``
+========================  ==============================================
 
-An unknown placeholder is an error.
+An unknown key, or one that is not set, is an error naming it.
 
 Running a pipeline from Python
 ------------------------------
@@ -266,7 +278,7 @@ Before anything runs, :func:`~ecefast.core.steps.run_pipeline` checks (*prefligh
 
 - every step comes after the steps it ``needs``;
 - a needed step that is not selected has run before: all its ``writes`` exist;
-- no ``writes`` path lies inside ``input`` or ``herold``;
+- no ``writes`` path lies inside ``inputs.ece4_data`` or ``inputs.herold``;
 - every ``reads`` path exists, or is written by an earlier selected step.
 
 All missing inputs are reported in one error, and nothing is written:
@@ -279,9 +291,9 @@ All missing inputs are reported in one error, and nothing is written:
 
 Then the runner builds every selected step with ``from_context``, before the first one runs. This
 is where a step checks inputs that a class-level ``reads`` list cannot hold because they depend on
-the configuration: the ``domain`` step checks ``tools.precomputed.domain`` (``local`` backend) or
-every input of the NEMO domain pipeline it runs (``atos`` and ``fake``, e.g.
-``nemo_domain.coords_ori``). ``from_context`` must not write anything.
+the configuration: the ``domain`` step checks the files in ``eocene.domain.from`` or, with
+``eocene.domain.build: true``, every input of the NEMO domain pipeline it runs (e.g.
+``nemo.domain.coords_ori``). ``from_context`` must not write anything.
 
 A **dry run** does the same checks, logs each selected step with its description and what it
 writes, and touches nothing. Otherwise the steps run in order, and after each one the runner

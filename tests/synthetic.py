@@ -10,6 +10,7 @@ import yaml
 
 from ecefast.components.nemo.bathymetry import PROCESSORS
 from ecefast.components.nemo.domain import pipeline
+from ecefast.core.config import Config, Eocene, EoceneDomain, Inputs
 from ecefast.paleo.eocene.bathymetry import EOCENE_PROCESSORS
 
 NY, NX = 6, 8
@@ -50,6 +51,15 @@ def write_domain_inputs(coords_file: Path, bathy_file: Path) -> None:
         {"bathy_metry": (("time_counter", "y", "x"), depth[None])},
         coords={"lon": (("y", "x"), lon), "lat": (("y", "x"), lat)},
     ).to_netcdf(bathy_file)
+
+
+def make_config(root: Path, tmpdir: str | None = None, **sections) -> Config:
+    """A schema 2 :class:`Config` built in memory: inputs ``root/input`` and ``root/herold``, Eocene output ``root/out``,
+    Eocene domain from ``root/precomputed``; ``sections`` override the other sections (``eocene=...``, ``nemo=...``).
+    """
+    inputs = Inputs(ece4_data=str(root / "input"), herold=str(root / "herold"))
+    eocene = Eocene(output_dir=str(root / "out"), domain=EoceneDomain(from_=str(root / "precomputed")))
+    return Config(file="test.yml", inputs=inputs, tmpdir=tmpdir, **({"eocene": eocene} | sections))
 
 
 # --- synthetic Eocene input tree ------------------------------------------------------------------------------------
@@ -169,14 +179,14 @@ def _domain(path: Path) -> None:
         for name in ("input", "herold"):
             (root / name).mkdir()
         config = {
-            "schema": 1,
-            "paths": {"input": str(root / "input"), "output": str(root / "out"), "herold": str(root / "herold")},
-            "tools": {"backend": "fake"},
-            "nemo_domain": nemo_domain_section(root / "domain", root),
+            "schema": 2,
+            "inputs": {"ece4_data": str(root / "input"), "herold": str(root / "herold")},
+            "machine": {"name": "fake"},
+            "nemo": {"domain": nemo_domain_section(root / "domain", root)},
         }
         (root / "config.yml").write_text(yaml.safe_dump(config))
         pipeline.run(str(root / "config.yml"), {**PROCESSORS, **EOCENE_PROCESSORS}, log_level="WARNING")
-        shutil.copy(root / "domain" / "domain" / "PALEORCA2" / "eocene" / "domain_cfg.nc", path)
+        shutil.copy(root / "domain" / "nemo" / "domain" / "PALEORCA2" / "eocene" / "domain_cfg.nc", path)
 
 
 def _directory(path: Path) -> None:
@@ -185,22 +195,22 @@ def _directory(path: Path) -> None:
 
 
 READ_WRITERS = {
-    "{input}/oifs": _directory,
-    "{input}/nemo": lambda path: path.mkdir(parents=True, exist_ok=True),
-    "{input}/oasis/{nemo_grid}": lambda path: path.mkdir(parents=True, exist_ok=True),
-    "{input}/nemo/domain/{nemo_grid}/domain_cfg.nc": _domain,
-    "{input}/oasis/{nemo_grid}/rstos.nc": _rstos,
-    "{herold}/Green_Huber_eocene_tidal_dissipation_1x1.nc": _tidal_dissipation,
-    "{herold}/herold_etal_eocene_topo_1x1.nc": _herold_topo,
-    "{herold}/age_depth_bath_55.xyadb": _age_depth,
-    "{input}/nemo/initial/zdfiwm_forcing_r720x360.nc": _zdfiwm,
-    "{input}/nemo/initial/Goutorbe_ghflux.nc": _ghflux,
-    "{input}/nemo/initial/woa13-levitus-L31.nc": _woa,
-    "{input}/nemo/domain/PALEORCA2/domain_cfg.nc": _domain,
-    "{input}/nemo/domain/ORCA2/domain_cfg.nc": _domain,
-    "{input}/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc": _nemo_runoff,
-    "{herold}/herold_etal_eocene_runoff_1x1.nc": _herold_runoff,
-    "{input}/runoff-mapper/runoff_maps.nc": _runoff_maps,
+    "{inputs.ece4_data}/oifs": _directory,
+    "{inputs.ece4_data}/nemo": lambda path: path.mkdir(parents=True, exist_ok=True),
+    "{inputs.ece4_data}/oasis/{nemo.grid}": lambda path: path.mkdir(parents=True, exist_ok=True),
+    "{inputs.ece4_data}/nemo/domain/{nemo.grid}/domain_cfg.nc": _domain,
+    "{inputs.ece4_data}/oasis/{nemo.grid}/rstos.nc": _rstos,
+    "{inputs.herold}/Green_Huber_eocene_tidal_dissipation_1x1.nc": _tidal_dissipation,
+    "{inputs.herold}/herold_etal_eocene_topo_1x1.nc": _herold_topo,
+    "{inputs.herold}/age_depth_bath_55.xyadb": _age_depth,
+    "{inputs.ece4_data}/nemo/initial/zdfiwm_forcing_r720x360.nc": _zdfiwm,
+    "{inputs.ece4_data}/nemo/initial/Goutorbe_ghflux.nc": _ghflux,
+    "{inputs.ece4_data}/nemo/initial/woa13-levitus-L31.nc": _woa,
+    "{inputs.ece4_data}/nemo/domain/PALEORCA2/domain_cfg.nc": _domain,
+    "{inputs.ece4_data}/nemo/domain/ORCA2/domain_cfg.nc": _domain,
+    "{inputs.ece4_data}/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc": _nemo_runoff,
+    "{inputs.herold}/herold_etal_eocene_runoff_1x1.nc": _herold_runoff,
+    "{inputs.ece4_data}/runoff-mapper/runoff_maps.nc": _runoff_maps,
 }
 
 
@@ -233,25 +243,25 @@ def write_input_tree(steps: list, ctx) -> list[Path]:
 
 
 def nemo_domain_section(output_dir: Path, root: Path, steps: dict | None = None, bathymetries=None) -> dict:
-    """The ``nemo_domain`` config section for the synthetic grid, with the outputs of the steps that need real grids.
+    """The ``nemo.domain`` config section for the synthetic grid, with the outputs of the steps that need real grids.
 
     ``coordinates`` and ``bathymetry`` are off (they need real grids; ``tests/local/test_nemo_domain_fake.py``):
     their outputs (``coords_halo.nc``, the remapped bathymetry) are written as small synthetic files where the
     pipeline expects them. ``configure_domain``, ``domain_cfg`` (fake DOMAINcfg) and ``generate_mask`` run.
     """
     write_domain_inputs(
-        output_dir / "coordinates" / "PALEORCA2" / "coords_halo.nc",
-        output_dir / "bathymetry" / "PALEORCA2" / "HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc",
+        output_dir / "work" / "coordinates" / "PALEORCA2" / "coords_halo.nc",
+        output_dir / "work" / "bathymetry" / "PALEORCA2" / "HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc",
     )
     if steps is None:
         steps = STEPS_WITHOUT_GRIDS
     if bathymetries is None:
-        bathymetries = [{"name": "eocene", "processor": "EoceneBathymetry", "source_file": "{herold}/topo.nc"}]
+        bathymetries = [{"name": "eocene", "processor": "EoceneBathymetry", "source_file": "{inputs.herold}/topo.nc"}]
     return {
         "output_dir": str(output_dir),
         "coords_ori": str(root / "coords_ori.nc"),
-        "grids": {"target": "PALEORCA2", "source": "eORCA1", "staggering_source": "T", "staggering_target": "T"},
-        "parameters": {"minimum_depth": 30},
+        "source_grid": "eORCA1",
+        "minimum_depth": 30,
         "steps": steps,
         "bathymetries": bathymetries,
     }

@@ -5,14 +5,14 @@ Opt-in. Set ``ECEFAST_TEST_DATA`` to a directory holding::
     ECE4-DATA-V3/                         input tree
     herold-et-al-2014/Supp/               Herold et al. (2014) supplement
     data/domain/PALEORCA2/eocene/         Eocene domain_cfg.nc and maskutil.nc
-    EOCENE-BASELINE/eocene/               frozen reference output
+    BASELINE/eocene/                      frozen reference output, with BASELINE/BASELINE.txt
 
 then run ``pytest -m local_data``. Takes about a minute and a half: ``ecefast eocene run --overwrite``, then
 ``--steps nemo`` on the same output, each compared with the baseline.
 
 The workflow uses the ``cdo`` found first on ``PATH``. A different CDO version legitimately changes the
 results (e.g. remapped bathymetries), so the test is skipped unless ``cdo --version`` matches the
-``CDO:`` line of ``EOCENE-BASELINE/BASELINE.txt``.
+``CDO:`` line of ``BASELINE/BASELINE.txt``.
 """
 
 import os
@@ -46,22 +46,21 @@ def baseline_cdo_version(baseline_txt: Path) -> str:
 
 def test_eocene_workflow_matches_baseline(tmp_path: Path) -> None:
     data = Path(DATA)
-    baseline = data / "EOCENE-BASELINE" / "eocene"
-    output = tmp_path / "EOCENE-TEST"
+    baseline = data / "BASELINE" / "eocene"
+    output = tmp_path / "OUTPUT" / "eocene"
     config = {
-        "schema": 1,
-        "paths": {
-            "input": str(data / "ECE4-DATA-V3"),
-            "output": str(output),
-            "herold": str(data / "herold-et-al-2014" / "Supp"),
-            "tmpdir": str(tmp_path / "tmp"),
+        "schema": 2,
+        "inputs": {"ece4_data": str(data / "ECE4-DATA-V3"), "herold": str(data / "herold-et-al-2014" / "Supp")},
+        "tmpdir": str(tmp_path / "tmp"),
+        "eocene": {
+            "output_dir": str(output),
+            "domain": {"from": str(data / "data" / "domain" / "PALEORCA2" / "eocene")},
         },
-        "tools": {"precomputed": {"domain": str(data / "data" / "domain" / "PALEORCA2" / "eocene")}},
     }
-    for path in (config["paths"]["input"], config["paths"]["herold"], config["tools"]["precomputed"]["domain"]):
+    for path in (*config["inputs"].values(), config["eocene"]["domain"]["from"]):
         assert Path(path).is_dir(), f"missing test data: {path}"
     assert baseline.is_dir(), f"missing test data: {baseline}"
-    expected_cdo = baseline_cdo_version(data / "EOCENE-BASELINE" / "BASELINE.txt")
+    expected_cdo = baseline_cdo_version(data / "BASELINE" / "BASELINE.txt")
     found_cdo = cdo_version()
     if found_cdo != expected_cdo:
         pytest.skip(f"cdo on PATH is {found_cdo}, the baseline was made with CDO {expected_cdo}: results would differ")
@@ -83,7 +82,7 @@ def test_eocene_workflow_matches_baseline(tmp_path: Path) -> None:
 
     # full run
     ecefast_eocene_run("--overwrite")
-    assert differences() == 0, "output differs from EOCENE-BASELINE/eocene, see the report above"
+    assert differences() == 0, "output differs from BASELINE/eocene, see the report above"
     assert yaml.safe_load((output / "provenance.yml").read_text())["steps"] == [
         "stage",
         "domain",
@@ -95,5 +94,5 @@ def test_eocene_workflow_matches_baseline(tmp_path: Path) -> None:
 
     # rerun one step on the existing output, without stage
     ecefast_eocene_run("--steps", "nemo")
-    assert differences() == 0, "output differs from EOCENE-BASELINE/eocene after '--steps nemo', see the report above"
+    assert differences() == 0, "output differs from BASELINE/eocene after '--steps nemo', see the report above"
     assert yaml.safe_load((output / "provenance.yml").read_text())["steps"] == ["nemo"]

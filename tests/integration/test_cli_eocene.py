@@ -27,15 +27,15 @@ class Dummy(ComponentStep):
 
     name = "dummy"
     needs = ["stage"]
-    reads = ["{output}/nemo/initial/woa.nc"]  # copied by stage
-    writes = ["{output}/dummy.txt"]
+    reads = ["{eocene.output_dir}/nemo/initial/woa.nc"]  # copied by stage
+    writes = ["{eocene.output_dir}/dummy.txt"]
 
     def __init__(self, output: str):
         self.output = output
 
     @classmethod
     def from_context(cls, ctx):
-        return cls(ctx.paths.output)
+        return cls(ctx.config.eocene.output_dir)
 
     def run(self):
         Path(self.output, "dummy.txt").write_text("dummy")
@@ -45,8 +45,8 @@ class NeedsMissing(Dummy):
     """Read a file that does not exist."""
 
     name = "missing"
-    reads = ["{input}/nemo/initial/woa13-levitus-L31.nc", "{herold}/topo.nc"]
-    writes = ["{output}/missing.txt"]
+    reads = ["{inputs.ece4_data}/nemo/initial/woa13-levitus-L31.nc", "{inputs.herold}/topo.nc"]
+    writes = ["{eocene.output_dir}/missing.txt"]
 
 
 @pytest.fixture
@@ -62,8 +62,9 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     config.write_text(
         yaml.safe_dump(
             {
-                "schema": 1,
-                "paths": {"input": str(data), "output": str(output), "herold": str(tmp_path / "herold")},
+                "schema": 2,
+                "inputs": {"ece4_data": str(data), "herold": str(tmp_path / "herold")},
+                "eocene": {"output_dir": str(output), "domain": {"from": str(tmp_path / "domain")}},
             }
         )
     )
@@ -95,8 +96,8 @@ def test_steps_lists_every_step_on_one_line(capsys: pytest.CaptureFixture) -> No
     assert [line.split()[0] for line in lines] == ["stage", "domain", "oasis", "oifs", "nemo", "rnfm"]
     nemo = lines[4]
     assert "needs: stage" in nemo
-    assert "{input}/nemo/initial/woa13-levitus-L31.nc" in nemo
-    assert "{output}/nemo/initial/woa13-levitus-L31_woa-pi.nc" in nemo
+    assert "{inputs.ece4_data}/nemo/initial/woa13-levitus-L31.nc" in nemo
+    assert "{eocene.output_dir}/nemo/initial/woa13-levitus-L31_woa-pi.nc" in nemo
 
 
 def test_pipeline_order() -> None:

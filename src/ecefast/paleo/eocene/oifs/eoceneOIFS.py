@@ -34,8 +34,8 @@ class EoceneOIFS(ComponentStep):
 
     The optional aerosol climatology (``eocene.oifs.aerosols``, off by default) is not declared in ``reads`` and
     ``writes``, because they cannot depend on the config: with it on, the step also reads
-    ``{herold}/herold_etal_eocene_CAM4_BAM_aerosols.nc`` and ``{input}/oifs/ifsdata/IFS_aerosol_climatology_PI.nc``
-    and writes ``{output}/oifs/ifsdata/IFS_aerosol_climatology_PI.nc``.
+    ``{inputs.herold}/herold_etal_eocene_CAM4_BAM_aerosols.nc`` and ``{inputs.ece4_data}/oifs/ifsdata/IFS_aerosol_climatology_PI.nc``
+    and writes ``{eocene.output_dir}/oifs/ifsdata/IFS_aerosol_climatology_PI.nc``.
     """
 
     name = "oifs"
@@ -43,21 +43,21 @@ class EoceneOIFS(ComponentStep):
     # initial-condition date of the ECE4-DATA tree (directory name under oifs/<resolution>/)
     STARTDATE = "19900101"
     reads = [
-        "{input}/oifs/{oifs_grid}/19900101/ICMGGECE4INIT",
-        "{input}/oifs/{oifs_grid}/19900101/ICMGGECE4INIUA",
-        "{input}/oifs/{oifs_grid}/19900101/ICMSHECE4INIT",
-        "{input}/oifs/{oifs_grid}/climate.v020/ICMCLECE4",
-        "{input}/oifs/{oifs_grid}/climate.v020/bare_soil_albedos.grb",
-        "{herold}/herold_etal_eocene_topo_1x1.nc",
-        "{herold}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc",
-        "{herold}/herold_etal_eocene_biome_1x1.nc",
+        "{inputs.ece4_data}/oifs/{oifs.grid}/19900101/ICMGGECE4INIT",
+        "{inputs.ece4_data}/oifs/{oifs.grid}/19900101/ICMGGECE4INIUA",
+        "{inputs.ece4_data}/oifs/{oifs.grid}/19900101/ICMSHECE4INIT",
+        "{inputs.ece4_data}/oifs/{oifs.grid}/climate.v020/ICMCLECE4",
+        "{inputs.ece4_data}/oifs/{oifs.grid}/climate.v020/bare_soil_albedos.grb",
+        "{inputs.herold}/herold_etal_eocene_topo_1x1.nc",
+        "{inputs.herold}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc",
+        "{inputs.herold}/herold_etal_eocene_biome_1x1.nc",
     ]
     writes = [
-        "{output}/oifs/{oifs_grid}/19900101/ICMGGECE4INIT",
-        "{output}/oifs/{oifs_grid}/19900101/ICMGGECE4INIUA",
-        "{output}/oifs/{oifs_grid}/19900101/ICMSHECE4INIT",
-        "{output}/oifs/{oifs_grid}/climate.v020/ICMCLECE4",
-        "{output}/oifs/{oifs_grid}/climate.v020/bare_soil_albedos.grb",
+        "{eocene.output_dir}/oifs/{oifs.grid}/19900101/ICMGGECE4INIT",
+        "{eocene.output_dir}/oifs/{oifs.grid}/19900101/ICMGGECE4INIUA",
+        "{eocene.output_dir}/oifs/{oifs.grid}/19900101/ICMSHECE4INIT",
+        "{eocene.output_dir}/oifs/{oifs.grid}/climate.v020/ICMCLECE4",
+        "{eocene.output_dir}/oifs/{oifs.grid}/climate.v020/bare_soil_albedos.grb",
     ]
 
     def __init__(self, idir, odir, herold, startdate, resolution="TL63L31", tmpdir=None, build_aerosols=False):
@@ -115,16 +115,17 @@ class EoceneOIFS(ComponentStep):
     @classmethod
     def from_context(cls, ctx: "Context") -> "EoceneOIFS":
         """Build the step from the run context: intermediate files go to ``{tmpdir}/oifs``."""
+        config = ctx.config
         tmpdir = None
-        if ctx.paths.tmpdir is not None:
-            tmpdir = os.path.join(ctx.paths.tmpdir, "oifs")
+        if config.tmpdir is not None:
+            tmpdir = os.path.join(config.tmpdir, "oifs")
             ctx.check_writable(tmpdir, cls.name)
         return cls(
-            idir=ctx.paths.input,
-            odir=ctx.paths.output,
-            herold=ctx.paths.herold,
+            idir=config.inputs.ece4_data,
+            odir=config.eocene.output_dir,
+            herold=config.inputs.herold,
             startdate=cls.STARTDATE,
-            resolution=ctx.grids.oifs,
+            resolution=config.oifs.grid,
             tmpdir=tmpdir,
             build_aerosols=ctx.config.eocene.oifs.aerosols,
         )

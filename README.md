@@ -51,7 +51,7 @@ ecefast eocene run -c configs/laptop.yml               # run every step
 ```text
 ecefast eocene run -c CONFIG [--steps a,b] [--dry-run] [--overwrite] [-l LEVEL]
 
--c, --config      YAML configuration file (schema 1). Required.
+-c, --config      YAML configuration file (schema 2), section 'eocene'. Required.
 --steps a,b       Comma-separated steps: stage, domain, oasis, oifs, nemo, rnfm. Default: all.
 --dry-run         Check all inputs and show the plan; write nothing.
 --overwrite       Let 'stage' replace an output directory that is not empty.
@@ -74,23 +74,29 @@ git commit, tool versions, times). Details in `docs/workflow.rst`.
 
 ## Configuration file
 
-One YAML file per machine (schema 1). Start from `configs/laptop.tmpl` (or `configs/atos.tmpl` on ECMWF Atos).
-Minimal structure for `ecefast eocene`:
+One YAML file per machine (schema 2). Start from `configs/laptop.tmpl` (or `configs/atos.tmpl` on ECMWF Atos).
+Sections follow the components: `ecefast <component> <command>` reads section `<component>.<command>`
+(`ecefast nemo domain` reads `nemo.domain`), `ecefast eocene run` reads `eocene`. Every command writes only to
+its own `output_dir`. Minimal structure for `ecefast eocene run`:
 
 ```yaml
-schema: 1
-paths:
-  input: /path/to/ECE4-DATA-V3              # EC-Earth input tree, read-only
-  output: /path/to/EOCENE-TEST              # destination tree for copied and generated files
-  herold: /path/to/herold-et-al-2014/Supp   # Herold paleo datasets, read-only
-tools:
-  precomputed:
-    domain: /path/to/domain/PALEORCA2/eocene  # domain_cfg.nc and maskutil.nc for the Eocene bathymetry
+schema: 2
+inputs:                                     # read-only, shared by every command
+  ece4_data: /path/to/ECE4-DATA-V3          # EC-Earth input tree
+  herold: /path/to/herold-et-al-2014/Supp   # Herold paleo datasets
+eocene:
+  output_dir: /path/to/OUTPUT/eocene        # destination tree for copied and generated files
+  domain:
+    from: /path/to/data/domain/PALEORCA2/eocene  # domain_cfg.nc and maskutil.nc of the Eocene bathymetry
 ```
 
-Optional sections: `grids` (`oifs: TL63L31`, `nemo: PALEORCA2`), `eocene` (`oifs.aerosols: false`,
-`oasis.constant_sst: 290.0`) and `nemo_domain` (the NEMO domain pipeline, `ecefast nemo domain -c <file>`).
-Every key is described in `docs/configuration.rst`. The old `dirs:` format is no longer read.
+Any string may refer to another value with a `{section.key}` placeholder, e.g.
+`from: "{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene"` (the output of an earlier
+`ecefast nemo domain`). Optional sections: `tmpdir`, `machine` (`name: local | atos | fake`), `oifs`
+(`grid: TL63L31`), `nemo` (`grid: PALEORCA2`, and `domain`: the NEMO domain pipeline,
+`ecefast nemo domain -c <file>`), and in `eocene`: `oifs.aerosols: false`, `oasis.constant_sst: 290.0`.
+Every key, and the schema 1 → 2 key table, is in `docs/configuration.rst`. Schema 1 files are no longer read:
+the error lists each old key with its new name.
 
 ## What `stage` copies
 
@@ -121,8 +127,9 @@ The OIFS workflow:
 
 The NEMO workflow:
 
-- installs the Eocene `domain_cfg.nc` and `maskutil.nc` into the output tree (`domain` step): the precomputed
-  ones (`tools.backend: local`), or built with the NEMO domain pipeline (`atos`, `fake`)
+- installs the Eocene `domain_cfg.nc` and `maskutil.nc` into the output tree (`domain` step), from
+  `eocene.domain.from` (e.g. the domain built on Atos); with `eocene.domain.build: true` it first builds them
+  there with the NEMO domain pipeline (needs `machine.name: atos`, or `fake` in tests)
 - creates tidal mixing forcing
 - creates geothermal heat flux forcing
 - creates ocean initial conditions
