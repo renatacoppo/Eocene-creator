@@ -9,6 +9,8 @@ a rule.
 All code, comments, docstrings, documentation, commit messages, issues and PRs are written in
 **English**.
 
+Do not exit from the main code folder unless asked by the user. 
+
 ## What this repo does
 
 Builds EC-Earth4 input data (OIFS TL63L31, NEMO PALEORCA2, OASIS, runoff-mapper) and modifies it
@@ -20,8 +22,10 @@ Herold et al. (2014) paleo datasets.
 The repo is being restructured into a single `ecefast` package
 (issue [#16](https://github.com/renatacoppo/Eocene-creator/issues/16), plan in
 [docs/refactor-plan.md](docs/refactor-plan.md)). Some rules below refer to pieces that do not
-exist yet; they are tagged **(from phase N)** and apply as soon as that phase is merged.
-Until then, follow the spirit of the rule in the current layout (`ecefast/`, `eocene/`).
+exist yet; they are tagged **(from phase N)** and apply as soon as that phase is merged into
+the `refactor` branch. Until then, follow the spirit of the rule in the current layout
+(`src/ecefast/`). Refactor work targets the `refactor` branch, not `main` (see
+[Git and pull requests](#git-and-pull-requests)).
 
 Target layout:
 
@@ -43,18 +47,24 @@ conda activate eocene
 pip install -e .                       # (from phase 1) pip install -e ".[dev,docs]"
 
 # local test data, see "Local test data" below
-ECE4_DATA_SRC=user@host:/path/to/ECE4-DATA-V3 ./get_ece4_data.sh   # moves to scripts/ in phase 1
+ECE4_DATA_SRC=user@host:/path/to/ECE4-DATA-V3 ./scripts/get_ece4_data.sh
 
 # run the Eocene workflow
-cp eocene/config.tmpl eocene/config.yml          # then set the paths; config.yml is gitignored
-eocene -c eocene/config.yml --run all --copy     # same as ./eocene/cli_eocene.py (removed in phase 4b)
-eocene -c eocene/config.yml --run nemo -l DEBUG  # one component: oifs, nemo, oasis, rnfm
-ecefast eocene run -c configs/laptop.yml [--steps nemo] [--dry-run]   # (from phase 4b) replaces the above
+cp configs/laptop.tmpl configs/laptop.yml                # then set the paths; configs/*.yml is gitignored
+ecefast eocene run -c configs/laptop.yml --overwrite     # all steps; --overwrite replaces a non-empty output
+ecefast eocene run -c configs/laptop.yml --steps nemo -l DEBUG   # some steps, on an existing output
+ecefast eocene run -c configs/laptop.yml --dry-run       # check all inputs, show the plan, write nothing
+ecefast eocene steps                                     # list the steps (needs, reads, writes)
+ecefast nemo domain -c configs/laptop.yml                # NEMO domain pipeline (section nemo.domain)
+ecefast nemo domain -c configs/laptop.yml --bathymetry eocene   # only some bathymetries
+ecefast nemo domain -c configs/laptop.yml --dry-run      # check all inputs, show the plan, write nothing
+ecefast oifs data -c configs/atos.yml                    # OIFS base data of oifs.grid (section oifs.data; Atos inputs)
 
 # checks before pushing
 ruff check --fix . && ruff format .                             # (from phase 1)
 pytest -m "unit or integration"                                 # (from phase 1)
-python scripts/compare_outputs.py EOCENE-BASELINE EOCENE-TEST   # (from phase 0)
+python scripts/compare_outputs.py BASELINE/eocene OUTPUT/eocene            # Eocene workflow
+python scripts/compare_outputs.py BASELINE/nemo-domain OUTPUT/nemo-domain  # NEMO domain pipeline
 sphinx-build -W -b html docs docs/_build/html                   # (from phase 1b)
 ```
 
@@ -64,12 +74,11 @@ All of these live at the repo root and are gitignored; never commit them.
 
 | Directory | What | How to get it |
 |---|---|---|
-| `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree, including the eORCA1 domain used by the present-day bathymetry | `get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
-| `ECE4-DATA-EOCENE/nemo/domain/PALEORCA2/` | Eocene NEMO domain | rsync from the HPC copy of ECE4-DATA-EOCENE |
-| `NEMO-COORDINATES/` | `PALEORCA2/coords_ori.nc` and `eORCA1/mesh_mask.nc`, inputs of the NEMO domain pipeline | copy from the HPC |
+| `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree, including the eORCA1 domain (grid and bathymetry of the present-day bathymetry) | `scripts/get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
+| `data/` | input of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `eocene.domain.from`) | copy from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplementary data | copy from the HPC or the paper supplement |
-| `EOCENE-TEST/` | output of your run | `eocene -c eocene/config.yml --run all --copy` |
-| `EOCENE-BASELINE/` | frozen reference output of the Eocene workflow and, in `domain/`, of the laptop part of the NEMO domain pipeline, with `BASELINE.txt` (commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
+| `OUTPUT/<command>/` | output of your runs, one folder per command (`eocene`, `nemo-domain`, `oifs-data`): each command's `output_dir` | `ecefast eocene run -c configs/laptop.yml --overwrite`, `ecefast nemo domain -c configs/laptop.yml`, `ecefast oifs data` (Atos) |
+| `BASELINE/<command>/` | frozen reference output: `eocene/` (Eocene workflow) and `nemo-domain/` (laptop part of the NEMO domain pipeline, run with `nemo.domain.output_dir` = `<main checkout>/OUTPUT/nemo-domain`, because the namelists contain absolute paths), with `BASELINE.txt` (how each was run, commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
 
 Tests that need this data use the `local_data` marker and read its location from
 `ECEFAST_TEST_DATA`; they skip when the variable is unset.
@@ -121,8 +130,8 @@ These come first; the more specific rules below follow from them.
 Keep the current naming scheme; new code follows it.
 
 - Modules and packages: lowercase `snake_case` (`subgrid_orog.py`, `utils_oifs.py`). Anything that
-  is imported must be a valid module name; hyphens only in standalone scripts
-  (`cli-domain-paleorca.py`).
+  is imported must be a valid module name; hyphens only in standalone scripts outside the
+  package.
 - Paleo component classes: `Eocene<COMPONENT>` with the component acronym in capitals
   (`EoceneOIFS`, `EoceneNEMO`, `EoceneOASIS`, `EoceneRNFM`), in a module `eocene<COMPONENT>.py`.
 - Bathymetry processors: `<Name>Bathymetry`, subclassing `BathymetryProcessor`
@@ -151,7 +160,8 @@ Keep the current naming scheme; new code follows it.
    `run()` calling the `create_*` methods.
 3. Add the class to the right `PIPELINE`, after the steps it `needs`.
 4. Unit tests for the new `create_*` methods; integration test for the step (dry run and real run
-   with the `fake` backend).
+   with the `fake` backend). Each new `reads` path needs a synthetic writer in `READ_WRITERS`
+   (`tests/synthetic.py`): the test input tree holds only declared reads.
 5. Describe it in `docs/workflow.rst` (what it reads, what it writes, why).
 6. Add a line to `CHANGELOG.rst`.
 
@@ -164,7 +174,7 @@ the docs.
 ## Scientific integrity
 
 - **Output must not change by accident.** Every refactor must reproduce the frozen baseline
-  (`EOCENE-BASELINE`), checked with `scripts/compare_outputs.py` **(from phase 0)**: same file
+  (`BASELINE/`), checked with `scripts/compare_outputs.py` **(from phase 0)**: same file
   list, NetCDF data variables equal within `rtol=1e-6` with the same names, order, dtypes and
   attributes, GRIB files identical in values, keys and message order (`grib_compare`);
   `history` and date attributes are ignored. A refactor PR that changes numbers is a bug.
@@ -180,14 +190,18 @@ the docs.
   `eocene.oifs.aerosols: false`, `eocene.oasis.constant_sst: 290.0`). Do not delete
   disabled code paths such as aerosols; switch them off in config.
 - **Vertical grid rule.** The present-day and Eocene PALEORCA2 domains must share the vertical
-  grid (`nav_lev`, `e3t_1d`). `EoceneNEMO` reads the present-day domain from the input tree on
-  purpose; do not change which domain it reads. The check in `EoceneDomain` / `verify` must fail
-  on a mismatch, never warn.
-- **CDO.** Use the most recent CDO release available on conda-forge, pinned exactly in
-  `environment.yaml`. Follow the grid naming scheme of that version (ECMWF style: `F<N>` regular
-  Gaussian, `N<N>` reduced Gaussian, e.g. `F32` for TL63); do not add version checks to support
-  old names. Upgrading CDO is its own PR: bump the pin, regenerate the baseline, list the output
-  changes in the changelog.
+  grid: the same number of levels, and `nav_lev`, `e3t_1d` equal within 1e-6 m (a tolerance for
+  floating-point rounding between DOMAINcfg builds, `VERTICAL_GRID_ATOL`). `EoceneNEMO` reads the
+  present-day domain from the input tree on purpose; do not change which domain it reads. The
+  check in `EoceneDomain` / `verify` is a hard error on a mismatch, never a warning.
+- **CDO.** CDO is not pinned and not part of `environment.yaml`: use the most recent release
+  available on each machine (Homebrew on macOS, conda-forge `cdo` on Linux and in CI, the module
+  on the HPC). `BASELINE/BASELINE.txt` records the exact CDO version of the baseline, and
+  compares are only valid with that version: a different CDO legitimately changes results (e.g.
+  the remapped bathymetries). Follow the grid naming scheme of that version (ECMWF style: `F<N>`
+  regular Gaussian, `N<N>` reduced Gaussian, e.g. `F32` for TL63); do not add version checks to
+  support old names. Upgrading the CDO used for the baseline is its own PR: regenerate the
+  baseline and list the output changes in the changelog.
 
 ## Data formats: NetCDF and GRIB
 
@@ -202,7 +216,7 @@ EC-Earth. Preserve, whenever possible:
   dates, packing type, `bitsPerValue`). Change values with ecCodes on a clone of the original
   message; avoid GRIB → NetCDF → GRIB round trips. If a round trip cannot be avoided, restore the
   metadata and message order afterwards. Existing code that already changes the message order
-  (`repack_grib_file` groups GRIB2 before GRIB1) is frozen in the baseline; do not copy that
+  (`repack_grib_file` writes all GRIB1 messages, then all GRIB2 messages) is frozen in the baseline; do not copy that
   pattern into new code.
 - When preserving something is not possible, say why in a code comment and in the PR.
 - Files created from scratch use CF-style `units`, `long_name` and, where one exists,
@@ -216,7 +230,7 @@ EC-Earth. Preserve, whenever possible:
   are generated synthetically at test time, not stored.
 - **No hardcoded paths** in code, scripts, namelist templates or tests: no `/home/...`,
   `/lus/...`, `/Users/...` or `hpcperm` paths, no host names. Paths come from config, from
-  command-line arguments or from environment variables. Local configs (`eocene/config.yml`) are
+  command-line arguments or from environment variables. Local configs (`configs/*.yml`) are
   gitignored; committed templates (`*.tmpl`) use placeholder or example paths.
 - **No secrets.** Never commit credentials, tokens, passwords, private keys, user names or ssh
   host aliases, in code, configs, notebooks (including cell outputs) or logs.
@@ -318,24 +332,39 @@ published on Read the Docs.
 
 - **Ask before adding any dependency.** It must be on conda-forge.
 - Add it to both `environment.yaml` and `pyproject.toml`.
-- Do not bump pinned versions in a non-science PR (CDO: see [Scientific integrity](#scientific-integrity)).
+- Do not bump pinned versions in a non-science PR. CDO is not pinned; changing the CDO used for the
+  baseline follows [Scientific integrity](#scientific-integrity).
 
 ## Git and pull requests
 
 - **Never commit to `main`.** Work on a branch, open a PR against
   `renatacoppo/Eocene-creator` `main`.
-- **Every PR is reviewed by the other author** (Renata or Paolo). No self-merge.
+- **Every PR to `main` is reviewed by the other author** (Renata or Paolo). No self-merge.
 - The PR description says what changed, whether output changes, and which test groups ran.
 - File moves use `git mv` so history follows the file.
-- One topic per PR. During the refactor: one phase per PR, and no feature PRs while the `src/`
-  move (phase 2) is open.
+- One topic per PR.
+
+### During the refactor: the `refactor` branch
+
+- All refactor work goes into the long-lived `refactor` branch; `main` stays frozen until the
+  refactor is done. Each task of [docs/refactor-plan.md](docs/refactor-plan.md) (wave table) is
+  one branch, created from `origin/refactor`, with one PR **against `refactor`**.
+- PRs into `refactor` may be merged by their author once CI is green and
+  `scripts/compare_outputs.py` reports 0 differences against `BASELINE/` (the PR says so).
+  Planned output changes (0.2, 5.3) are the exception: they say which files change, and the
+  baseline is regenerated right after the merge.
+- The other author reviews the final `refactor` → `main` PR. It is merged with a merge commit
+  (no squash, no rebase) so the `git mv` history is kept.
+- Bring `main` into `refactor` with `git merge`, never rebase `refactor`.
+- Parallel tasks must not touch the same files (see the wave table). While task 2.1 (the `src/`
+  move) is open, no other PR into `refactor` is open.
 
 ## Out of scope for now
 
 Do not start these without an issue agreed by both authors:
 
-- reworking the WEIGHTS driver (its namelists move as data, untouched);
-- reworking the OIFS generator (moved as-is, constants stay);
+- reworking the WEIGHTS driver (its namelists move as data; only their hardcoded paths become
+  placeholders);
 - splitting steps more finely than one per component;
 - HPC targets other than ECMWF Atos.
 

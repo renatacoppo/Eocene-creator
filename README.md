@@ -5,7 +5,7 @@ This repository provides a workflow to prepare Eocene boundary conditions for EC
 The main entry point is:
 
 ```bash
-./eocene/cli-eocene.py
+ecefast eocene run -c configs/laptop.yml
 ```
 
 ## What the CLI does
@@ -41,56 +41,71 @@ pip install -e .
 From the repository root:
 
 ```bash
-python eocene/cli-eocene.py -c eocene/config.yml --copy
+cp configs/laptop.tmpl configs/laptop.yml   # then set the paths; configs/*.yml is gitignored
+ecefast eocene run -c configs/laptop.yml --dry-run     # check all inputs, show the plan, write nothing
+ecefast eocene run -c configs/laptop.yml               # run every step
 ```
 
 ## Command-line options
 
 ```text
--c, --config   Path to the YAML configuration file. Required.
--l, --log      Logging level. Default: INFO.
--r, --run      Workflow section to run: oifs, nemo, oasis, rnfm, all. Default: all.
---copy         Copy the required input subtree to the output directory before running.
+ecefast eocene run -c CONFIG [--steps a,b] [--dry-run] [--overwrite] [-l LEVEL]
+
+-c, --config      YAML configuration file (schema 2), section 'eocene'. Required.
+--steps a,b       Comma-separated steps: stage, domain, oasis, oifs, nemo, rnfm. Default: all.
+--dry-run         Check all inputs and show the plan; write nothing.
+--overwrite       Let 'stage' replace an output directory that is not empty.
+-l, --loglevel    Logging level. Default: INFO.
+
+ecefast eocene steps   List the steps: what each needs, reads and writes.
 ```
 
 Examples:
 
 ```bash
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --copy
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --run oifs -l DEBUG
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --run nemo -l INFO
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --run rnfm
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --run all --copy
+ecefast eocene run -c configs/laptop.yml --overwrite           # rebuild everything in an existing output
+ecefast eocene run -c configs/laptop.yml --steps oifs -l DEBUG  # rerun one step on an existing output
+ecefast eocene run -c configs/laptop.yml --steps oasis,nemo
 ```
+
+A missing input stops the run before anything is written, with one error listing every missing
+file. A successful run writes `provenance.yml` into the output directory (steps, config hash,
+git commit, tool versions, times). Details in `docs/workflow.rst`.
 
 ## Configuration file
 
-The CLI expects a YAML file with a top-level `dirs` section.
-
-Minimal structure:
+One YAML file per machine (schema 2). Start from `configs/laptop.tmpl` (or `configs/atos.tmpl` on ECMWF Atos).
+Sections follow the components: `ecefast <component> <command>` reads section `<component>.<command>`
+(`ecefast nemo domain` reads `nemo.domain`), `ecefast eocene run` reads `eocene`. Every command writes only to
+its own `output_dir`. Minimal structure for `ecefast eocene run`:
 
 ```yaml
-dirs:
-  input: /path/to/ECE4-DATA-V2
-  output: /path/to/output
-  herold: /path/to/herold-data
-  domain: /path/to/nemo/domain/PALEORCA2
-  tmpdir: /path/to/tmp
+schema: 2
+inputs:                                     # read-only, shared by every command
+  ece4_data: /path/to/ECE4-DATA-V3          # EC-Earth input tree
+  herold: /path/to/herold-et-al-2014/Supp   # Herold paleo datasets
+eocene:
+  output_dir: /path/to/OUTPUT/eocene        # destination tree for copied and generated files
+  domain:
+    from: /path/to/data/domain/PALEORCA2/eocene  # domain_cfg.nc and maskutil.nc of the Eocene bathymetry
 ```
 
-Field meaning:
+Any string may refer to another value with a `{section.key}` placeholder, e.g.
+`from: "{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene"` (the output of an earlier
+`ecefast nemo domain`). Optional sections: `tmpdir`, `machine` (`name: local | atos | fake`), `oifs`
+(`grid: TL63L31`, and `data`: the OIFS generator, `ecefast oifs data -c <file>`, inputs on Atos only), `nemo` (`grid: PALEORCA2`, and `domain`: the NEMO domain pipeline,
+`ecefast nemo domain -c <file>`), and in `eocene`: `oifs.aerosols: false`, `oasis.constant_sst: 290.0`.
+Every key, and the schema 1 → 2 key table, is in `docs/configuration.rst`. Schema 1 files are no longer read:
+the error lists each old key with its new name.
 
-- `input`: source EC-Earth data tree, the one retrieved from official repo
-- `output`: destination tree where copied and generated files are written
-- `herold`: directory containing Herold paleo input datasets
-- `domain`: directory containing `domain_cfg.nc` and `maskutil.nc` modified for Eocene bathymetry
-- `tmpdir`: reserved temporary directory path (not used yet)
+## What `stage` copies
 
-A real example is available in `eocene/config.tmpl`.
+The `stage` step does not clone the full input tree. It copies only the subsets currently used by the workflow:
 
-## What `--copy` copies
-
-The copy step does not clone the full input tree. It copies only the subsets currently used by the workflow:
+- `oifs/`: `composition`, `ifsdata`, `vtables`, `rtables` and the OIFS grid (`TL63L31`)
+- `nemo/`: `cfc`, `climatology`, `initial`, `weights`
+- `oasis/<nemo grid>`
+- `cmip6-data` is symlinked, not copied
 
 ## Workflow notes
 
@@ -112,7 +127,9 @@ The OIFS workflow:
 
 The NEMO workflow:
 
-- copies `domain_cfg.nc` and `maskutil.nc` into the output tree
+- installs the Eocene `domain_cfg.nc` and `maskutil.nc` into the output tree (`domain` step), from
+  `eocene.domain.from` (e.g. the domain built on Atos); with `eocene.domain.build: true` it first builds them
+  there with the NEMO domain pipeline (needs `machine.name: atos`, or `fake` in tests)
 - creates tidal mixing forcing
 - creates geothermal heat flux forcing
 - creates ocean initial conditions

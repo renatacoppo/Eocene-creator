@@ -1,0 +1,76 @@
+# ecefast configuration, schema 2: laptop / workstation.
+# Copy to configs/laptop.yml (gitignored) and set the paths. Every key is described in docs/configuration.rst.
+# Keys shown commented out are optional; the value shown is the default.
+#
+# Sections follow the components: `ecefast <component> <command>` reads section <component>.<command>
+# (`ecefast nemo domain` -> nemo.domain), `ecefast eocene run` reads eocene. Every command writes only to its own
+# output_dir. Any string may refer to another value with a {section.key} placeholder, e.g. {inputs.herold},
+# {nemo.grid} or {nemo.domain.output_dir}.
+
+schema: 2                       # configuration schema version (required)
+
+# Read-only inputs, shared by every command (required section; both must exist)
+inputs:
+  ece4_data: /path/to/ECE4-DATA-V3        # EC-Earth4 input tree
+  herold: /path/to/herold-et-al-2014/Supp # Herold et al. (2014) supplementary data
+
+# tmpdir: null                  # scratch directory of every command (OIFS intermediate files); null: none
+
+# machine:
+#   name: local                 # where DOMAINcfg runs: local (not available), atos (ECMWF Atos) or fake (tests)
+
+# OIFS settings and commands
+# oifs:
+#   grid: TL63L31               # OIFS resolution (directory under oifs/); also the target of `ecefast oifs data`
+#   data:                       # OIFS generator (`ecefast oifs data`); its inputs (TL255L91, climate) are on Atos only
+#     output_dir: /path/to/OUTPUT/oifs-data   # see configs/atos.tmpl for the other keys
+
+# NEMO settings and commands
+nemo:
+  # grid: PALEORCA2             # NEMO grid (directory under oasis/ and nemo/domain/), also the grid the domain pipeline builds
+
+  # NEMO domain pipeline (`ecefast nemo domain`); omit if you do not run it
+  domain:
+    output_dir: /path/to/OUTPUT/nemo-domain  # only output: nemo/domain/<grid>/<name>/ (final files) and work/ (required)
+    # tools_dir: null          # NEMO tools dir holding DOMAINcfg/ (Atos); null: namelists go to output_dir/work/domaincfg
+    coords_ori: /path/to/data/PALEORCA2/coords_ori.nc   # PALEORCA2 coordinates with halo, NEMO 3.6 (required)
+    source_grid: eORCA1       # grid of the present_day bathymetry; read from {inputs.ece4_data}/nemo/domain/<source_grid>/domain_cfg.nc (required)
+    # staggering:             # staggering of the coordinate bounds, T or F
+    #   source: T             # source grid (used in setgrid)
+    #   target: T             # target grid (used in remapping)
+    minimum_depth: 30         # m; depths 0 < d < minimum_depth are raised to it (required)
+
+    # Steps to run. DOMAINcfg runs only on Atos: its steps are off on a laptop.
+    steps:
+      coordinates: true
+      bathymetry: true
+      configure_domain: true
+      domain_cfg: false          # run DOMAINcfg (Atos only)
+      generate_mask: false       # post-process domain_cfg.nc and extract maskutil.nc (needs DOMAINcfg output)
+      generate_subbasins: false  # ocean subbasin masks, every bathymetry (needs DOMAINcfg output)
+
+    # One entry per bathymetry source: name (output and namelist names), enabled, processor (BathymetryProcessor
+    # class: PROCESSORS in components/nemo/bathymetry, EOCENE_PROCESSORS in paleo/eocene/bathymetry.py) and
+    # source_file. Algorithm choices (variable, mask, remapping) live in the processor class.
+    bathymetries:
+      - name: present_day
+        enabled: true
+        processor: PresentDayBathymetry
+        source_file: "{inputs.ece4_data}/nemo/domain/eORCA1/domain_cfg.nc"
+        orca2_file: "{inputs.ece4_data}/nemo/domain/ORCA2/domain_cfg.nc"   # enables the land-sea mask comparison plot
+
+      - name: eocene
+        enabled: true
+        processor: EoceneBathymetry
+        source_file: "{inputs.herold}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc"
+
+# Eocene (DeepMIP) workflow (`ecefast eocene run`)
+eocene:
+  output_dir: /path/to/OUTPUT/eocene      # the Eocene EC-Earth tree; --overwrite replaces it (required)
+  domain:                                 # the Eocene NEMO domain the `domain` step installs (required)
+    from: /path/to/data/domain/PALEORCA2/eocene   # directory with domain_cfg.nc + maskutil.nc, here the one built on Atos
+    # build: false               # true: build it first with nemo.domain; not possible with machine.name: local
+  # oifs:
+  #   aerosols: false           # build the Herold Eocene aerosol climatology (EoceneOIFS.aerosols); off
+  # oasis:
+  #   constant_sst: 290.0       # SST (K) written everywhere in OASIS rstos.nc (value used so far, placeholder)

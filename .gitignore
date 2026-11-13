@@ -1,9 +1,10 @@
-eocene.egg-info
+*.egg-info
 dist
-__pycache__
+__pycache__/
 *.idx
 .vscode/
 eocene/*.yml
+configs/*.yml
 *.grb
 *.grib
 *.nc
@@ -12,6 +13,14 @@ eocene/*.yml
 /ECE4-DATA-V3/
 /ECE4-DATA-EOCENE/
 /herold-et-al-2014/
-/EOCENE-TEST/
+/OUTPUT/
+/BASELINE/
 /eocene_tmp/
+/data/
+# old names of OUTPUT/ and BASELINE/, until the local folders are moved
+/EOCENE-TEST/
 /EOCENE-BASELINE/
+/EOCENE-DOMAIN-TEST/
+
+# build outputs
+docs/_build/

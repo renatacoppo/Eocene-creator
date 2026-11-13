@@ -1,0 +1,213 @@
+import xarray as xr
+import numpy as np
+from ecefast.core.cdo import get_cdo
+
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+import tempfile
+from ecefast.core.grib import spectral2gaussian
+
+
+# Sanity check helper
+def plot_compare(original, modified, title):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4), subplot_kw=dict(projection=ccrs.Robinson()))
+    for ax, da, label in zip(axes, [original, modified], ["Original", "Modified"]):
+        im = da.plot(ax=ax, transform=ccrs.PlateCarree(), cmap="viridis")
+        ax.coastlines()
+        ax.set_title(label)
+        plt.colorbar(im, ax=ax, shrink=0.7)
+    plt.suptitle(title)
+    plt.show()
+
+
+def plot_before_after(
+    before: xr.DataArray,
+    after: xr.DataArray,
+    title: str = "",
+    labels: tuple[str, str] = ("Present day", "Eocene"),
+    **kwargs,
+) -> plt.Figure:
+    """Plot two 2D fields side by side with the same colour scale.
+
+    No map projection and no coastlines: present-day coastlines would be wrong on an Eocene field. Fields with
+    1D coordinates are plotted against them (lon/lat); fields on a curvilinear grid (NEMO ``y``, ``x``) are
+    plotted in index space.
+
+    Parameters
+    ----------
+    before, after : xarray.DataArray
+        The fields. Dimensions of size 1 (e.g. one time step) are dropped; what is left must be 2D.
+    title : str
+        Figure title.
+    labels : tuple of str
+        Titles of the two panels.
+    **kwargs
+        Passed to :meth:`xarray.DataArray.plot` (e.g. ``cmap``, ``vmin``, ``vmax``). By default ``vmin`` and
+        ``vmax`` span both fields.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The figure.
+
+    Raises
+    ------
+    ValueError
+        If a field is not 2D after dropping dimensions of size 1.
+    """
+    before, after = before.squeeze(drop=True), after.squeeze(drop=True)
+    for da, label in zip((before, after), labels):
+        if da.ndim != 2:
+            raise ValueError(f"plot_before_after: '{label}' field has dimensions {da.dims}, expected 2")
+    kwargs.setdefault("vmin", float(min(before.min(), after.min())))
+    kwargs.setdefault("vmax", float(max(before.max(), after.max())))
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4), layout="constrained")
+    for ax, da, label in zip(axes, (before, after), labels):
+        da.plot(ax=ax, **kwargs)
+        ax.set_title(label)
+    fig.suptitle(title)
+    return fig
+
+
+def load_grib_var(gribfile, varname, grid="r360x180"):
+    """
+    Load a GRIB variable and remap it to a regular lat-lon grid
+    suitable for plotting.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
+        outfile = tmp.name
+
+    get_cdo().remapnn(grid, input=f"-selname,{varname} {gribfile}", output=outfile, options="-f nc4")
+
+    ds = xr.open_dataset(outfile)
+
+    da = list(ds.data_vars.values())[0]
+
+    # drop time dimension if present
+    if "time" in da.dims:
+        da = da.isel(time=0)
+
+    return da
+
+
+def load_grib_var_spec(gribfile, varname, grid="r360x181"):
+    """Load a GRIB variable, gridpoint (remapped to ``grid``) or spectral (to its Gaussian grid with ``sp2gp``)."""
+    with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
+        outfile = tmp.name
+
+    selected = f"-selname,{varname} {gribfile}"
+    if any("spectral" in line for line in get_cdo().griddes(input=selected)):
+        get_cdo().sp2gp(input=selected, output=outfile, options="-f nc4")
+    else:
+        get_cdo().remapnn(grid, input=selected, output=outfile, options="-f nc4")
+
+    # decode_times=False: the steps of some EC-Earth GRIB files cannot be decoded, and plots do not need them
+    ds = xr.open_dataset(outfile, decode_times=False)
+    # sp2gp also writes lat_bnds; return the field, not the bounds
+    return next(da for name, da in ds.data_vars.items() if not name.endswith("_bnds"))
+
+
+def compare_maps(var, origfile, newfile):
+    """Plot original & modified variable on a world map."""
+    da_orig = load_grib_var_spec(origfile, var)
+    da_new = load_grib_var_spec(newfile, var)
+    proj = ccrs.PlateCarree()
+    fig, ax = plt.subplots(1, 2, figsize=(14, 5), subplot_kw={"projection": proj})
+    da_orig.plot(ax=ax[0], transform=proj)
+    ax[0].set_title(f"Original {var}")
+    ax[0].coastlines()
+    da_new.plot(ax=ax[1], transform=proj)
+    ax[1].set_title(f"Eocene {var}")
+    ax[1].coastlines()
+    plt.show()
+
+
+def compare_maps_cl(var, origfile, newfile):
+    """Plot original & modified variable on a world map with robust coordinate handling."""
+    da_orig = load_grib_var_spec(origfile, var)
+    da_new = load_grib_var_spec(newfile, var)
+
+    # Helper to fix coordinates
+    def fix_coords(da):
+        # Wrap lon from 0-360 → -180..180
+        if da.lon.max() > 180:
+            da = da.assign_coords(lon=((da.lon + 180) % 360) - 180)
+        # Sort lon
+        if not np.all(np.diff(da.lon.values) > 0):
+            da = da.sortby("lon")
+        # Flip lat if decreasing
+        if da.lat.values[0] > da.lat.values[-1]:
+            da = da.isel(lat=slice(None, None, -1))
+        return da
+
+    da_orig = fix_coords(da_orig)
+    da_new = fix_coords(da_new)
+
+    proj = ccrs.PlateCarree()
+    fig, ax = plt.subplots(1, 2, figsize=(14, 5), subplot_kw={"projection": proj})
+
+    # Select first time/level if they exist
+    def select_2d(da):
+        if "time" in da.dims:
+            da = da.isel(time=0)
+        if "level" in da.dims:
+            da = da.isel(level=0)
+        return da
+
+    da_orig_2d = select_2d(da_orig)
+    da_new_2d = select_2d(da_new)
+
+    # Force 2D plotting
+    for da, ax_, title in zip([da_orig_2d, da_new_2d], ax, ["Original", "Eocene"]):
+        da.plot.pcolormesh(ax=ax_, x="lon", y="lat", transform=proj, cmap="viridis", shading="auto")
+        ax_.set_title(f"{title} {var}")
+        ax_.coastlines()
+
+    plt.show()
+
+
+def plot_spectral_sanity(varname, file, spectral_trunc=63, grid_type="L"):
+    """
+    Quick sanity check for spectral files.
+
+    varname: name of the variable to inspect (e.g., "z")
+    file: path to GRIB file
+    spectral_trunc: spectral truncation (e.g., 63 for TL63)
+    grid_type: "L" or "CO" (linear or complete)
+    """
+
+    # Load the spectral file
+    ds = xr.open_dataset(file, engine="cfgrib")
+    if varname not in ds:
+        raise ValueError(f"Variable {varname} not found in {file}")
+    da = ds[varname]
+
+    # Inspect dimensions
+    print(f"\nVariable '{varname}' dims: {da.dims}")
+    print(da)
+
+    # Compute approximate lat/lon for sanity plotting
+    nlat = spectral2gaussian(spectral_trunc, grid_type)
+    nlon = 2 * nlat
+    lat = np.linspace(-90, 90, nlat)
+    lon = np.linspace(0, 360, nlon)
+
+    # Make a meshgrid
+    lon2d, lat2d = np.meshgrid(lon, lat)
+
+    # Simple sanity check: take first time and first level (if present)
+    data = da.isel(time=0) if "time" in da.dims else da
+    data = data.isel(level=0) if "level" in da.dims else data
+
+    # If spectral resolution > lat/lon, we just tile / truncate for visualization
+    # (this is not accurate, just for rough comparison)
+    data_plot = np.resize(data.values, (nlat, nlon))
+
+    # Plot
+    proj = ccrs.PlateCarree()
+    fig, ax = plt.subplots(figsize=(8, 4), subplot_kw={"projection": proj})
+    im = ax.pcolormesh(lon2d, lat2d, data_plot, shading="auto", cmap="viridis")
+    ax.coastlines()
+    ax.set_title(f"Sanity check: {varname}")
+    plt.colorbar(im, ax=ax, orientation="vertical", label=varname)
+    plt.show()

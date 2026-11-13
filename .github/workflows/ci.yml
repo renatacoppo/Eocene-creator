@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, refactor]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # AGENTS.md "Data safety": paths come from config, CLI arguments or environment variables.
+      # Allowlist: the OIFS generator (moved as-is, flagged for later), planning notes and the changelog that
+      # quote old paths, and AGENTS.md, which states the rule with examples.
+      - name: No hardcoded personal or HPC paths
+        # [P]ERM: the pattern must not match this file itself.
+        shell: bash
+        run: |
+          if git grep -nE '/(home|lus|ec|hpcperm|perm|Users|scratch)/|HPC[P]ERM|\$[P]ERM' -- . \
+              ':!src/ecefast/components/oifs/generator.py' ':!docs/refactor-plan.md' \
+              ':!docs/issue-refactor.md' ':!CHANGELOG.rst' ':!AGENTS.md'; then
+            echo "::error::Hardcoded paths found (see above). Take them from config, CLI arguments or env vars."
+            exit 1
+          fi
+
+      - name: Set up the environment from environment.yaml (Python 3.14, CDO from conda-forge)
+        uses: mamba-org/setup-micromamba@v3.2.1
+        with:
+          environment-file: environment.yaml
+          create-args: >-
+            python=3.14
+            cdo
+            pytest
+            pytest-cov
+            ruff
+            import-linter
+          cache-environment: true
+
+      - name: Install the package with the dev extras
+        run: pip install -e '.[dev]' --no-deps
+
+      - name: Versions
+        run: |
+          python --version
+          cdo --version 2>&1 | head -1
+          codes_info -v
+
+      - name: Lint and format check
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Import contracts (layers, independent components)
+        run: lint-imports
+
+      - name: Unit and integration tests
+        run: pytest -m "unit or integration"
