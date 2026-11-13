@@ -3,22 +3,29 @@
 ## Overview
 This workflow processes bathymetry and coordinate data to generate NEMO domain configuration files for both present-day and Eocene paleoenvironments on the PALEORCA2 grid.
 
-**Main Entry Point**: `ecefast nemo domain -c configs/laptop.yml [--bathymetry NAME ...]`
+`NEMOWorkflow` builds the NEMO domain of **one** bathymetry. Each time period runs it with its own bathymetry:
 
-**Bathymetry processors**: found by the `processor` name of each bathymetry in a plain mapping passed to
-`NEMOWorkflow` by the caller: `ecefast.components.nemo.bathymetry.PROCESSORS` (generic: `PresentDayBathymetry`)
-merged with `ecefast.paleo.eocene.bathymetry.EOCENE_PROCESSORS` (`EoceneBathymetry`). This package never imports
-`paleo`. An unknown name stops the pipeline before the first step, listing the known names.
+- present day: the `nemo` step, `ecefast present run` or `ecefast nemo run -c configs/laptop.yml [--nemo a,b]`
+- Eocene: inside the `domain` step with `eocene.nemo.domain: build`,
+  `ecefast eocene run -c configs/atos.yml` or `ecefast nemo run -c configs/atos.yml --period eocene`
+
+**Bathymetry processors**: not configured. Each period passes its own `BathymetryProcessor` subclass to
+`NEMOWorkflow`: `ecefast.periods.present.bathymetry.PresentDayBathymetry` (present day) or
+`ecefast.periods.eocene.bathymetry.EoceneBathymetry` (Eocene). This package never imports `periods`. The processor
+declares its source file as a path template (`source_file`) and holds every algorithm choice.
 
 **DOMAINcfg backend**: `NEMOWorkflow` also gets the backend of `machine.name` (`ecefast.tools.ecearth`: `atos`,
 `local`, `fake`), used by the `domain_cfg` step.
 
-**Configuration**: the `nemo.domain` section of the config file (one file per machine, see `docs/configuration.rst`):
-- `output_dir`: the only output directory (`nemo/domain/<grid>/<name>/` and `work/`)
-- `tools_dir`: NEMO tools directory holding `DOMAINcfg/` (for HPC compilation)
-- `coords_ori`: Pre-existing target grid coordinates (input)
-- Source grid: `{inputs.ece4_data}/nemo/domain/<source_grid>/domain_cfg.nc` (input tree; its horizontal grid)
-- Target grid: `nemo.grid`
+**Configuration** (one file per machine, see `docs/configuration.rst`):
+- `grids.nemo.name`: target grid (`PALEORCA2`)
+- `grids.nemo.coords_ori`: pre-existing target grid coordinates with halo (input)
+- `grids.nemo.staggering`: staggering of the target-grid bounds used in remapping (`T`)
+- `<period>.nemo.minimum_depth`, `<period>.nemo.steps`
+- present day only: `present.nemo.source_grid` (`eORCA1`) and `present.nemo.source_staggering` (`T`); the source
+  grid is `{input}/nemo/domain/<source_grid>/domain_cfg.nc` (input tree; its horizontal grid and bathymetry)
+- `machine.tmpdir`: intermediate files in `<machine.tmpdir>/<period>/nemo/`
+- `machine.atos.ecearth4_sources` (Atos): DOMAINcfg runs in its `nemo-4.2/tools/DOMAINcfg/`
 
 ## Key Parameters and Decisions
 
@@ -56,16 +63,19 @@ The workflow uses different remapping strategies based on data characteristics:
 ---
 
 ## Step 1: Environment Setup
-**YAML Key**: `nemo.domain` (one config file per machine: `configs/laptop.tmpl`, `configs/atos.tmpl`)
+**YAML Key**: `<period>.nemo`, `grids.nemo` (one config file per machine: `configs/laptop.tmpl`, `configs/atos.tmpl`)
 
-Directory structure derived from `output_dir`:
-- `{output_dir}/nemo/domain/{grid}/{name}/` - final domain_cfg, maskutil and subbasins files (as in ECE4-DATA)
-- `{output_dir}/work/coordinates/{grid}/` - coordinate bounds files
-- `{output_dir}/work/bathymetry/{grid}/` - processed bathymetry files
-- `{namelist_dir}` - DOMAINcfg namelists and raw DOMAINcfg output: `{tools_dir}/DOMAINcfg/` if
-  `tools_dir` is set (HPC), else `{output_dir}/work/domaincfg/`
+Directory structure (`{workdir}` = `<machine.tmpdir>/<period>/nemo`; `{name}` = the processor's `name`,
+`present_day` or `eocene`, suffix of the namelist and raw DOMAINcfg files):
+- `{domain_dir}` - final domain_cfg, maskutil and subbasins files: `<present.output>/nemo/domain/{grid}/` (present
+  day, as in ECE4-DATA), `<machine.tmpdir>/eocene/nemo/domain/{grid}/` (Eocene build; the `domain` step installs
+  domain_cfg.nc and maskutil.nc into `<eocene.output>/nemo/domain/{grid}/`)
+- `{workdir}/coordinates/{grid}/` - coordinate bounds files
+- `{workdir}/bathymetry/{grid}/` - processed bathymetry files
+- `{namelist_dir}` - DOMAINcfg namelists and raw DOMAINcfg output: `<machine.atos.ecearth4_sources>/nemo-4.2/tools/DOMAINcfg/`
+  with `machine.name: atos`, else `{workdir}/domaincfg/`
 
-Workflow steps controlled via `steps` flags in YAML:
+Workflow steps controlled via `<period>.nemo.steps` flags in YAML, or `--nemo a,b` for one run:
 - `coordinates`, `bathymetry`, `configure_domain`, `domain_cfg`, `generate_mask`, `generate_subbasins`
 
 ---
@@ -75,42 +85,46 @@ Workflow steps controlled via `steps` flags in YAML:
 **Method**: `NEMOWorkflow.generate_coordinates()`
 
 - Remove halo from target grid coordinates (`coords_ori`) using CDO `sethalo(-1,-1)`
-  - Output: `{output_dir}/work/coordinates/PALEORCA2/coords_halo.nc`
+  - Output: `{workdir}/coordinates/PALEORCA2/coords_halo.nc`
 - Generate coordinate bounds for both T and F staggering via `orca_bounds.py`
   - Target grid: `coords_bounds_T.nc`, `coords_bounds_F.nc` (from coords_halo.nc)
-  - Source grid: `coords_bounds_T.nc`, `coords_bounds_F.nc` (from the source `domain_cfg.nc` of the input tree)
-- Staggering selection controlled by `staggering.target` and `staggering.source`
+  - Source grid (present day only): `coords_bounds_T.nc`, `coords_bounds_F.nc` (from the source `domain_cfg.nc` of
+    the input tree)
+- Staggering selection controlled by `grids.nemo.staggering` and `present.nemo.source_staggering`
 
 ---
 
 ## Step 3: Present-Day Bathymetry Processing
-**YAML Key**: `steps.bathymetry`, `bathymetries[name=present_day]`
-**Processor**: `PresentDayBathymetry` (bathymetry/present_day.py)
+**YAML Key**: `present.nemo.steps.bathymetry`, `present.nemo.source_grid`
+**Processor**: `PresentDayBathymetry` (ecefast/periods/present/bathymetry.py)
 **Method**: `NEMOWorkflow.process_bathymetry(cfg)`
 
 ### 3a. Extract and Remap Bathymetry
-- Extract `bathy_metry` from source domain_cfg (eORCA1)
+- Extract `bathy_metry` from source domain_cfg (`{input}/nemo/domain/eORCA1/domain_cfg.nc`)
 - Apply CDO chain: `remapnn` → `sethalo(-1,-1)` → `setgrid(coords_bounds_T.nc)`
-- Output: `{output_dir}/work/bathymetry/PALEORCA2/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T.nc`
+- Output: `{workdir}/bathymetry/PALEORCA2/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T.nc`
 
 ### 3b. Apply Strait Corrections (postprocess)
-- Load corrections from `config/bathymetry_corrections.yaml` (key: `PALEORCA2_remapnn`)
+- Load corrections from `config/bathymetry_corrections.yaml`, by source grid, target grid and remap method
+  (key: `eORCA1_to_PALEORCA2_remapnn`); a source grid without corrections is a configuration error
 - **Open regions**: average neighboring ocean depths for narrow straits
 - **Close regions**: set depth to 0 (land) for regions that should be closed
 - Apply minimum depth threshold: `0 < depth < 30m` → `30m`
 - Output: `eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc`
+- Plot: `landsea_mask_comparison.png` next to it, the land-sea mask of the result and of every
+  `{input}/nemo/domain/*/domain_cfg.nc`, one panel each
 
 *Rationale*: Nearest-neighbor prevents coastal interpolation artifacts but may incorrectly close/open straits
 
 ---
 
 ## Step 4: Eocene Paleobathymetry Processing
-**YAML Key**: `steps.bathymetry`, `bathymetries[name=eocene]`
-**Processor**: `EoceneBathymetry` (ecefast/paleo/eocene/bathymetry.py)
+**YAML Key**: `eocene.nemo.steps.bathymetry` (with `eocene.nemo.domain: build`)
+**Processor**: `EoceneBathymetry` (ecefast/periods/eocene/bathymetry.py)
 **Method**: `NEMOWorkflow.process_bathymetry(cfg)`
 
 ### 4a. Extract and Remap Paleobathymetry
-- Extract `paleotopo` from Herold dataset, rename to `bathy_metry`
+- Extract `paleotopo` from Herold dataset (`{herold}/herold_etal_stddev_subgrid_etopo1_to_eocene_1x1.nc`), rename to `bathy_metry`
 - Generate land-sea mask: paleotopo < 0 (ocean) → 1, paleotopo ≥ 0 (land) → 0
 - Apply CDO chain: 
   - Invert sign (elevation → depth): `expr,'bathy_metry=-1*paleotopo'`
@@ -118,7 +132,7 @@ Workflow steps controlled via `steps` flags in YAML:
   - Remove halo: `sethalo(-1,-1)`
   - Set grid: `setgrid(coords_bounds_T.nc)` (no setgrid file needed for Eocene)
 - Apply minimum depth: `0 < depth < 30m` → `30m`
-- Output: `{output_dir}/work/bathymetry/PALEORCA2/HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc`
+- Output: `{workdir}/bathymetry/PALEORCA2/HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc`
 
 *No postprocessing*: Eocene processor does not apply strait corrections
 
@@ -132,15 +146,15 @@ Workflow steps controlled via `steps` flags in YAML:
 **Script**: `domain/namelist.py`
 
 - Read bathymetry files and extract grid dimensions automatically
-- Generate NEMO DOMAINcfg namelists via Jinja2 template (`namelist_cfg.j2`)
-- Write namelists to:
-  - HPC: `{tools_dir}/DOMAINcfg/namelist_cfg_{name}`
-  - Local: `{output_dir}/work/domaincfg/namelist_cfg_{name}`
+- Generate the NEMO DOMAINcfg namelist via Jinja2 template (`namelist_cfg.j2`)
+- Write the namelist to:
+  - Atos: `<machine.atos.ecearth4_sources>/nemo-4.2/tools/DOMAINcfg/namelist_cfg_{name}`
+  - Local: `{workdir}/domaincfg/namelist_cfg_{name}`
 - Configuration includes:
   - Bathymetry file path and variable name (`bathy_metry`)
   - Coordinates file path (`coords_halo.nc`)
   - Grid dimensions (jpiglo, jpjglo from data)
-  - Minimum depth: from `minimum_depth`
+  - Minimum depth: from `<period>.nemo.minimum_depth`
 
 ---
 
@@ -161,7 +175,8 @@ the structure of the DOMAINcfg output (tests). `atos` runs `ecefast/tools/run_do
   - Generates: `domain_cfg_{name}.nc`, `mesh_mask_{name}.nc`
   - Renames files immediately to prevent overwriting
 - Error handling: captures segfault (exit 139), validates output with CDO
-- Working directory: `{tools_dir}/DOMAINcfg/` (the `atos` backend needs `tools_dir`)
+- Working directory: `<machine.atos.ecearth4_sources>/nemo-4.2/tools/DOMAINcfg/` (the `atos` backend needs
+  `ecearth4_sources`; it also adds `oasis3-mct-5.2/arch_ecearth/lib` of it to `LD_LIBRARY_PATH`)
 
 ---
 
@@ -175,14 +190,14 @@ the structure of the DOMAINcfg output (tests). `atos` runs `ecefast/tools/run_do
 - Rename vertical dimension: `nav_lev` → `z`; `nav_lev` stays as a plain variable on `z`
 - Add PALEORCA attributes: `cn_cfg='PALEORCA'`, `nn_cfg=2`
 - Write with no `_FillValue` on any variable and `time_counter` as the unlimited dimension
-- Write to: `{output_dir}/nemo/domain/{grid}/{name}/domain_cfg.nc`
+- Write to: `{domain_dir}/domain_cfg.nc`
 
 ### 7b. Extract maskutil.nc
 - Read `mesh_mask_{name}.nc` from `{namelist_dir}`
 - Extract mask variables: `tmaskutil`, `umaskutil`, `vmaskutil`
 - Rename time dimension: `time_counter` → `t` (unlimited) and drop the `time_counter` variable
 - Replace the global attributes with `Conventions='CF-1.1'`
-- Write to: `{output_dir}/nemo/domain/{grid}/{name}/maskutil.nc`
+- Write to: `{domain_dir}/maskutil.nc`
 
 These two functions are the only writer of `domain_cfg.nc` and `maskutil.nc` (the old standalone
 `domain/mask_util.py` script, a copy of them, was removed). Tests: `tests/unit/test_nemo_postprocess.py`.
@@ -196,7 +211,7 @@ These two functions are the only writer of `domain_cfg.nc` and `maskutil.nc` (th
 **Method**: `NEMOWorkflow.generate_subbasins()`
 **Script**: `domain/subbasins.py`
 
-- Runs for every bathymetry. The polygons follow present-day geography, so a processor with
+- Runs for both periods. The polygons follow present-day geography, so a processor with
   `regional_subbasins = False` (`EoceneBathymetry`) gets the global mask only (`--global-only`, only
   `glomsk` in `subbasins.nc`); assessment and options in `notebooks/analysis/eocene-subbasins.ipynb`
 - Read `mesh_mask_{name}.nc` from `{namelist_dir}`
@@ -207,7 +222,7 @@ These two functions are the only writer of `domain_cfg.nc` and `maskutil.nc` (th
   - Indian Ocean
   - Indo-Pacific (Pacific + Indian combined)
   - Global ocean
-- Write to: `{output_dir}/nemo/domain/{grid}/{name}/subbasins.nc`
+- Write to: `{domain_dir}/subbasins.nc`
   - Variables: `atlmsk`, `pacmsk`, `indmsk`, `indpacmsk`, `glomsk` (`glomsk` only with `--global-only`)
 
 **Dependency check**: Verifies mesh_mask files exist before running
@@ -217,21 +232,21 @@ These two functions are the only writer of `domain_cfg.nc` and `maskutil.nc` (th
 ## Output Files
 
 ### Coordinate Files
-- `{output_dir}/work/coordinates/PALEORCA2/coords_halo.nc`
-- `{output_dir}/work/coordinates/PALEORCA2/coords_bounds_{T,F}.nc`
-- `{output_dir}/work/coordinates/eORCA1/coords_bounds_{T,F}.nc`
+- `{workdir}/coordinates/PALEORCA2/coords_halo.nc`
+- `{workdir}/coordinates/PALEORCA2/coords_bounds_{T,F}.nc`
+- `{workdir}/coordinates/eORCA1/coords_bounds_{T,F}.nc`
   - Contains: Grid cell corners and center points
   - Purpose: Reference grids for all remapping operations
 
 ### Bathymetry Files (Intermediate)
-- `{output_dir}/work/bathymetry/PALEORCA2/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T.nc` (pre-correction)
+- `{workdir}/bathymetry/PALEORCA2/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T.nc` (pre-correction)
   - Contains: Remapped present-day bathymetry before manual adjustments
   
-- `{output_dir}/work/bathymetry/PALEORCA2/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc` (final present-day)
+- `{workdir}/bathymetry/PALEORCA2/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc` (final present-day)
   - Contains: Present-day bathymetry with strait corrections applied
   - Used for: Present-day domain configuration
   
-- `{output_dir}/work/bathymetry/PALEORCA2/HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc` (final Eocene)
+- `{workdir}/bathymetry/PALEORCA2/HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc` (final Eocene)
   - Contains: Paleobathymetry remapped and processed
   - Used for: Eocene domain configuration
 
@@ -248,12 +263,12 @@ These two functions are the only writer of `domain_cfg.nc` and `maskutil.nc` (th
   - Processed and moved to final location in Step 7
 
 ### Final Domain Output
-- `{output_dir}/nemo/domain/PALEORCA2/{name}/domain_cfg.nc`
+- `{domain_dir}/domain_cfg.nc`
   - Complete NEMO domain configuration (coordinates, scales, metrics)
   - Modified: vertical dimension renamed, PALEORCA attributes added
-- `{output_dir}/nemo/domain/PALEORCA2/{name}/maskutil.nc`
+- `{domain_dir}/maskutil.nc`
   - Binary masks: tmaskutil, umaskutil, vmaskutil
   - Purpose: Used throughout NEMO simulation for masking operations
-- `{output_dir}/nemo/domain/PALEORCA2/{name}/subbasins.nc`
+- `{domain_dir}/subbasins.nc`
   - Ocean basin masks: Atlantic, Pacific, Indian, Indo-Pacific, Global (Global only for paleo bathymetries)
   - Purpose: Regional diagnostics and analysis

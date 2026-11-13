@@ -7,9 +7,10 @@ written next to the namelists; the pipeline then post-processes them. The backen
 
 ``atos``
     ECMWF Atos: loads the HPC modules of ``machine.atos.profile`` (``hpc_profiles.yaml``), compiles DOMAINcfg if
-    needed and runs it, through ``run_domain_cfg.sh``.
+    needed and runs it, through ``run_domain_cfg.sh``. DOMAINcfg and the OASIS libraries come from the EC-Earth4
+    source tree ``machine.atos.ecearth4_sources``.
 ``local``
-    A laptop: DOMAINcfg is not available. Use the domain built on Atos (``eocene.domain.from``).
+    A laptop: DOMAINcfg is not available. Use the domain built on Atos (``eocene.nemo.domain``).
 ``fake``
     Tests and CI: writes small but valid files with the structure of the DOMAINcfg output, without running
     DOMAINcfg. See :class:`FakeBackend` for what it does not do.
@@ -28,13 +29,17 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
-from ecefast.core.config import Config, load_yaml
+from ecefast.core.config import Config, ConfigError, load_yaml
 from ecefast.core.io import atomic_write
 
 logger = logging.getLogger(__name__)
 
 PROFILES_FILE = Path(__file__).with_name("hpc_profiles.yaml")
 RUN_DOMAIN_CFG = Path(__file__).with_name("run_domain_cfg.sh")
+# Folders of the EC-Earth4 source tree (machine.atos.ecearth4_sources), as laid out by EC-Earth 4: the OASIS
+# libraries added to LD_LIBRARY_PATH, and the NEMO tools folder holding DOMAINcfg/.
+OASIS_LIB_SUBDIR = "oasis3-mct-5.2/arch_ecearth/lib"
+NEMO_TOOLS_SUBDIR = "nemo-4.2/tools"
 
 # Earth rotation rate (rad/s), 2*pi/rsiday with the sidereal day rsiday = 86164 s, as in NEMO (phycst.F90)
 OMEGA = 2.0 * np.pi / 86164.0
@@ -87,6 +92,14 @@ class EcEarthTools:
         """Whether DOMAINcfg can run with this backend on this machine."""
         raise NotImplementedError
 
+    def namelist_dir(self) -> str | None:
+        """Where DOMAINcfg needs its namelists, or ``None``: then the domain pipeline chooses (in ``tmpdir``)."""
+        return None
+
+    def required_paths(self) -> list[str]:
+        """Files or directories the backend needs to run DOMAINcfg (checked before the pipeline starts)."""
+        return []
+
     def domaincfg(self, namelist_dir: str | os.PathLike, names: list[str]) -> dict[str, tuple[Path, Path]]:
         """Run DOMAINcfg once per bathymetry.
 
@@ -115,16 +128,35 @@ class AtosBackend(EcEarthTools):
     ----------
     profile : str
         HPC profile of ``hpc_profiles.yaml`` whose modules are loaded.
-    oasis_lib_dir : str, optional
-        Directory added to ``LD_LIBRARY_PATH`` (OASIS libraries of the EC-Earth build), if needed.
+    ecearth4_sources : str, optional
+        EC-Earth4 source tree: DOMAINcfg runs in its ``nemo-4.2/tools/DOMAINcfg/`` and its
+        ``oasis3-mct-5.2/arch_ecearth/lib`` is added to ``LD_LIBRARY_PATH``. Needed to run DOMAINcfg.
     """
 
     name = "atos"
 
-    def __init__(self, profile: str = "atos", oasis_lib_dir: str | None = None):
+    def __init__(self, profile: str = "atos", ecearth4_sources: str | None = None):
         hpc_modules(profile)  # fail early on an unknown profile
         self.profile = profile
-        self.oasis_lib_dir = oasis_lib_dir
+        self.ecearth4_sources = ecearth4_sources
+
+    def namelist_dir(self) -> str | None:
+        """``<ecearth4_sources>/nemo-4.2/tools/DOMAINcfg``: DOMAINcfg is compiled and runs there."""
+        if self.ecearth4_sources is None:
+            return None
+        return os.path.join(self.ecearth4_sources, NEMO_TOOLS_SUBDIR, "DOMAINcfg")
+
+    def required_paths(self) -> list[str]:
+        """The NEMO tools folder and the OASIS libraries of ``ecearth4_sources``.
+
+        Raises
+        ------
+        ConfigError
+            If ``ecearth4_sources`` is not set.
+        """
+        if self.ecearth4_sources is None:
+            raise ConfigError("machine.atos.ecearth4_sources is not set: the atos backend needs it to run DOMAINcfg")
+        return [os.path.join(self.ecearth4_sources, sub) for sub in (NEMO_TOOLS_SUBDIR, OASIS_LIB_SUBDIR)]
 
     def available(self) -> bool:
         """True where an environment-modules system is set up (``MODULESHOME``), as on Atos."""
@@ -135,7 +167,7 @@ class AtosBackend(EcEarthTools):
 
         The arguments are the NEMO tools directory and the bathymetry names, as the domain pipeline passes them.
         The environment tells the script which Python reads the profile (this interpreter), which profile, and
-        the optional OASIS library directory.
+        the OASIS library directory of ``ecearth4_sources``.
         """
         namelist_dir = Path(namelist_dir)
         if namelist_dir.name != "DOMAINcfg":
@@ -145,8 +177,8 @@ class AtosBackend(EcEarthTools):
             )
         cmd = ["bash", str(RUN_DOMAIN_CFG), str(namelist_dir.parent), *names]
         env = {**os.environ, "ECEFAST_PYTHON": sys.executable, "ECEFAST_HPC_PROFILE": self.profile}
-        if self.oasis_lib_dir:
-            env["ECEFAST_OASIS_LIB_DIR"] = self.oasis_lib_dir
+        if self.ecearth4_sources:
+            env["ECEFAST_OASIS_LIB_DIR"] = os.path.join(self.ecearth4_sources, OASIS_LIB_SUBDIR)
         return cmd, env
 
     def domaincfg(self, namelist_dir: str | os.PathLike, names: list[str]) -> dict[str, tuple[Path, Path]]:
@@ -173,8 +205,8 @@ class LocalBackend(EcEarthTools):
         """Raise: DOMAINcfg cannot run locally."""
         raise RuntimeError(
             "DOMAINcfg cannot run with 'machine.name: local'. Use the domain built on Atos: point "
-            "eocene.domain.from at it (build: false), which the Eocene 'domain' step installs; or run the domain "
-            "pipeline on Atos with machine.name: atos."
+            "eocene.nemo.domain at it, which the Eocene 'domain' step installs; or run the domain pipeline on Atos "
+            "with machine.name: atos."
         )
 
 
@@ -380,7 +412,7 @@ def get_backend(config: Config) -> EcEarthTools:
     """
     machine = config.machine
     if machine.name == "atos":
-        return AtosBackend(profile=machine.atos.profile, oasis_lib_dir=machine.atos.oasis_lib_dir)
+        return AtosBackend(profile=machine.atos.profile, ecearth4_sources=machine.atos.ecearth4_sources)
     if machine.name == "local":
         return LocalBackend()
     if machine.name == "fake":

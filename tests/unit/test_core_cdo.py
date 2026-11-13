@@ -25,16 +25,16 @@ def test_get_cdo_returns_one_shared_instance(monkeypatch: pytest.MonkeyPatch) ->
 # Modules that used to create a Cdo() at import time.
 CDO_MODULES = [
     "ecefast.cli.main",
-    "ecefast.paleo.eocene.pipeline",
+    "ecefast.periods.eocene.pipeline",
     "ecefast.components.nemo.domain.pipeline",
     "ecefast.components.oifs.generator",
-    "ecefast.paleo.eocene.oifs.albedo",
-    "ecefast.paleo.eocene.oifs.eoceneOIFS",
-    "ecefast.paleo.eocene.oifs.subgrid_orog",
-    "ecefast.paleo.eocene.oifs.fields",
-    "ecefast.paleo.eocene.oifs.vegetation",
-    "ecefast.paleo.eocene.nemo.eoceneNEMO",
-    "ecefast.paleo.eocene.plots.helper_functions",
+    "ecefast.periods.eocene.oifs.albedo",
+    "ecefast.periods.eocene.oifs.eoceneOIFS",
+    "ecefast.periods.eocene.oifs.subgrid_orog",
+    "ecefast.periods.eocene.oifs.fields",
+    "ecefast.periods.eocene.oifs.vegetation",
+    "ecefast.periods.eocene.nemo.eoceneNEMO",
+    "ecefast.periods.eocene.plots.helper_functions",
 ]
 
 IMPORT_WITHOUT_SUBPROCESS = """

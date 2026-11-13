@@ -33,8 +33,8 @@ Target layout:
 src/ecefast/
   core/          config, logging, workspace, io, cdo, grib, ComponentStep, runner  (no internal deps)
   tools/         EC-Earth binaries and HPC modules: ecearth backends               (imports core)
-  components/    oifs/ nemo/ oasis/ rnfm/                                    (imports core, tools)
-  paleo/eocene/  Eocene steps, EoceneBathymetry, PIPELINE                    (imports components)
+  components/    oifs/ nemo/ oasis/ rnfm/: tools that know no period         (imports core, tools)
+  periods/       present/ eocene/: steps, bathymetry, PIPELINE of each period (imports components)
   cli/           argument parsing only                                       (imports everything)
 ```
 
@@ -54,17 +54,18 @@ cp configs/laptop.tmpl configs/laptop.yml                # then set the paths; c
 ecefast eocene run -c configs/laptop.yml --overwrite     # all steps; --overwrite replaces a non-empty output
 ecefast eocene run -c configs/laptop.yml --steps nemo -l DEBUG   # some steps, on an existing output
 ecefast eocene run -c configs/laptop.yml --dry-run       # check all inputs, show the plan, write nothing
-ecefast eocene steps                                     # list the steps (needs, reads, writes)
-ecefast nemo domain -c configs/laptop.yml                # NEMO domain pipeline (section nemo.domain)
-ecefast nemo domain -c configs/laptop.yml --bathymetry eocene   # only some bathymetries
-ecefast nemo domain -c configs/laptop.yml --dry-run      # check all inputs, show the plan, write nothing
-ecefast oifs data -c configs/atos.yml                    # OIFS base data of oifs.grid (section oifs.data; Atos inputs)
+ecefast eocene steps                                     # list the steps (component, needs, reads, writes)
+ecefast nemo run -c configs/laptop.yml                   # present-day NEMO domain (section present.nemo)
+ecefast nemo run -c configs/laptop.yml --nemo coordinates,bathymetry   # only some domain steps
+ecefast nemo run -c configs/atos.yml --period eocene     # NEMO steps of the Eocene period (domain, nemo)
+ecefast oifs run -c configs/atos.yml                     # OIFS base data of grids.oifs (section present.oifs; Atos inputs)
+ecefast present run -c configs/atos.yml                  # every present-day step
 
 # checks before pushing
 ruff check --fix . && ruff format .                             # (from phase 1)
 pytest -m "unit or integration"                                 # (from phase 1)
 python scripts/compare_outputs.py BASELINE/eocene OUTPUT/eocene            # Eocene workflow
-python scripts/compare_outputs.py BASELINE/nemo-domain OUTPUT/nemo-domain  # NEMO domain pipeline
+python scripts/compare_outputs.py BASELINE/present <machine.tmpdir>/present/nemo   # present-day domain, laptop part
 sphinx-build -W -b html docs docs/_build/html                   # (from phase 1b)
 ```
 
@@ -75,10 +76,10 @@ All of these live at the repo root and are gitignored; never commit them.
 | Directory | What | How to get it |
 |---|---|---|
 | `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree, including the eORCA1 domain (grid and bathymetry of the present-day bathymetry) | `scripts/get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
-| `data/` | input of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `eocene.domain.from`) | copy from the HPC |
+| `data/` | input of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `eocene.nemo.domain`) | copy from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplementary data | copy from the HPC or the paper supplement |
-| `OUTPUT/<command>/` | output of your runs, one folder per command (`eocene`, `nemo-domain`, `oifs-data`): each command's `output_dir` | `ecefast eocene run -c configs/laptop.yml --overwrite`, `ecefast nemo domain -c configs/laptop.yml`, `ecefast oifs data` (Atos) |
-| `BASELINE/<command>/` | frozen reference output: `eocene/` (Eocene workflow) and `nemo-domain/` (laptop part of the NEMO domain pipeline, run with `nemo.domain.output_dir` = `<main checkout>/OUTPUT/nemo-domain`, because the namelists contain absolute paths), with `BASELINE.txt` (how each was run, commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
+| `OUTPUT/<period>/` | output of your runs, one folder per period (`present`, `eocene`): each period's `output` | `ecefast eocene run -c configs/laptop.yml --overwrite`, `ecefast nemo run -c configs/laptop.yml`, `ecefast oifs run` (Atos) |
+| `BASELINE/<period>/` | frozen reference output: `eocene/` (Eocene workflow) and `present/` (intermediate files of the laptop part of the present-day domain pipeline, `<machine.tmpdir>/present/nemo`; its namelist holds absolute paths), with `BASELINE.txt` (how each was run, commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
 
 Tests that need this data use the `local_data` marker and read its location from
 `ECEFAST_TEST_DATA`; they skip when the variable is unset.
@@ -105,19 +106,24 @@ These come first; the more specific rules below follow from them.
 
 ## Architecture rules
 
-- **Layers** go one way: `core` → `tools` → `components` → `paleo` → `cli`. A module may only
+- **Layers** go one way: `core` → `tools` → `components` → `periods` → `cli`. A module may only
   import from layers to its left. Enforced by import-linter **(from phase 5)**.
+- **Time periods and components are separate axes.** A component (`components/`) is *how*: tools
+  that know nothing about a period. A period (`periods/present`, `periods/eocene`) is *what*: its
+  data, choices and output tree, with one config section per period. Periods do not import each
+  other; a paleo period depends on the present day only through its config (`eocene.input`).
 - **Components do not import each other.** If OIFS and NEMO need the same helper, it belongs in
   `core` or `tools`.
-- **Steps** are classes that subclass `ComponentStep` **(from phase 4a)** and declare `name`, `needs`,
-  `reads`, `writes`, `from_context()` and `run()`. Keep the signatures and logic of `__init__` and
+- **Steps** are classes that subclass `ComponentStep` **(from phase 4a)** and declare `name`, `component`,
+  `needs`, `reads`, `writes`, `from_context()` and `run()`. Keep the signatures and logic of `__init__` and
   the `create_*` methods; the step is a thin wrapper. The only change inside `create_*` is writing
   through the atomic-write helper in `core`. A pipeline is an ordered list of step classes. Do not
   introduce decorator- or lambda-based step registration.
 - **`reads` and `writes` are the truth.** A step reads only the paths it declares in `reads` and
   writes only the paths in `writes`. No hidden file access inside `create_*`.
-- **Bathymetries** are registered by name in the NEMO bathymetry registry; paleo-specific ones
-  (e.g. `EoceneBathymetry`) live in `paleo/`, never in `components/nemo`.
+- **Bathymetries** belong to a period: `PresentDayBathymetry` in `periods/present`, `EoceneBathymetry`
+  in `periods/eocene`, never in `components/nemo`. Each declares its source file; the period's
+  pipeline passes it to the domain pipeline (no registry by name).
 - **External tools** (DOMAINcfg, OASIS lib, HPC modules) are reached only through
   `tools.ecearth` and its backends `atos`, `local`, `fake`. No direct `subprocess` calls to
   EC-Earth binaries elsewhere.
@@ -132,8 +138,10 @@ Keep the current naming scheme; new code follows it.
 - Modules and packages: lowercase `snake_case` (`subgrid_orog.py`, `utils_oifs.py`). Anything that
   is imported must be a valid module name; hyphens only in standalone scripts outside the
   package.
-- Paleo component classes: `Eocene<COMPONENT>` with the component acronym in capitals
-  (`EoceneOIFS`, `EoceneNEMO`, `EoceneOASIS`, `EoceneRNFM`), in a module `eocene<COMPONENT>.py`.
+- Period step classes: `<Period><COMPONENT>` with the component acronym in capitals
+  (`EoceneOIFS`, `EoceneNEMO`, `EoceneOASIS`, `EoceneRNFM` in modules `eocene<COMPONENT>.py`;
+  `PresentOIFS`, `PresentNEMO` in `periods/present/pipeline.py`).
+- Time periods in config and CLI: `present`, `eocene` (sections and `ecefast <period> run`).
 - Bathymetry processors: `<Name>Bathymetry`, subclassing `BathymetryProcessor`
   (`PresentDayBathymetry`, `EoceneBathymetry`).
 - Component short names in config and CLI: `oifs`, `nemo`, `oasis`, `rnfm`.
@@ -156,7 +164,7 @@ Keep the current naming scheme; new code follows it.
 ### Adding a step
 
 1. Copy the closest existing step and rename it following [Naming](#naming).
-2. Declare `name`, `needs`, `reads`, `writes`; implement `from_context()` and `run()`, with
+2. Declare `name`, `component`, `needs`, `reads`, `writes`; implement `from_context()` and `run()`, with
    `run()` calling the `create_*` methods.
 3. Add the class to the right `PIPELINE`, after the steps it `needs`.
 4. Unit tests for the new `create_*` methods; integration test for the step (dry run and real run
@@ -225,7 +233,7 @@ EC-Earth. Preserve, whenever possible:
 ## Data safety
 
 - **The input tree is read-only.** Never write, move or delete anything under the configured
-  `input` (ECE4-DATA-V3) or `herold` directories. Write only to `output` and `tmpdir`.
+  `input` (ECE4-DATA-V3) or `herold` directories. Write only to `output` and `machine.tmpdir`.
 - **No data in git.** Never commit `.nc`, `.grb`, `.grib` or other large binaries. Test fixtures
   are generated synthetically at test time, not stored.
 - **No hardcoded paths** in code, scripts, namelist templates or tests: no `/home/...`,

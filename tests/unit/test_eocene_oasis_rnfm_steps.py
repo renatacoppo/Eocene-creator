@@ -8,9 +8,9 @@ import xarray as xr
 
 from ecefast.core.config import EoceneOASIS as EoceneOASISOptions
 from ecefast.core.workspace import Context
-from ecefast.paleo.eocene.oasis.eoceneOASIS import EoceneOASIS
-from ecefast.paleo.eocene.rnfm import eoceneRNFM
-from ecefast.paleo.eocene.rnfm.eoceneRNFM import EoceneRNFM, create_basin_data
+from ecefast.periods.eocene.oasis.eoceneOASIS import EoceneOASIS
+from ecefast.periods.eocene.rnfm import eoceneRNFM
+from ecefast.periods.eocene.rnfm.eoceneRNFM import EoceneRNFM, create_basin_data
 from synthetic import make_config
 
 pytestmark = pytest.mark.unit
@@ -20,9 +20,9 @@ ICE_VARS = ["OIceFrc", "OIceTck", "OSnwTck", "O_AlbIce", "O_TepIce"]
 
 @pytest.fixture
 def ctx(tmp_path: Path) -> Context:
-    config = make_config(tmp_path, tmpdir=str(tmp_path / "tmp"))
+    config = make_config(tmp_path)
     config.eocene.oasis = EoceneOASISOptions(constant_sst=280.5)
-    return Context(config)
+    return Context(config, "eocene")
 
 
 def write_rstos(path: Path) -> None:
@@ -36,28 +36,28 @@ def write_rstos(path: Path) -> None:
 
 
 def test_oasis_paths_expand(ctx: Context) -> None:
-    root = Path(ctx.config.inputs.ece4_data).parent
+    root = Path(ctx.section.input).parent
     assert [ctx.expand(t) for t in EoceneOASIS.reads] == [str(root / "input/oasis/PALEORCA2/rstos.nc")]
     assert [ctx.expand(t) for t in EoceneOASIS.writes] == [str(root / "out/oasis/PALEORCA2/rstos.nc")]
-    assert EoceneOASIS.name == "oasis" and EoceneOASIS.needs == ["stage"]
+    assert (EoceneOASIS.name, EoceneOASIS.component, EoceneOASIS.needs) == ("oasis", "oasis", ["stage"])
 
 
 def test_rnfm_paths_expand(ctx: Context) -> None:
-    root = Path(ctx.config.inputs.ece4_data).parent
+    root = Path(ctx.section.input).parent
     assert [ctx.expand(t) for t in EoceneRNFM.reads] == [
         str(root / "herold/herold_etal_eocene_runoff_1x1.nc"),
         str(root / "input/runoff-mapper/runoff_maps.nc"),
     ]
     assert [ctx.expand(t) for t in EoceneRNFM.writes] == [str(root / "out/runoff-mapper/runoff_maps.nc")]
-    assert EoceneRNFM.name == "rnfm" and EoceneRNFM.needs == ["stage"]
+    assert (EoceneRNFM.name, EoceneRNFM.component, EoceneRNFM.needs) == ("rnfm", "rnfm", ["stage"])
 
 
 def test_oasis_from_context(ctx: Context) -> None:
-    Path(ctx.config.inputs.ece4_data).mkdir()
+    Path(ctx.section.input).mkdir()
     step = EoceneOASIS.from_context(ctx)
     assert (step.idir, step.odir, step.nemo_resolution) == (
-        ctx.config.inputs.ece4_data,
-        ctx.config.eocene.output_dir,
+        ctx.section.input,
+        ctx.section.output,
         "PALEORCA2",
     )
     assert step.constant_sst == 280.5
@@ -66,9 +66,9 @@ def test_oasis_from_context(ctx: Context) -> None:
 def test_rnfm_from_context(ctx: Context) -> None:
     step = EoceneRNFM.from_context(ctx)
     assert (step.idir, step.odir, step.herold) == (
-        ctx.config.inputs.ece4_data,
-        ctx.config.eocene.output_dir,
-        ctx.config.inputs.herold,
+        ctx.section.input,
+        ctx.section.output,
+        ctx.section.herold,
     )
 
 
@@ -77,7 +77,7 @@ def test_rnfm_from_context(ctx: Context) -> None:
 
 def test_oasis_run_writes_rstos(ctx: Context) -> None:
     write_rstos(Path(ctx.expand(EoceneOASIS.reads[0])))
-    Path(ctx.config.eocene.output_dir).mkdir()
+    Path(ctx.section.output).mkdir()
     EoceneOASIS.from_context(ctx).run()
     out_file = Path(ctx.expand(EoceneOASIS.writes[0]))
     with xr.open_dataset(out_file) as out:

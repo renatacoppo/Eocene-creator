@@ -14,10 +14,10 @@ import yaml
 
 from ecefast import __version__
 from ecefast.cli.main import main
-from ecefast.core import provenance
+from ecefast.core import provenance, runner, workspace
 from ecefast.core.steps import ComponentStep
 from ecefast.core.workspace import Stage
-from ecefast.paleo.eocene import pipeline
+from ecefast.periods.eocene import pipeline
 
 pytestmark = pytest.mark.integration
 
@@ -27,15 +27,15 @@ class Dummy(ComponentStep):
 
     name = "dummy"
     needs = ["stage"]
-    reads = ["{eocene.output_dir}/nemo/initial/woa.nc"]  # copied by stage
-    writes = ["{eocene.output_dir}/dummy.txt"]
+    reads = ["{output}/nemo/initial/woa.nc"]  # copied by stage
+    writes = ["{output}/dummy.txt"]
 
     def __init__(self, output: str):
         self.output = output
 
     @classmethod
     def from_context(cls, ctx):
-        return cls(ctx.config.eocene.output_dir)
+        return cls(ctx.section.output)
 
     def run(self):
         Path(self.output, "dummy.txt").write_text("dummy")
@@ -45,8 +45,8 @@ class NeedsMissing(Dummy):
     """Read a file that does not exist."""
 
     name = "missing"
-    reads = ["{inputs.ece4_data}/nemo/initial/woa13-levitus-L31.nc", "{inputs.herold}/topo.nc"]
-    writes = ["{eocene.output_dir}/missing.txt"]
+    reads = ["{input}/nemo/initial/woa13-levitus-L31.nc", "{herold}/topo.nc"]
+    writes = ["{output}/missing.txt"]
 
 
 @pytest.fixture
@@ -63,13 +63,19 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
         yaml.safe_dump(
             {
                 "schema": 2,
-                "inputs": {"ece4_data": str(data), "herold": str(tmp_path / "herold")},
-                "eocene": {"output_dir": str(output), "domain": {"from": str(tmp_path / "domain")}},
+                "machine": {"tmpdir": str(tmp_path / "tmp")},
+                "eocene": {
+                    "input": str(data),
+                    "herold": str(tmp_path / "herold"),
+                    "output": str(output),
+                    "nemo": {"domain": str(tmp_path / "domain"), "minimum_depth": 30},
+                },
             }
         )
     )
     monkeypatch.setattr(pipeline, "PIPELINE", [Stage, Dummy])
-    monkeypatch.setattr(pipeline, "cdo_version", lambda: "9.9.9")
+    monkeypatch.setattr(runner, "cdo_version", lambda: "9.9.9")
+    monkeypatch.setattr(workspace, "OVERWRITE_PAUSE", 0)
     return {"config": str(config), "output": output}
 
 
@@ -95,9 +101,10 @@ def test_steps_lists_every_step_on_one_line(capsys: pytest.CaptureFixture) -> No
     lines = capsys.readouterr().out.strip().splitlines()
     assert [line.split()[0] for line in lines] == ["stage", "domain", "oasis", "oifs", "nemo", "rnfm"]
     nemo = lines[4]
+    assert "component: nemo" in nemo and "component: -" in lines[0]
     assert "needs: stage" in nemo
-    assert "{inputs.ece4_data}/nemo/initial/woa13-levitus-L31.nc" in nemo
-    assert "{eocene.output_dir}/nemo/initial/woa13-levitus-L31_woa-pi.nc" in nemo
+    assert "{input}/nemo/initial/woa13-levitus-L31.nc" in nemo
+    assert "{output}/nemo/initial/woa13-levitus-L31_woa-pi.nc" in nemo
 
 
 def test_pipeline_order() -> None:
@@ -158,6 +165,7 @@ def test_stage_refuses_non_empty_output_without_overwrite(tree: dict, log) -> No
     run("-c", tree["config"], "--overwrite")
     assert not (out / "old.txt").exists()
     assert (out / "dummy.txt").exists()
+    assert f"Step 'stage' (--overwrite) replaces {out}. Starting in 0 s, Ctrl-C to stop." in log.text
 
 
 def test_stage_accepts_empty_output(tree: dict) -> None:
@@ -189,6 +197,25 @@ def test_unknown_step_exits(tree: dict, log) -> None:
         run("-c", tree["config"], "--steps", "dummy,nope")
     assert exit_info.value.code != 0
     assert "Unknown step(s): nope" in log.text
+
+
+def test_component_run_selects_its_steps(tree: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``ecefast <component> run --period eocene`` runs that component's steps of the Eocene pipeline."""
+    monkeypatch.setattr(Dummy, "component", "rnfm")
+    run("-c", tree["config"])
+    (tree["output"] / "dummy.txt").unlink()
+    main(["rnfm", "run", "-c", tree["config"], "--period", "eocene"])
+    assert (tree["output"] / "dummy.txt").exists()
+    assert yaml.safe_load((tree["output"] / "provenance.yml").read_text())["steps"] == ["dummy"]
+
+
+def test_eocene_needs_its_herold_folder(tree: dict, log) -> None:
+    raw = yaml.safe_load(Path(tree["config"]).read_text())
+    raw["eocene"]["herold"] = "/nowhere"
+    Path(tree["config"]).write_text(yaml.safe_dump(raw))
+    with pytest.raises(SystemExit):
+        run("-c", tree["config"])
+    assert "'eocene.herold' is not a directory: /nowhere" in log.text
 
 
 def test_bad_config_exits(tmp_path: Path, log) -> None:

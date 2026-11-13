@@ -5,13 +5,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 import xarray as xr
-import yaml
 
-from ecefast.core.config import ConfigError, load_config
 from ecefast.core.steps import PipelineError
 from ecefast.core.workspace import Context
-from ecefast.paleo.eocene.nemo.domain import EoceneDomain, check_vertical_grid
-from ecefast.paleo.eocene.nemo.eoceneNEMO import EoceneNEMO
+from ecefast.periods.eocene.nemo.domain import EoceneDomain, check_vertical_grid
+from ecefast.periods.eocene.nemo.eoceneNEMO import EoceneNEMO
 from synthetic import make_config
 
 pytestmark = pytest.mark.unit
@@ -77,7 +75,7 @@ def test_vertical_grid_millimetre_difference_fails(variable: str) -> None:
 
 @pytest.fixture
 def ctx(tmp_path: Path) -> Context:
-    return Context(make_config(tmp_path, tmpdir=str(tmp_path / "tmp")))
+    return Context(make_config(tmp_path), "eocene")
 
 
 def test_nemo_does_not_need_domain() -> None:
@@ -87,10 +85,10 @@ def test_nemo_does_not_need_domain() -> None:
 
 @pytest.mark.parametrize("step", [EoceneNEMO, EoceneDomain])
 def test_writes_under_output(step, ctx: Context) -> None:
-    output = ctx.config.eocene.output_dir + "/"
+    output = ctx.section.output + "/"
     assert step.writes
     for template in step.writes:
-        assert template.startswith("{eocene.output_dir}/")
+        assert template.startswith("{output}/")
         assert ctx.expand(template).startswith(output)
         ctx.check_writable(ctx.expand(template), step.name)
 
@@ -106,10 +104,10 @@ def test_nemo_writes_both_ocean_initial_states() -> None:
 
 def make_domain_tree(ctx: Context, eocene_levels: int) -> None:
     """Present-day domain in the input tree, precomputed Eocene domain with ``eocene_levels`` levels."""
-    present_dir = Path(ctx.expand("{inputs.ece4_data}/nemo/domain/{nemo.grid}"))
+    present_dir = Path(ctx.expand("{input}/nemo/domain/{grids.nemo.name}"))
     present_dir.mkdir(parents=True)
     vertical_grid(31).to_netcdf(present_dir / "domain_cfg.nc")
-    precomputed = Path(ctx.config.eocene.domain.from_)
+    precomputed = Path(ctx.config.eocene.nemo.domain)
     precomputed.mkdir()
     vertical_grid(eocene_levels).to_netcdf(precomputed / "domain_cfg.nc")
     xr.Dataset({"tmask": ("z", np.ones(eocene_levels))}).to_netcdf(precomputed / "maskutil.nc")
@@ -120,7 +118,7 @@ def test_domain_step_installs_and_checks(ctx: Context) -> None:
     EoceneDomain.from_context(ctx).run()
     for template in EoceneDomain.writes:
         installed = Path(ctx.expand(template))
-        assert installed.read_bytes() == (Path(ctx.config.eocene.domain.from_) / installed.name).read_bytes()
+        assert installed.read_bytes() == (Path(ctx.config.eocene.nemo.domain) / installed.name).read_bytes()
 
 
 def test_domain_step_fails_on_mismatch(ctx: Context) -> None:
@@ -130,19 +128,23 @@ def test_domain_step_fails_on_mismatch(ctx: Context) -> None:
 
 
 def test_domain_step_needs_the_domain_files(ctx: Context) -> None:
-    with pytest.raises(PipelineError, match=r"missing in eocene.domain.from .*domain_cfg.nc, maskutil.nc"):
+    with pytest.raises(PipelineError, match=r"missing in eocene.nemo.domain .*domain_cfg.nc, maskutil.nc"):
         EoceneDomain.from_context(ctx)
 
 
-def test_domain_build_needs_a_machine_with_domaincfg(tmp_path: Path) -> None:
-    """``eocene.domain.build: true`` with ``machine.name: local`` is refused when the config is read."""
-    for name in ("input", "herold"):
-        (tmp_path / name).mkdir()
-    raw = {
-        "schema": 2,
-        "inputs": {"ece4_data": str(tmp_path / "input"), "herold": str(tmp_path / "herold")},
-        "eocene": {"output_dir": str(tmp_path / "out"), "domain": {"from": str(tmp_path / "d"), "build": True}},
-    }
-    (tmp_path / "config.yml").write_text(yaml.safe_dump(raw))
-    with pytest.raises(ConfigError, match="'eocene.domain.build: true'.*'machine.name: local'"):
-        load_config(tmp_path / "config.yml")
+def test_nemo_reads_the_grid_of_the_config() -> None:
+    """The NEMO grid name comes from grids.nemo.name, not hardcoded (except ORCA2, the woa-pi reference mask)."""
+    templates = EoceneNEMO.reads + EoceneNEMO.writes
+    assert not [t for t in templates if "PALEORCA2" in t]
+    assert "{input}/nemo/domain/ORCA2/domain_cfg.nc" in EoceneNEMO.reads
+
+
+def test_from_context_passes_the_grid(ctx: Context) -> None:
+    ctx.config.grids.nemo.name = "ORCA2"
+    step = EoceneNEMO.from_context(ctx)
+    assert step.nemo_grid == "ORCA2"
+    assert (step.herold_folder, step.input_folder, step.output_folder) == (
+        ctx.section.herold,
+        ctx.section.input,
+        ctx.section.output,
+    )

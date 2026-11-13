@@ -30,12 +30,12 @@ from oifs_helpers import (
     spectral_coefficients,
 )
 
-from ecefast.paleo.eocene.oifs.eoceneOIFS import EoceneOIFS
+from ecefast.periods.eocene.oifs.eoceneOIFS import EoceneOIFS
 
 pytestmark = [pytest.mark.unit, needs_grib_tools]
 
 RESOLUTION = "TL63L31"
-STARTDATE = EoceneOIFS.STARTDATE
+STARTDATE = "19900101"  # grids.oifs.startdate default
 
 ALBEDO = ["al", "aluvp", "aluvd", "alnip", "alnid"]
 ALBEDO_DIRECT = ["aluvpi", "aluvpv", "aluvpg", "alnipi", "alnipv", "alnipg"]

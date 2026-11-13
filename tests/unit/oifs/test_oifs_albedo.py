@@ -1,4 +1,4 @@
-"""Unit tests for ``paleo.eocene.oifs.albedo.albedo`` on tiny hand-made grids.
+"""Unit tests for ``periods.eocene.oifs.albedo.albedo`` on tiny hand-made grids.
 
 Expected values follow the code: each variable is replaced by its zonal mean over present-day land (latitudes with
 no land take the value of the nearest latitude), polar bands are filled with the mean of a nearby band, then the
@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from ecefast.paleo.eocene.oifs.albedo import albedo
+from ecefast.periods.eocene.oifs.albedo import albedo
 
 pytestmark = pytest.mark.unit
 

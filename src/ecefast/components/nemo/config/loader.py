@@ -3,7 +3,7 @@
 import logging
 import os
 
-from ecefast.core.config import load_yaml
+from ecefast.core.config import ConfigError, load_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ def load_bathymetry_corrections():
     """Load bathymetry corrections configuration from YAML.
 
     Returns:
-        dict: Corrections config organized by grid_remap_key (e.g. 'PALEORCA2_remapnn')
+        dict: Corrections config organized by <source>_to_<target>_<remap> key (e.g. 'eORCA1_to_PALEORCA2_remapnn')
     """
     return load_yaml(os.path.join(_CONFIG_DIR, "bathymetry_corrections.yaml"))
 
@@ -33,13 +33,14 @@ def _convert_cell_indices(y_start, y_end, x_start, x_end):
     return (y_idx, x_idx)
 
 
-def get_corrections_for_grid(target_grid, remap_method):
-    """Get strait corrections for a specific grid+remap combination.
+def get_corrections_for_grid(source_grid, target_grid, remap_method):
+    """Get strait corrections for a specific source grid + target grid + remap combination.
 
     Returns the corrections in the native Python format (dictionaries of region names
     to lists of (y_idx, x_idx) tuples where idx can be int or slice).
 
     Args:
+        source_grid (str): Source grid of the bathymetry (e.g. 'eORCA1')
         target_grid (str): Target grid name (e.g. 'PALEORCA2')
         remap_method (str): Remap method (e.g. 'remapnn')
 
@@ -47,17 +48,17 @@ def get_corrections_for_grid(target_grid, remap_method):
         tuple: (open_regions_dict, close_regions_dict)
 
     Raises:
-        ValueError: If corrections not defined for this grid+remap combination
+        ConfigError: If corrections are not defined for this source+target+remap combination
     """
     corrections = load_bathymetry_corrections()
-    key = f"{target_grid}_{remap_method}"
+    key = f"{source_grid}_to_{target_grid}_{remap_method}"
 
     if key not in corrections:
         available = ", ".join(corrections.keys())
-        raise ValueError(
+        raise ConfigError(
             f"No strait corrections defined for '{key}' "
-            f"(grid='{target_grid}', remap='{remap_method}'). "
-            f"Available: {available}. "
+            f"(source grid '{source_grid}', target grid '{target_grid}', remap '{remap_method}'), so the "
+            f"present-day bathymetry cannot be built from this source grid. Available: {available}. "
             f"Define corrections in {os.path.basename(_CONFIG_DIR)}/bathymetry_corrections.yaml"
         )
 

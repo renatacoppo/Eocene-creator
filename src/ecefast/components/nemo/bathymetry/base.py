@@ -44,6 +44,11 @@ class BathymetryProcessor:
 
     Class-level attributes (override in subclasses)
     -----------------------------------------------
+    name          : str   — suffix of the DOMAINcfg namelist and raw output files (``namelist_cfg_<name>``)
+    source_file   : str   — path template of the source file, expanded in the running period
+                            (e.g. ``{herold}/file.nc``, ``{input}/nemo/domain/{nemo.source_grid}/domain_cfg.nc``)
+    has_source_grid : bool — the source is on a NEMO grid of the input tree (``<period>.nemo.source_grid``),
+                            whose cell bounds the coordinates step makes
     variable      : str   — variable name in the source NetCDF
     rename_to     : str | None — rename variable to this before processing
     setgrid       : str | None — CDO grid description file for source
@@ -54,6 +59,9 @@ class BathymetryProcessor:
                     (present-day polygons); False: the global mask only
     """
 
+    name: str = ""
+    source_file: str = ""
+    has_source_grid: bool = False
     variable = None
     rename_to = None
     setgrid = None
@@ -66,7 +74,7 @@ class BathymetryProcessor:
         """
         Parameters
         ----------
-        cfg    : dict   — YAML entry for this bathymetry (name, source_file, etc.)
+        cfg    : dict   — this bathymetry: name, source_file (expanded)
         paths  : dict   — resolved workflow paths (bathydir, coordsdir, …)
         grids  : dict   — target/source grid names and staggering
         params : dict   — workflow parameters (minimum_depth, …)

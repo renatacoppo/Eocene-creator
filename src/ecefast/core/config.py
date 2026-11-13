@@ -1,18 +1,22 @@
 """Read and validate the ``ecefast`` configuration file (schema 2).
 
-One YAML file per machine holds everything. Sections follow the components and the commands:
-``ecefast <component> <command>`` reads section ``<component>.<command>`` (``ecefast nemo domain`` reads
-``nemo.domain``), ``ecefast eocene run`` reads ``eocene``. Every command writes only to its own ``output_dir``.
+One YAML file per machine holds everything. Sections follow the **time periods**: ``machine`` (where the tools
+run and where intermediate files go), ``grids`` (the model resolution, shared by every period), then one section
+per period, ``present`` and ``eocene``. Each period has ``input`` (the EC-Earth tree it starts from, read-only),
+``output`` (the tree it makes) and one subsection per component (``oifs``, ``nemo``, ...); datasets of a period
+have their own key (``eocene.herold``).
 
 Any string value may refer to another value of the file with a ``{section.key}`` placeholder, e.g.
-``"{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene"``; defaults count as values. The steps' ``reads``
-and ``writes`` use the same placeholders (:meth:`Config.expand`).
+``"{present.input}"``; defaults count as values. The steps' ``reads`` and ``writes`` use the same placeholders,
+plus the keys of the running period without the period name (``{input}``, ``{output}``, ``{herold}``,
+``{nemo.source_grid}``), see :meth:`ecefast.core.workspace.Context.expand`.
 
 Each section is a small dataclass; :func:`load_config` checks the keys, resolves the placeholders and returns a
 :class:`Config`. See ``docs/configuration.rst`` and the templates in ``configs/``.
 """
 
 import dataclasses
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,12 +32,7 @@ class ConfigError(ValueError):
     """The configuration file is missing, unreadable or does not match the schema."""
 
 
-@dataclass
-class Inputs:
-    """Read-only input directories, shared by every command."""
-
-    ece4_data: str
-    herold: str
+# --- machine --------------------------------------------------------------------------------------------------------
 
 
 @dataclass
@@ -41,20 +40,54 @@ class Atos:
     """Options of the ``atos`` machine (DOMAINcfg on ECMWF Atos)."""
 
     profile: str = "atos"
-    oasis_lib_dir: str | None = None
+    # EC-Earth4 source tree: the atos backend finds the OASIS libraries and NEMO DOMAINcfg in it
+    ecearth4_sources: str | None = None
 
 
 @dataclass
 class Machine:
-    """Where the EC-Earth tools (DOMAINcfg) run: ``local``, ``atos`` or ``fake`` (tests)."""
+    """Where the EC-Earth tools (DOMAINcfg) run (``local``, ``atos`` or ``fake``), and the scratch directory."""
 
+    tmpdir: str
     name: str = "local"
     atos: Atos = field(default_factory=Atos)
 
 
+# --- grids ----------------------------------------------------------------------------------------------------------
+
+
+@dataclass
+class OIFSGrid:
+    """The OIFS resolution and the dated folders of its files, as in ECE4-DATA (``oifs/<name>/<startdate>/``)."""
+
+    name: str = "TL63L31"
+    startdate: str = "19900101"  # initial-state date of the ECE4-DATA tree (folder name)
+    climate_version: str = "climate.v020"  # climate files version: climate.v020 for cy48, v015 for cy43
+
+
+@dataclass
+class NemoGrid:
+    """The NEMO grid, and what the domain pipeline needs to build a domain on it."""
+
+    name: str = "PALEORCA2"
+    coords_ori: str | None = None  # coordinates with halo (NEMO 3.6); read when a domain is built
+    staggering: str = "T"  # staggering of the target-grid coordinate bounds used in remapping
+
+
+@dataclass
+class Grids:
+    """The model resolution, the same for every period."""
+
+    oifs: OIFSGrid = field(default_factory=OIFSGrid)
+    nemo: NemoGrid = field(default_factory=NemoGrid)
+
+
+# --- steps ----------------------------------------------------------------------------------------------------------
+
+
 @dataclass
 class OIFSDataSteps:
-    """Steps of ``ecefast oifs data``: today's defaults of the OIFS generator."""
+    """Steps of the OIFS generator: today's defaults of the original script."""
 
     spectral: bool = True
     gridpoint: bool = True
@@ -62,15 +95,27 @@ class OIFSDataSteps:
 
 
 @dataclass
-class OIFSData:
-    """OIFS generator (``ecefast oifs data``): base data of ``oifs.grid`` made from ``source_grid``."""
+class DomainSteps:
+    """Steps of the NEMO domain pipeline, in run order. DOMAINcfg and the steps after it need ``atos`` or ``fake``."""
 
-    output_dir: str
+    coordinates: bool = True
+    bathymetry: bool = True
+    configure_domain: bool = True
+    domain_cfg: bool = True
+    generate_mask: bool = True
+    generate_subbasins: bool = True
+
+
+# --- present --------------------------------------------------------------------------------------------------------
+
+
+@dataclass
+class PresentOIFS:
+    """The OIFS generator: the present-day base data of ``grids.oifs`` made from ``source_grid``."""
+
     # Defaults: the values of the original generator script (Atos, cy48). A finer source is better in
     # principle; TL255L91 because of the remapcon issue noted there.
     source_grid: str = "TL255L91"
-    startdate: str = "19900101"
-    climate_version: str = "climate.v020"  # climate files version: climate.v020 for cy48, v015 for cy43
     climate_dir: str | None = None
     precomputed_climate_dir: str | None = None
     vertical_grids_dir: str | None = None
@@ -78,49 +123,35 @@ class OIFSData:
 
 
 @dataclass
-class OIFS:
-    """OIFS settings and commands."""
+class PresentNEMO:
+    """The present-day NEMO domain: bathymetry of ``{input}/nemo/domain/<source_grid>/domain_cfg.nc``."""
 
-    grid: str = "TL63L31"
-    data: OIFSData | None = None
-
-
-@dataclass
-class Staggering:
-    """Staggering of the coordinate bounds of the source and target grids (``T`` or ``F``)."""
-
-    source: str = "T"
-    target: str = "T"
-
-
-@dataclass
-class NemoDomain:
-    """NEMO domain pipeline (``ecefast nemo domain``)."""
-
-    output_dir: str
-    coords_ori: str
-    source_grid: str
     minimum_depth: float
-    steps: dict[str, bool]
-    bathymetries: list[dict[str, Any]]
-    tools_dir: str | None = None
-    staggering: Staggering = field(default_factory=Staggering)
+    source_grid: str = "eORCA1"
+    source_staggering: str = "T"  # staggering of the source-grid coordinate bounds (used in setgrid)
+    steps: DomainSteps = field(default_factory=DomainSteps)
 
 
 @dataclass
-class Nemo:
-    """NEMO settings and commands."""
+class Present:
+    """The present-day period: what is built on the present-day EC-Earth tree."""
 
-    grid: str = "PALEORCA2"
-    domain: NemoDomain | None = None
+    input: str
+    output: str
+    oifs: PresentOIFS | None = None
+    nemo: PresentNEMO | None = None
+
+
+# --- eocene ---------------------------------------------------------------------------------------------------------
 
 
 @dataclass
-class EoceneDomain:
-    """The Eocene NEMO domain installed by the ``domain`` step of ``ecefast eocene run``."""
+class EoceneNEMO:
+    """Eocene NEMO options: where the Eocene domain comes from, and how it is built."""
 
-    from_: str = field(metadata={"key": "from"})
-    build: bool = False
+    domain: str  # "build", or a directory holding domain_cfg.nc and maskutil.nc
+    minimum_depth: float
+    steps: DomainSteps = field(default_factory=DomainSteps)
 
 
 @dataclass
@@ -141,12 +172,17 @@ class EoceneOASIS:
 
 @dataclass
 class Eocene:
-    """Eocene (DeepMIP) workflow (``ecefast eocene run``)."""
+    """The Eocene (DeepMIP) period: the present-day tree modified with the Herold et al. (2014) data."""
 
-    output_dir: str
-    domain: EoceneDomain
+    input: str
+    herold: str
+    output: str
+    nemo: EoceneNEMO
     oifs: EoceneOIFS = field(default_factory=EoceneOIFS)
     oasis: EoceneOASIS = field(default_factory=EoceneOASIS)
+
+
+# --- the file -------------------------------------------------------------------------------------------------------
 
 
 @dataclass
@@ -154,15 +190,13 @@ class Config:
     """A validated configuration file, with every placeholder resolved."""
 
     file: str
-    inputs: Inputs
-    tmpdir: str | None = None
-    machine: Machine = field(default_factory=Machine)
-    oifs: OIFS = field(default_factory=OIFS)
-    nemo: Nemo = field(default_factory=Nemo)
+    machine: Machine
+    grids: Grids = field(default_factory=Grids)
+    present: Present | None = None
     eocene: Eocene | None = None
 
     def lookup(self, name: str) -> Any:
-        """Value of the dotted key ``name`` (e.g. ``nemo.domain.output_dir``).
+        """Value of the dotted key ``name`` (e.g. ``present.output``).
 
         Raises
         ------
@@ -177,7 +211,7 @@ class Config:
         Parameters
         ----------
         template : str
-            Text with placeholders, e.g. ``"{inputs.ece4_data}/oasis/{nemo.grid}/rstos.nc"``.
+            Text with placeholders, e.g. ``"{present.input}/oasis/{grids.nemo.name}/rstos.nc"``.
 
         Returns
         -------
@@ -191,50 +225,98 @@ class Config:
         """
         return PLACEHOLDER.sub(lambda m: str(self.lookup(m.group(1))), template)
 
+    def period(self, name: str) -> Present | Eocene:
+        """The section of period ``name``.
 
+        Raises
+        ------
+        ConfigError
+            If ``name`` is not a period or the file has no section for it.
+        """
+        if name not in PERIODS:
+            raise ConfigError(f"Unknown period {name!r} (known: {', '.join(PERIODS)})")
+        section = getattr(self, name)
+        if section is None:
+            raise ConfigError(f"{self.file}: this command needs a '{name}' section")
+        return section
+
+    def read_only_roots(self) -> dict[str, str]:
+        """The read-only directories of every period in the file, by key (``present.input``, ``eocene.herold``)."""
+        roots = {}
+        for period in PERIODS:
+            section = getattr(self, period)
+            for key in READ_ONLY_KEYS.get(period, ()):
+                if section is not None:
+                    roots[f"{period}.{key}"] = getattr(section, key)
+        return roots
+
+    def check_inputs(self, period: str) -> None:
+        """Check that the read-only directories of ``period`` exist.
+
+        Raises
+        ------
+        ConfigError
+            Naming the first key whose directory does not exist.
+        """
+        section = self.period(period)
+        for key in READ_ONLY_KEYS[period]:
+            path = getattr(section, key)
+            if not Path(path).is_dir():
+                raise ConfigError(f"{self.file}: '{period}.{key}' is not a directory: {path}")
+
+
+PERIODS = ("present", "eocene")
+# the read-only directories of each period
+READ_ONLY_KEYS = {"present": ("input",), "eocene": ("input", "herold")}
+# the components of each period that have configurable steps (``--oifs a,b`` and ``--nemo c,d``)
+STEP_SECTIONS = {("present", "oifs"), ("present", "nemo"), ("eocene", "nemo")}
 BACKENDS = ("atos", "local", "fake")
-NEMO_DOMAIN_STEPS = (
-    "coordinates",
-    "bathymetry",
-    "configure_domain",
-    "domain_cfg",
-    "generate_mask",
-    "generate_subbasins",
-)
+NEMO_DOMAIN_STEPS = tuple(f.name for f in dataclasses.fields(DomainSteps))
+OIFS_DATA_STEPS = tuple(f.name for f in dataclasses.fields(OIFSDataSteps))
 STAGGERING_OPTIONS = ("T", "F")
+# the value of eocene.nemo.domain that builds the domain
+BUILD = "build"
 # the top-level sections, and the sections whose values are themselves sections
-SECTIONS = {"inputs": Inputs, "machine": Machine, "oifs": OIFS, "nemo": Nemo, "eocene": Eocene}
+SECTIONS = {"machine": Machine, "grids": Grids, "present": Present, "eocene": Eocene}
 NESTED = {
     "machine": {"atos": Atos},
-    "oifs": {"data": OIFSData},
-    "oifs.data": {"steps": OIFSDataSteps},
-    "nemo": {"domain": NemoDomain},
-    "nemo.domain": {"staggering": Staggering},
-    "eocene": {"domain": EoceneDomain, "oifs": EoceneOIFS, "oasis": EoceneOASIS},
+    "grids": {"oifs": OIFSGrid, "nemo": NemoGrid},
+    "present": {"oifs": PresentOIFS, "nemo": PresentNEMO},
+    "present.oifs": {"steps": OIFSDataSteps},
+    "present.nemo": {"steps": DomainSteps},
+    "eocene": {"nemo": EoceneNEMO, "oifs": EoceneOIFS, "oasis": EoceneOASIS},
+    "eocene.nemo": {"steps": DomainSteps},
 }
 # a placeholder: {name} or {section.key}, names are Python identifiers
 PLACEHOLDER = re.compile(r"\{([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\}")
 
-# Schema 1 keys and their schema 2 names, shown when a schema 1 file is read.
+# Keys of earlier layouts and their names now, shown when an old file is read.
 SCHEMA_1_KEYS = {
-    "paths.input": "inputs.ece4_data",
-    "paths.herold": "inputs.herold",
-    "paths.output": "eocene.output_dir",
-    "paths.tmpdir": "tmpdir",
+    "paths.input": 'present.input (and eocene.input: "{present.input}")',
+    "paths.herold": "eocene.herold",
+    "paths.output": "eocene.output",
+    "paths.tmpdir": "machine.tmpdir",
     "tools.backend": "machine.name",
     "tools.atos": "machine.atos",
-    "tools.precomputed.domain": "eocene.domain.from (and eocene.domain.build: false)",
-    "grids.oifs": "oifs.grid",
-    "grids.nemo": "nemo.grid",
-    "nemo_domain": "nemo.domain",
-    "nemo_domain.domaincfg_dir": "nemo.domain.tools_dir",
-    "nemo_domain.grids.target": "nemo.grid",
-    "nemo_domain.grids.source": "nemo.domain.source_grid",
-    "nemo_domain.grids.staggering_source": "nemo.domain.staggering.source",
-    "nemo_domain.grids.staggering_target": "nemo.domain.staggering.target",
-    "nemo_domain.parameters.minimum_depth": "nemo.domain.minimum_depth",
-    "nemo_domain.aliases": "removed: use {section.key} placeholders",
-    "{input}, {herold}, {output} placeholders": "{inputs.ece4_data}, {inputs.herold}, {eocene.output_dir}",
+    "tools.precomputed.domain": "eocene.nemo.domain",
+    "grids.oifs": "grids.oifs.name",
+    "grids.nemo": "grids.nemo.name",
+    "nemo_domain": "present.nemo (present-day domain), eocene.nemo (Eocene domain), grids.nemo",
+    "{input}, {herold}, {output} placeholders": "{present.input}, {eocene.herold}, {eocene.output}",
+}
+COMPONENT_LAYOUT_KEYS = {
+    "inputs.ece4_data": 'present.input (and eocene.input: "{present.input}")',
+    "inputs.herold": "eocene.herold",
+    "tmpdir": "machine.tmpdir (required)",
+    "machine.atos.oasis_lib_dir": "machine.atos.ecearth4_sources",
+    "oifs.grid": "grids.oifs.name",
+    "oifs.data": "present.oifs (output: present.output, startdate and climate_version: grids.oifs)",
+    "nemo.grid": "grids.nemo.name",
+    "nemo.domain": "present.nemo and eocene.nemo (coords_ori and staggering.target: grids.nemo)",
+    "nemo.domain.tools_dir": "machine.atos.ecearth4_sources",
+    "nemo.domain.bathymetries": "removed: each period uses its own bathymetry",
+    "eocene.output_dir": "eocene.output",
+    "eocene.domain": "eocene.nemo.domain: build, or the directory of the domain",
 }
 
 
@@ -269,16 +351,11 @@ def load_yaml(path: str | Path) -> Any:
     return data
 
 
-def _key(f: dataclasses.Field) -> str:
-    """Name of a dataclass field in the YAML file (``from_`` is ``from``)."""
-    return f.metadata.get("key", f.name)
-
-
 def _build(cls: type, raw: Any, where: str, file: str) -> Any:
     """Build the dataclass ``cls`` from the mapping ``raw``, rejecting unknown and missing keys."""
     if not isinstance(raw, dict):
         raise ConfigError(f"{file}: '{where}' must be a mapping, got {type(raw).__name__}")
-    fields = {_key(f): f for f in dataclasses.fields(cls)}
+    fields = {f.name: f for f in dataclasses.fields(cls)}
     unknown = sorted(set(raw) - set(fields))
     if unknown:
         raise ConfigError(f"{file}: unknown key(s) in '{where}': {', '.join(unknown)}")
@@ -291,8 +368,7 @@ def _build(cls: type, raw: Any, where: str, file: str) -> Any:
         raise ConfigError(f"{file}: missing key(s) in '{where}': {', '.join(f'{where}.{m}' for m in missing)}")
     nested = NESTED.get(where, {})
     values = {
-        fields[k].name: _build(nested[k], v, f"{where}.{k}", file) if k in nested and v is not None else v
-        for k, v in raw.items()
+        k: _build(nested[k], v, f"{where}.{k}", file) if k in nested and v is not None else v for k, v in raw.items()
     }
     return cls(**values)
 
@@ -300,7 +376,7 @@ def _build(cls: type, raw: Any, where: str, file: str) -> Any:
 def _to_dict(obj: Any) -> Any:
     """A dataclass tree as nested dicts with the YAML key names."""
     if dataclasses.is_dataclass(obj):
-        return {_key(f): _to_dict(getattr(obj, f.name)) for f in dataclasses.fields(obj) if f.name != "file"}
+        return {f.name: _to_dict(getattr(obj, f.name)) for f in dataclasses.fields(obj) if f.name != "file"}
     if isinstance(obj, list):
         return [_to_dict(v) for v in obj]
     if isinstance(obj, dict):
@@ -320,6 +396,16 @@ def _lookup(values: dict, name: str, file: str) -> Any:
     if isinstance(value, (dict, list)):
         raise ConfigError(f"{file}: placeholder {{{name}}} refers to a section, not a value")
     return value
+
+
+def has_key(values: dict, name: str) -> bool:
+    """Whether the dotted key ``name`` exists in the nested dicts ``values`` (set or not)."""
+    value: Any = values
+    for part in name.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return False
+        value = value[part]
+    return True
 
 
 def resolve_placeholders(values: dict, file: str = "config") -> dict:
@@ -377,82 +463,118 @@ def _check_type(value: Any, expected: type | tuple[type, ...], key: str, file: s
         raise ConfigError(f"{file}: '{key}' must be {names}, got {value!r}")
 
 
-def _validate(config: Config) -> None:
-    """Check values: types, existing read-only directories, allowed choices."""
-    file = config.file
-    for name in ("ece4_data", "herold"):
-        path = getattr(config.inputs, name)
-        _check_type(path, str, f"inputs.{name}", file)
-        if not Path(path).is_dir():
-            raise ConfigError(f"{file}: 'inputs.{name}' is not a directory: {path}")
-    _check_type(config.tmpdir, (str, type(None)), "tmpdir", file)
-    if config.machine.name not in BACKENDS:
-        raise ConfigError(f"{file}: 'machine.name' must be one of {', '.join(BACKENDS)}, got {config.machine.name!r}")
-    _check_type(config.machine.atos.profile, str, "machine.atos.profile", file)
-    _check_type(config.machine.atos.oasis_lib_dir, (str, type(None)), "machine.atos.oasis_lib_dir", file)
-    _check_type(config.oifs.grid, str, "oifs.grid", file)
-    data = config.oifs.data
-    if data is not None:
-        for name in ("output_dir", "source_grid", "startdate", "climate_version"):
-            _check_type(getattr(data, name), str, f"oifs.data.{name}", file)
-        for name in ("climate_dir", "precomputed_climate_dir", "vertical_grids_dir"):
-            _check_type(getattr(data, name), (str, type(None)), f"oifs.data.{name}", file)
-        for name in ("spectral", "gridpoint", "boundary"):
-            _check_type(getattr(data.steps, name), bool, f"oifs.data.steps.{name}", file)
-    _check_type(config.nemo.grid, str, "nemo.grid", file)
+def _check_steps(steps: Any, key: str, file: str) -> None:
+    for f in dataclasses.fields(steps):
+        _check_type(getattr(steps, f.name), bool, f"{key}.{f.name}", file)
 
-    domain = config.nemo.domain
-    if domain is not None:
-        for name in ("output_dir", "coords_ori", "source_grid"):
-            _check_type(getattr(domain, name), str, f"nemo.domain.{name}", file)
-        _check_type(domain.tools_dir, (str, type(None)), "nemo.domain.tools_dir", file)
-        _check_type(domain.minimum_depth, (int, float), "nemo.domain.minimum_depth", file)
-        _check_type(domain.steps, dict, "nemo.domain.steps", file)
-        _check_type(domain.bathymetries, list, "nemo.domain.bathymetries", file)
-        for name in ("source", "target"):
-            value = getattr(domain.staggering, name)
-            if value not in STAGGERING_OPTIONS:
-                raise ConfigError(f"{file}: 'nemo.domain.staggering.{name}' must be T or F, got {value!r}")
-        unknown = sorted(set(domain.steps) - set(NEMO_DOMAIN_STEPS))
-        if unknown:
-            raise ConfigError(
-                f"{file}: unknown step(s) in 'nemo.domain.steps': {', '.join(unknown)} "
-                f"(known: {', '.join(NEMO_DOMAIN_STEPS)})"
-            )
+
+def _inside(path: str, root: str) -> bool:
+    """``path`` is ``root`` or lies inside it (paths need not exist)."""
+    path, root = os.path.realpath(path), os.path.realpath(root)
+    return path == root or path.startswith(root + os.sep)
+
+
+def _validate(config: Config) -> None:
+    """Check values: types, allowed choices, where ``tmpdir`` may be. Directories are checked per period."""
+    file = config.file
+    machine = config.machine
+    _check_type(machine.tmpdir, str, "machine.tmpdir", file)
+    if machine.name not in BACKENDS:
+        raise ConfigError(f"{file}: 'machine.name' must be one of {', '.join(BACKENDS)}, got {machine.name!r}")
+    _check_type(machine.atos.profile, str, "machine.atos.profile", file)
+    _check_type(machine.atos.ecearth4_sources, (str, type(None)), "machine.atos.ecearth4_sources", file)
+
+    for name in ("name", "startdate", "climate_version"):
+        _check_type(getattr(config.grids.oifs, name), str, f"grids.oifs.{name}", file)
+    _check_type(config.grids.nemo.name, str, "grids.nemo.name", file)
+    _check_type(config.grids.nemo.coords_ori, (str, type(None)), "grids.nemo.coords_ori", file)
+
+    staggering = {"grids.nemo.staggering": config.grids.nemo.staggering}
+    present = config.present
+    if present is not None:
+        for name in ("input", "output"):
+            _check_type(getattr(present, name), str, f"present.{name}", file)
+        if present.oifs is not None:
+            _check_type(present.oifs.source_grid, str, "present.oifs.source_grid", file)
+            for name in ("climate_dir", "precomputed_climate_dir", "vertical_grids_dir"):
+                _check_type(getattr(present.oifs, name), (str, type(None)), f"present.oifs.{name}", file)
+            _check_steps(present.oifs.steps, "present.oifs.steps", file)
+        if present.nemo is not None:
+            _check_type(present.nemo.source_grid, str, "present.nemo.source_grid", file)
+            _check_type(present.nemo.minimum_depth, (int, float), "present.nemo.minimum_depth", file)
+            _check_steps(present.nemo.steps, "present.nemo.steps", file)
+            staggering["present.nemo.source_staggering"] = present.nemo.source_staggering
 
     eocene = config.eocene
     if eocene is not None:
-        _check_type(eocene.output_dir, str, "eocene.output_dir", file)
-        _check_type(eocene.domain.from_, str, "eocene.domain.from", file)
-        _check_type(eocene.domain.build, bool, "eocene.domain.build", file)
+        for name in ("input", "herold", "output"):
+            _check_type(getattr(eocene, name), str, f"eocene.{name}", file)
+        _check_type(eocene.nemo.domain, str, "eocene.nemo.domain", file)
+        _check_type(eocene.nemo.minimum_depth, (int, float), "eocene.nemo.minimum_depth", file)
+        _check_steps(eocene.nemo.steps, "eocene.nemo.steps", file)
         _check_type(eocene.oifs.aerosols, bool, "eocene.oifs.aerosols", file)
         _check_type(eocene.oasis.constant_sst, (int, float), "eocene.oasis.constant_sst", file)
-        if eocene.domain.build and config.machine.name == "local":
+        if eocene.nemo.domain == BUILD and machine.name == "local":
             raise ConfigError(
-                f"{file}: 'eocene.domain.build: true' runs DOMAINcfg, which is not available with "
-                "'machine.name: local'. Set 'build: false' and point 'eocene.domain.from' at a domain built on "
-                "Atos, or run on Atos (machine.name: atos)."
+                f"{file}: 'eocene.nemo.domain: build' runs DOMAINcfg, which is not available with "
+                "'machine.name: local'. Point 'eocene.nemo.domain' at the directory of a domain built on Atos "
+                "(its domain_cfg.nc and maskutil.nc), or run on Atos (machine.name: atos)."
+            )
+
+    for key, value in staggering.items():
+        if value not in STAGGERING_OPTIONS:
+            raise ConfigError(f"{file}: '{key}' must be T or F, got {value!r}")
+
+    for key, root in config.read_only_roots().items():
+        if _inside(machine.tmpdir, root):
+            raise ConfigError(f"{file}: 'machine.tmpdir' {machine.tmpdir} lies inside the read-only '{key}' {root}")
+    for period in PERIODS:
+        section = getattr(config, period)
+        if section is not None and _inside(machine.tmpdir, section.output):
+            raise ConfigError(
+                f"{file}: 'machine.tmpdir' {machine.tmpdir} lies inside '{period}.output' {section.output}: "
+                "keep intermediate files out of the output trees"
             )
 
 
-def _schema_1_error(raw: dict, file: str) -> ConfigError:
-    """The error for a schema 1 file: each old key found in it, with its new name."""
+def override_steps(config: Config, period: str, component: str, names: list[str]) -> None:
+    """Run only the steps ``names`` of a component of a period (the ``--oifs`` and ``--nemo`` options).
 
-    def present(key: str) -> bool:
-        value: Any = raw
-        for part in key.split("."):
-            if not isinstance(value, dict) or part not in value:
-                return False
-            value = value[part]
-        return True
+    Parameters
+    ----------
+    config : Config
+        The configuration; its ``<period>.<component>.steps`` is replaced.
+    period, component : str
+        E.g. ``present`` and ``nemo``.
+    names : list of str
+        The steps to switch on; every other step of the component is switched off.
 
-    found = {old: new for old, new in SCHEMA_1_KEYS.items() if old.startswith("{") or present(old)}
+    Raises
+    ------
+    ConfigError
+        If the component of the period has no steps, its section is missing, or a name is not one of its steps.
+    """
+    if (period, component) not in STEP_SECTIONS:
+        with_steps = ", ".join(f"{p}.{c}" for p, c in sorted(STEP_SECTIONS))
+        raise ConfigError(f"'{period}.{component}' has no steps to select (only {with_steps} have)")
+    section = getattr(config.period(period), component)
+    if section is None:
+        raise ConfigError(f"{config.file}: --{component} selects steps of '{period}.{component}', which is missing")
+    known = [f.name for f in dataclasses.fields(section.steps)]
+    unknown = [n for n in names if n not in known]
+    if unknown:
+        raise ConfigError(f"Unknown {period}.{component} step(s): {', '.join(unknown)} (known: {', '.join(known)})")
+    section.steps = type(section.steps)(**{n: n in names for n in known})
+
+
+def _old_layout_error(raw: dict, file: str, keys: dict[str, str], what: str) -> ConfigError:
+    """The error for a file in an old layout: each old key found in it, with its name now."""
+    found = {old: new for old, new in keys.items() if old.startswith("{") or has_key(raw, old)}
     width = max(len(old) for old in found)
     lines = [
-        f"{file}: schema 1 configuration, no longer read. Migrate it to schema {SCHEMA_VERSION} "
+        f"{file}: {what}, no longer read. Migrate it to the current schema {SCHEMA_VERSION} "
         f"(start from {TEMPLATE}, see docs/configuration.rst). Old key -> new key:",
         *(f"  {old:<{width}}  ->  {new}" for old, new in found.items()),
-        "  the Eocene domain is now explicit: eocene.domain.from (where it is) and eocene.domain.build.",
     ]
     return ConfigError("\n".join(lines))
 
@@ -473,9 +595,10 @@ def load_config(path: str | Path) -> Config:
     Raises
     ------
     ConfigError
-        If the file is missing or unreadable, uses an old format (``dirs:`` or schema 1, the error lists the new
-        key names), has a wrong ``schema``, unknown or missing keys, values of the wrong type, a placeholder that
-        names an unknown key or a cycle, or ``inputs.ece4_data``/``inputs.herold`` do not exist.
+        If the file is missing or unreadable, uses an old layout (``dirs:``, schema 1, or the component sections
+        of the first schema 2; the error lists the new key names), has a wrong ``schema``, unknown or missing keys,
+        values of the wrong type, a placeholder that names an unknown key or a cycle, or ``machine.tmpdir`` lies
+        inside a read-only directory or an output tree.
     """
     file = str(path)
     raw = load_yaml(path)
@@ -489,19 +612,21 @@ def load_config(path: str | Path) -> Config:
     if "schema" not in raw:
         raise ConfigError(f"{file}: missing key 'schema' (expected 'schema: {SCHEMA_VERSION}', see {TEMPLATE})")
     if raw["schema"] == 1:
-        raise _schema_1_error(raw, file)
+        raise _old_layout_error(raw, file, SCHEMA_1_KEYS, "schema 1 configuration")
     if raw["schema"] != SCHEMA_VERSION:
         raise ConfigError(f"{file}: unsupported schema {raw['schema']!r}, this version reads schema {SCHEMA_VERSION}")
+    if any(key in raw for key in ("inputs", "oifs", "nemo", "tmpdir")):
+        raise _old_layout_error(raw, file, COMPONENT_LAYOUT_KEYS, "configuration with component sections")
 
-    unknown = sorted(set(raw) - set(SECTIONS) - {"schema", "tmpdir"})
+    unknown = sorted(set(raw) - set(SECTIONS) - {"schema"})
     if unknown:
         raise ConfigError(f"{file}: unknown top-level key(s): {', '.join(unknown)}")
-    if "inputs" not in raw:
-        raise ConfigError(f"{file}: missing section 'inputs'")
+    if not raw.get("machine"):
+        raise ConfigError(f"{file}: missing section 'machine' (it holds the required 'machine.tmpdir')")
 
     def build(raw: dict) -> Config:
         values = {name: _build(cls, raw[name], name, file) for name, cls in SECTIONS.items() if raw.get(name)}
-        return Config(file=file, tmpdir=raw.get("tmpdir"), **values)
+        return Config(file=file, **values)
 
     # build once to fill in the defaults, so placeholders can refer to them; then build from the resolved values
     config = build(resolve_placeholders(_to_dict(build(raw)), file))

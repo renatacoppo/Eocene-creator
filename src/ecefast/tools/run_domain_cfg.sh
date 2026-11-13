@@ -25,7 +25,7 @@ for module in $MODULES; do
 done
 
 # Library directories set by the modules, plus the OASIS libraries of the EC-Earth build if given
-# (ECEFAST_OASIS_LIB_DIR, from machine.atos.oasis_lib_dir).
+# (ECEFAST_OASIS_LIB_DIR, from machine.atos.ecearth4_sources).
 export LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}:$NETCDF4_PARALLEL_DIR/lib:$ECCODES_DIR/lib:$HDF5_DIR/lib
 if [[ -n "${ECEFAST_OASIS_LIB_DIR:-}" ]]; then
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ECEFAST_OASIS_LIB_DIR

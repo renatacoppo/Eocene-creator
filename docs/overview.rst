@@ -1,66 +1,86 @@
 Overview
 ========
 
-``ecefast`` turns the present-day EC-Earth4 input data into **Eocene (DeepMIP) boundary
-conditions**. It copies the files EC-Earth4 reads (atmosphere OIFS TL63L31, ocean NEMO PALEORCA2,
-coupler OASIS, runoff-mapper) and replaces their geography-dependent fields with the Eocene ones of
-Herold et al. (2014). The output tree has the layout and file names of the input tree, so EC-Earth4
+``ecefast`` builds EC-Earth4 input data for a **time period**. Two periods exist:
+
+``present``
+   The present-day base data of the model grids: the OIFS initial state and climate file of a
+   resolution (e.g. TL63L31), made from a finer one, and the NEMO domain of the ocean grid
+   (PALEORCA2), made from the bathymetry of a present-day domain (eORCA1).
+``eocene``
+   **Eocene (DeepMIP) boundary conditions**. It copies the files EC-Earth4 reads (atmosphere OIFS
+   TL63L31, ocean NEMO PALEORCA2, coupler OASIS, runoff-mapper) and replaces their
+   geography-dependent fields with the Eocene ones of Herold et al. (2014). Runs on a laptop in
+   about a minute.
+
+Each period writes a tree with the layout and file names of an EC-Earth4 input tree, so EC-Earth4
 uses it in place of the present-day one.
 
-Three commands do the work:
+Two kinds of commands run them:
 
-``ecefast eocene run``
-   The **Eocene workflow**: six steps that build the Eocene input tree. Runs on a laptop in about
-   a minute.
-``ecefast nemo domain``
-   The **NEMO domain pipeline**: builds NEMO ocean domains (grid, bathymetry, masks) from
-   bathymetries. The DOMAINcfg part runs only on ECMWF Atos; the ``domain`` step of the Eocene
-   workflow either uses its result or runs it.
-``ecefast oifs data``
-   The **OIFS generator**: makes the present-day OIFS base data of a resolution (e.g. TL63L31) from a
-   finer one (TL255L91). Its inputs exist on ECMWF Atos only. The Eocene workflow reads its OIFS base
-   from ECE4-DATA, not from this output.
+``ecefast <period> run``
+   The whole pipeline of a period: ``ecefast present run``, ``ecefast eocene run``.
+``ecefast <component> run [--period present|eocene]``
+   Only the steps of one component (``oifs``, ``nemo``, ``oasis``, ``rnfm``) in one period,
+   ``present`` by default: ``ecefast nemo run`` builds the present-day NEMO domain,
+   ``ecefast nemo run --period eocene`` runs the Eocene ``domain`` and ``nemo`` steps.
 
 Commands, sections and outputs
 ------------------------------
 
-Each command reads its own section of the configuration file (:doc:`configuration`) and writes
-only to its own ``output_dir``. A later run reads the output of an earlier one through a
-``{section.key}`` placeholder; ``inputs`` are shared and read-only.
+A period reads its own section of the configuration file (:doc:`configuration`) and writes its
+final files only to that section's ``output``. Intermediate files of every command go to
+``<machine.tmpdir>/<period>/<component>/``. ``input`` and ``eocene.herold`` are read-only.
 
 .. code-block:: text
 
-   config file             command                 writes only to
-   -----------             -------                 --------------
-   inputs:  ece4_data, herold   (read-only, shared by every command)
-   machine: name (local | atos | fake)
+   config file                command                  writes only to
+   -----------                -------                  --------------
+   machine: name, tmpdir      (every command)          <tmpdir>/<period>/<component>/   intermediates
+   grids:   oifs, nemo        (the model resolution, shared by every period)
 
-   nemo:                   ecefast nemo domain     nemo.domain.output_dir   = OUTPUT/nemo-domain/
-     grid                                            nemo/domain/<grid>/<name>/  final files
-     domain: ...                                     work/                       intermediates
-                                                          |
-                                                          | {nemo.domain.output_dir}/nemo/domain/
-                                                          v   {nemo.grid}/eocene
-   eocene:                 ecefast eocene run      eocene.output_dir        = OUTPUT/eocene/
-     domain: from, build                             oifs/ nemo/ oasis/ runoff-mapper/  (EC-Earth tree)
-     oifs, oasis                                     provenance.yml
+   present:                   ecefast present run      present.output = OUTPUT/present/
+     input       (read-only)    oifs  (Atos inputs)      oifs/<grid>/<startdate>/, oifs/<grid>/<climate_version>/
+     oifs, nemo                 nemo                     nemo/domain/<grid>/  domain_cfg.nc, maskutil.nc, subbasins.nc
+                                                         provenance.yml
 
-   oifs:                   ecefast oifs data       oifs.data.output_dir     = OUTPUT/oifs-data/
-     grid                  (Atos inputs)             oifs/<grid>/<startdate>/    initial state
-     data: ...                                       oifs/<grid>/<climate>/      climate file
-                                                     work/                       intermediates
+   eocene:                    ecefast eocene run       eocene.output  = OUTPUT/eocene/
+     input: "{present.input}"   stage, domain, oasis,    oifs/ nemo/ oasis/ runoff-mapper/  (EC-Earth tree)
+     herold      (read-only)    oifs, nemo, rnfm         provenance.yml
+     nemo, oifs, oasis
 
-On a laptop ``eocene.domain.from`` points at the Eocene domain copied from Atos; on Atos at the
-output of ``ecefast nemo domain``, or ``eocene.domain.build: true`` runs the domain pipeline inside
-the ``domain`` step. The frozen references live next to the outputs in ``BASELINE/<command>``.
+.. list-table::
+   :header-rows: 1
+   :widths: 34 33 33
+
+   * - Command
+     - Steps with ``--period present`` (default)
+     - Steps with ``--period eocene``
+   * - ``ecefast oifs run``
+     - ``oifs`` (OIFS generator)
+     - ``oifs``
+   * - ``ecefast nemo run``
+     - ``nemo`` (present-day domain)
+     - ``domain``, ``nemo``
+   * - ``ecefast oasis run``
+     - none (error)
+     - ``oasis``
+   * - ``ecefast rnfm run``
+     - none (error)
+     - ``rnfm``
+
+``eocene.nemo.domain`` says where the Eocene NEMO domain comes from: on a laptop, the directory of
+the domain copied from Atos; on Atos, ``build`` runs the NEMO domain pipeline with the Eocene
+bathymetry inside the ``domain`` step. Local runs write to ``OUTPUT/<period>``; the frozen
+references live in ``BASELINE/<period>``.
 
 Inputs and outputs
 ------------------
 
 .. code-block:: text
 
-   INPUTS (read-only)                               OUTPUT (eocene.output_dir)
-   ------------------                               ---------------------
+   INPUTS (read-only)                               OUTPUT (eocene.output)
+   ------------------                               ----------------------
    ECE4-DATA-V3/      present-day EC-Earth4 -+      oifs/             atmosphere
                       inputs                 |      nemo/             ocean and domain
    herold-et-al-2014/ Eocene topography,     +-->   oasis/PALEORCA2/  coupler restart
@@ -76,20 +96,20 @@ Inputs and outputs
      - Config key
      - What it provides
    * - ECE4-DATA-V3 (subset)
-     - ``inputs.ece4_data``
+     - ``present.input``, ``eocene.input`` (``"{present.input}"``)
      - The present-day files to modify, and the present-day domains. Fetched with
        ``scripts/get_ece4_data.sh``.
    * - Herold et al. (2014) supplement
-     - ``inputs.herold``
+     - ``eocene.herold``
      - Eocene topography and bathymetry, subgrid orography, biomes, river flow direction, M2 tidal
        dissipation, ocean-floor age.
    * - PALEORCA2 ``coords_ori.nc``
-     - ``nemo.domain.coords_ori``
-     - The PALEORCA2 grid, for the NEMO domain pipeline.
+     - ``grids.nemo.coords_ori``
+     - The PALEORCA2 grid, to build a NEMO domain.
    * - Eocene NEMO domain
-     - ``eocene.domain.from``
-     - ``domain_cfg.nc`` and ``maskutil.nc`` built on Atos; used on a laptop instead of running
-       DOMAINcfg.
+     - ``eocene.nemo.domain``
+     - The directory holding ``domain_cfg.nc`` and ``maskutil.nc`` built on Atos; used on a laptop
+       instead of running DOMAINcfg.
 
 The Eocene workflow
 -------------------
@@ -117,17 +137,17 @@ alone (``--steps oifs``) on an existing output.
 
    * - Step
      - What it changes, and from what
-     - Files written (under ``eocene.output_dir``)
+     - Files written (under ``eocene.output``)
    * - ``stage``
      - Copies the base files of the input tree: ``oifs/`` (grid, ``ifsdata``, ``composition``,
        tables), ``nemo/`` (``initial``, ``climatology``, ``cfc``, ``weights``),
-       ``oasis/PALEORCA2``; symlinks ``cmip6-data``. Refuses a non-empty output without
-       ``--overwrite``.
+       ``oasis/PALEORCA2``; symlinks ``cmip6-data``. Refuses an output that holds files without
+       ``--overwrite``; with it, removes the whole Eocene tree first.
      - ``oifs/``, ``nemo/``, ``oasis/PALEORCA2/``
    * - ``domain``
-     - Installs the Eocene PALEORCA2 domain from ``eocene.domain.from``: the one built on Atos
-       (laptop), the output of ``ecefast nemo domain``, or built first by the NEMO domain pipeline
-       (``eocene.domain.build: true``, Atos). Fails if its vertical levels differ from the
+     - Installs the Eocene PALEORCA2 domain: from the directory of ``eocene.nemo.domain`` (the
+       one built on Atos), or, with ``eocene.nemo.domain: build`` (Atos), built first by the NEMO
+       domain pipeline with the Eocene bathymetry. Fails if its vertical levels differ from the
        present-day domain (the ocean initial state is built on those levels).
      - ``nemo/domain/PALEORCA2/domain_cfg.nc``, ``maskutil.nc``
    * - ``oasis``
@@ -141,7 +161,8 @@ alone (``--steps oifs``) on an existing output.
        dry upper-air state (humidity and clouds 0), spectral fields truncated to their mean.
        Optional Eocene aerosols (``eocene.oifs.aerosols``).
      - ``oifs/TL63L31/19900101/ICMGGECE4INIT``, ``ICMGGECE4INIUA``, ``ICMSHECE4INIT``;
-       ``oifs/TL63L31/climate.v020/ICMCLECE4``, ``bare_soil_albedos.grb``
+       ``oifs/TL63L31/climate.v020/ICMCLECE4``, ``bare_soil_albedos.grb`` (grid, start date and
+       climate version from ``grids.oifs``)
    * - ``nemo``
      - Ocean forcing and initial state: M2 tidal dissipation and bathymetry from Green & Huber;
        geothermal flux from the Eocene ocean-floor age; two ocean initial states (DeepMIP
@@ -169,23 +190,41 @@ What a run checks
 
 ``--dry-run`` does the checks of the first line and shows the plan without writing anything.
 
-The NEMO domain pipeline
-------------------------
+The present-day period
+----------------------
 
-``ecefast nemo domain`` builds one NEMO domain per bathymetry listed in ``nemo.domain.bathymetries``
-(``present_day`` from the eORCA1 domain of the input tree, ``eocene`` from Herold). Each step is
-switched on or off in ``nemo.domain.steps``:
+``ecefast present run`` has two steps, one per component:
+
+``oifs`` (``ecefast oifs run``)
+   The **OIFS generator**: makes the OIFS base data of ``grids.oifs`` from the finer
+   ``present.oifs.source_grid`` (TL255L91). Its inputs exist on ECMWF Atos only. The Eocene
+   workflow reads its OIFS base from ``eocene.input``, not from this output.
+``nemo`` (``ecefast nemo run``)
+   The **NEMO domain pipeline** for the present-day bathymetry: the bathymetry of
+   ``{input}/nemo/domain/<present.nemo.source_grid>/domain_cfg.nc`` (eORCA1) on the grid of
+   ``grids.nemo``. The DOMAINcfg part runs only on ECMWF Atos.
+
+Present-day runs refuse to replace final files that exist already, unless ``--overwrite`` is
+given.
+
+The NEMO domain pipeline
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The same pipeline builds the present-day domain (``nemo`` step, ``PresentDayBathymetry``) and,
+with ``eocene.nemo.domain: build``, the Eocene one (inside the ``domain`` step,
+``EoceneBathymetry``). Each of its steps is switched on or off in ``<period>.nemo.steps``, or for
+one run with ``--nemo a,b``:
 
 .. code-block:: text
 
-   coords_ori.nc --> coordinates         cell bounds, PALEORCA2 + eORCA1  |
-   bathymetries  --> bathymetry          one bathymetry per name          |  laptop
-                     configure_domain    one namelist per name            |  and Atos
+   coords_ori.nc --> coordinates         cell bounds, target + source grid  |
+   bathymetry    --> bathymetry          remapped, corrected bathymetry     |  laptop
+                     configure_domain    DOMAINcfg namelist                 |  and Atos
                             |
                             v
-                     domain_cfg          run DOMAINcfg (raw output)       |
-                     generate_mask       domain_cfg.nc, maskutil.nc       |  Atos only
-                     generate_subbasins  subbasins.nc                     |  (need DOMAINcfg)
+                     domain_cfg          run DOMAINcfg (raw output)         |
+                     generate_mask       domain_cfg.nc, maskutil.nc         |  Atos only
+                     generate_subbasins  subbasins.nc                       |  (need DOMAINcfg)
 
 .. list-table::
    :header-rows: 1
@@ -193,29 +232,33 @@ switched on or off in ``nemo.domain.steps``:
 
    * - Step
      - What it does
-     - Output (under ``nemo.domain.output_dir``)
+     - Output (``<tmp>`` = ``<machine.tmpdir>/<period>/nemo``)
    * - ``coordinates``
-     - Removes the halo of the PALEORCA2 coordinates; computes cell bounds of the target grid and
-       of the source grid (eORCA1, from the input tree), for remapping.
-     - ``work/coordinates/``
+     - Removes the halo of the PALEORCA2 coordinates; computes cell bounds of the target grid and,
+       for the present day, of the source grid (eORCA1, from the input tree), for remapping.
+     - ``<tmp>/coordinates/``
    * - ``bathymetry``
-     - One processor per bathymetry: ``PresentDayBathymetry`` remaps eORCA1 (nearest neighbour) and
-       opens or closes straits; ``EoceneBathymetry`` remaps the Herold paleotopography (bilinear).
-       Both apply the minimum depth (30 m).
-     - ``work/bathymetry/PALEORCA2/``
+     - ``PresentDayBathymetry`` remaps eORCA1 (nearest neighbour), opens or closes straits and
+       plots the land-sea mask; ``EoceneBathymetry`` remaps the Herold paleotopography (bilinear).
+       Both apply ``<period>.nemo.minimum_depth`` (30 m).
+     - ``<tmp>/bathymetry/PALEORCA2/``
    * - ``configure_domain``
-     - Writes one DOMAINcfg namelist per bathymetry.
-     - ``work/domaincfg/`` (laptop) or ``<tools_dir>/DOMAINcfg/`` (Atos)
+     - Writes the DOMAINcfg namelist of the bathymetry.
+     - ``<tmp>/domaincfg/`` (laptop) or ``<ecearth4_sources>/nemo-4.2/tools/DOMAINcfg/`` (Atos)
    * - ``domain_cfg``
      - Runs DOMAINcfg on ``machine.name`` (``atos``; ``fake`` in tests).
      - raw ``domain_cfg_<name>.nc``, ``mesh_mask_<name>.nc``
    * - ``generate_mask``
      - Post-processes the raw output into the files EC-Earth reads.
-     - ``nemo/domain/PALEORCA2/<name>/domain_cfg.nc``, ``maskutil.nc``
+     - ``domain_cfg.nc``, ``maskutil.nc`` (see below)
    * - ``generate_subbasins``
      - Basin masks: Atlantic, Pacific, Indian, Indo-Pacific and global for present day; global
        only for the Eocene.
-     - ``nemo/domain/PALEORCA2/<name>/subbasins.nc``
+     - ``subbasins.nc`` (see below)
+
+The final files go to ``<present.output>/nemo/domain/PALEORCA2/`` for the present day, and to
+``<machine.tmpdir>/eocene/nemo/domain/PALEORCA2/`` for the Eocene build, from where the ``domain``
+step installs ``domain_cfg.nc`` and ``maskutil.nc`` into ``eocene.output``.
 
 Where each part runs
 --------------------
@@ -228,11 +271,15 @@ Where each part runs
      - Laptop (``machine.name: local``)
      - ECMWF Atos (``machine.name: atos``)
    * - ``ecefast eocene run``
-     - all steps; ``domain`` copies the Eocene domain built on Atos (``eocene.domain.from``)
-     - all steps; ``domain`` installs the output of ``ecefast nemo domain``, or builds it first
-       (``eocene.domain.build: true``)
-   * - ``ecefast nemo domain``
+     - all steps; ``domain`` copies the Eocene domain built on Atos (``eocene.nemo.domain``: its
+       directory)
+     - all steps; ``domain`` builds the Eocene domain first (``eocene.nemo.domain: build``), or
+       installs one from a directory
+   * - ``ecefast nemo run``
      - ``coordinates``, ``bathymetry``, ``configure_domain``
+     - all steps
+   * - ``ecefast oifs run``
+     - not available (inputs on Atos only)
      - all steps
    * - Tests (CI)
      - ``fake`` backend: DOMAINcfg replaced by a small stand-in

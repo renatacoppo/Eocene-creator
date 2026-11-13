@@ -1,11 +1,11 @@
-"""Unit tests for the array helpers of ``paleo.eocene.oifs.fields``: modify_value, replace_value, regrid_dataset."""
+"""Unit tests for the array helpers of ``periods.eocene.oifs.fields``: modify_value, replace_value, regrid_dataset."""
 
 import numpy as np
 import pytest
 import xarray as xr
 from oifs_helpers import needs_cdo
 
-from ecefast.paleo.eocene.oifs.fields import modify_value, regrid_dataset, replace_value
+from ecefast.periods.eocene.oifs.fields import modify_value, regrid_dataset, replace_value
 
 pytestmark = pytest.mark.unit
 

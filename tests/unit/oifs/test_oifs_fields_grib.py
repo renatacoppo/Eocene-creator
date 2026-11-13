@@ -1,4 +1,4 @@
-"""Unit tests for the GRIB-level helpers of ``paleo.eocene.oifs.fields`` on tiny GRIB files made with CDO.
+"""Unit tests for the GRIB-level helpers of ``periods.eocene.oifs.fields`` on tiny GRIB files made with CDO.
 
 Checked: values written, message order, and the keys that EC-Earth reads (edition, grid, resolution, date).
 """
@@ -17,7 +17,7 @@ from oifs_helpers import (
     run,
 )
 
-from ecefast.paleo.eocene.oifs.fields import (
+from ecefast.periods.eocene.oifs.fields import (
     flatten_grib_steps,
     modify_single_grib,
     modify_value,

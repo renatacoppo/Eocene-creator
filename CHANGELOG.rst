@@ -82,6 +82,29 @@ Added
 Changed
 ~~~~~~~
 
+- Configuration by time period (task 8.3), still ``schema: 2``: ``machine`` (with the required ``tmpdir`` for the
+  intermediate files of every command, ``<tmpdir>/<period>/<component>/``, and ``atos.ecearth4_sources``, which
+  replaces ``oasis_lib_dir`` and ``nemo.domain.tools_dir``), ``grids`` (``oifs``: ``name``, ``startdate``,
+  ``climate_version``; ``nemo``: ``name``, ``coords_ori``, ``staggering``), then one section per period,
+  ``present`` and ``eocene``, each with ``input`` (the EC-Earth tree it starts from), ``output`` and its component
+  subsections. The Herold data is ``eocene.herold`` and is no longer required by the present-day commands.
+  Bathymetries are no longer configured: each period uses its own (``present.nemo.source_grid`` stays visible),
+  and the strait corrections are looked up by source grid. ``eocene.nemo.domain`` is ``build`` or a directory
+  (was ``eocene.domain.from`` + ``build``); ``minimum_depth`` is set per period. A file in the component layout
+  of task 8.1 stops with an error listing each old key and its new name (#48).
+- Commands: ``ecefast <period> run`` (``present``, ``eocene``) and ``ecefast <component> run [--period ...]``
+  (``oifs``, ``nemo``, ``oasis``, ``rnfm``; default ``present``) replace ``ecefast oifs data`` and
+  ``ecefast nemo domain [--bathymetry ...]``; ``--oifs a,b`` and ``--nemo c,d`` override the configured steps of
+  a component for one run. ``--overwrite`` on every run: it logs what it replaces and waits 5 s (Ctrl-C to
+  stop); a present-day run refuses existing final files without it. ``stage`` counts files only, so empty
+  folders made by the preflight of later steps no longer block a first run (#48).
+- Code: ``ecefast.paleo`` is now ``ecefast.periods`` (``periods/eocene``, new ``periods/present`` with
+  ``PresentDayBathymetry`` and the present-day steps); the domain pipeline builds one bathymetry; the
+  processor registry (``PROCESSORS``, ``EOCENE_PROCESSORS``) is removed. Steps declare their ``component``.
+  ``EoceneOIFS`` and ``EoceneNEMO`` take ``startdate``, ``climate_version`` and the NEMO grid from ``grids``
+  (were hardcoded). The present-day mask comparison plot is always on, one panel per domain of the input tree.
+  Intermediate files of the domain pipeline and of the OIFS generator move from ``<output_dir>/work/`` to
+  ``machine.tmpdir``; local folders are ``OUTPUT/{present,eocene}`` and ``BASELINE/{present,eocene}`` (#48).
 - Configuration schema 2 (task 8.1): sections follow the components and commands
   (``ecefast <component> <command>`` reads ``<component>.<command>``): ``inputs`` (read-only,
   shared), ``tmpdir``, ``machine`` (was ``tools``), ``oifs.grid``, ``nemo.grid``, ``nemo.domain`` (was
@@ -203,6 +226,12 @@ Removed
 Output
 ~~~~~~
 
+- Domain pipeline layout (file contents unchanged, checked against the domain baseline): the present-day domain
+  goes to ``present.output/nemo/domain/<grid>/`` (no ``<name>/`` folder), the Eocene one built with
+  ``eocene.nemo.domain: build`` to ``<tmpdir>/eocene/nemo/domain/<grid>/`` before it is installed;
+  coordinates, bathymetries and namelists go to ``<tmpdir>/<period>/nemo/``. The mask comparison plot is
+  ``landsea_mask_comparison.png`` (was ``landsea_mask_comparison_orca2_paleorca2.png``), with one panel per domain
+  of the input tree. The Eocene output is unchanged (0 differences against ``BASELINE/eocene``) (#48).
 - NEMO domain pipeline layout (file contents unchanged): final files move from
   ``<output_dir>/domain/<grid>/<name>/`` to ``<output_dir>/nemo/domain/<grid>/<name>/``, as in ECE4-DATA;
   ``coordinates/`` and ``bathymetry/`` move to ``<output_dir>/work/``, and the laptop DOMAINcfg namelists

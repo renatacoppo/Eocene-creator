@@ -14,8 +14,8 @@ import yaml
 from ecefast.cli.main import main
 from ecefast.core.config import load_config
 from ecefast.core.workspace import Context
-from ecefast.paleo.eocene import pipeline
-from synthetic import nemo_domain_section, write_input_tree
+from ecefast.periods.eocene import pipeline
+from synthetic import STEPS_WITHOUT_GRIDS, write_domain_work, write_input_tree
 
 pytestmark = pytest.mark.integration
 
@@ -28,19 +28,21 @@ def tree(tmp_path_factory: pytest.TempPathFactory) -> dict:
     root = tmp_path_factory.mktemp("eocene")
     for name in ("input", "herold"):
         (root / name).mkdir()
+    write_domain_work(root / "tmp" / "eocene" / "nemo")
     config_file = root / "config.yml"
     raw = {
         "schema": 2,
-        "inputs": {"ece4_data": str(root / "input"), "herold": str(root / "herold")},
-        "machine": {"name": "fake"},
-        "nemo": {"domain": nemo_domain_section(root / "domain", root)},
+        "machine": {"name": "fake", "tmpdir": str(root / "tmp")},
+        "grids": {"nemo": {"coords_ori": str(root / "coords_ori.nc")}},
         "eocene": {
-            "output_dir": str(root / "out"),
-            "domain": {"from": "{nemo.domain.output_dir}/nemo/domain/{nemo.grid}/eocene", "build": True},
+            "input": str(root / "input"),
+            "herold": str(root / "herold"),
+            "output": str(root / "out"),
+            "nemo": {"domain": "build", "minimum_depth": 30, "steps": STEPS_WITHOUT_GRIDS},
         },
     }
     config_file.write_text(yaml.safe_dump(raw))
-    ctx = Context(load_config(config_file))
+    ctx = Context(load_config(config_file), "eocene")
     steps = [s for s in pipeline.PIPELINE if s.name in STEPS]
     inputs = write_input_tree(steps, ctx)
     return {"config": str(config_file), "ctx": ctx, "steps": steps, "inputs": inputs, "root": root}
@@ -55,23 +57,23 @@ def test_input_tree_holds_only_declared_reads(tree: dict) -> None:
     ctx = tree["ctx"]
     declared = {ctx.expand(t) for step in tree["steps"] for t in step.reads}
     assert {str(p) for p in tree["inputs"]} == declared
-    files = set(files_under(Path(ctx.config.inputs.ece4_data), Path(ctx.config.inputs.herold)))
+    files = set(files_under(Path(ctx.section.input), Path(ctx.section.herold)))
     assert files <= declared, "files outside the declared reads"
 
 
 def test_dry_run_writes_nothing(tree: dict) -> None:
     main(["eocene", "run", "-c", tree["config"], "--steps", ",".join(STEPS), "--dry-run"])
-    assert not os.path.exists(tree["ctx"].config.eocene.output_dir)
+    assert not os.path.exists(tree["ctx"].section.output)
 
 
 def test_run_writes_every_declared_output(tree: dict) -> None:
     ctx = tree["ctx"]
-    before = files_under(Path(ctx.config.inputs.ece4_data), Path(ctx.config.inputs.herold))
+    before = files_under(Path(ctx.section.input), Path(ctx.section.herold))
     main(["eocene", "run", "-c", tree["config"], "--steps", ",".join(STEPS)])
 
     missing = [p for step in tree["steps"] for p in (ctx.expand(t) for t in step.writes) if not os.path.exists(p)]
     assert missing == []
-    record = yaml.safe_load((Path(ctx.config.eocene.output_dir) / "provenance.yml").read_text())
+    record = yaml.safe_load((Path(ctx.section.output) / "provenance.yml").read_text())
     assert record["steps"] == STEPS
-    read_only = files_under(Path(ctx.config.inputs.ece4_data), Path(ctx.config.inputs.herold))
+    read_only = files_under(Path(ctx.section.input), Path(ctx.section.herold))
     assert read_only == before, "the read-only trees changed"

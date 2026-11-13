@@ -61,47 +61,50 @@ class EoceneNEMO(ComponentStep):
     """Modify NEMO input files for the Eocene: tidal mixing, geothermal flux, ocean initial state, runoff."""
 
     name = "nemo"
+    component = "nemo"
     # reads only present-day domains from the input tree, on purpose: not the Eocene domain of the 'domain' step
     needs = ["stage"]
-    # the PALEORCA2 grid name is hardcoded in create_ocean_init and create_runoff
+    # ORCA2 is the reference present-day ocean mask of the woa-pi profile (create_ocean_init), always that grid
     reads = [
-        "{inputs.herold}/Green_Huber_eocene_tidal_dissipation_1x1.nc",
-        "{inputs.herold}/herold_etal_eocene_topo_1x1.nc",
-        "{inputs.herold}/age_depth_bath_55.xyadb",
-        "{inputs.ece4_data}/nemo/initial/zdfiwm_forcing_r720x360.nc",
-        "{inputs.ece4_data}/nemo/initial/Goutorbe_ghflux.nc",
-        "{inputs.ece4_data}/nemo/initial/woa13-levitus-L31.nc",
-        "{inputs.ece4_data}/nemo/domain/PALEORCA2/domain_cfg.nc",
-        "{inputs.ece4_data}/nemo/domain/ORCA2/domain_cfg.nc",
-        "{inputs.ece4_data}/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc",
+        "{herold}/Green_Huber_eocene_tidal_dissipation_1x1.nc",
+        "{herold}/herold_etal_eocene_topo_1x1.nc",
+        "{herold}/age_depth_bath_55.xyadb",
+        "{input}/nemo/initial/zdfiwm_forcing_r720x360.nc",
+        "{input}/nemo/initial/Goutorbe_ghflux.nc",
+        "{input}/nemo/initial/woa13-levitus-L31.nc",
+        "{input}/nemo/domain/{grids.nemo.name}/domain_cfg.nc",
+        "{input}/nemo/domain/ORCA2/domain_cfg.nc",
+        "{input}/nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc",
     ]
     # the age grid is not in the Herold et al. (2014) supplement
     sources = {
-        "{inputs.herold}/age_depth_bath_55.xyadb": (f"{AGE_GRID_URL} (bunzip2, then put it in the herold folder)"),
+        "{herold}/age_depth_bath_55.xyadb": (f"{AGE_GRID_URL} (bunzip2, then put it in the herold folder)"),
     }
     writes = [
-        "{eocene.output_dir}/nemo/initial/zdfiwm_forcing_r720x360.nc",
-        "{eocene.output_dir}/nemo/initial/Goutorbe_ghflux.nc",
-        "{eocene.output_dir}/nemo/initial/woa13-levitus-L31_deepmip-30.nc",
-        "{eocene.output_dir}/nemo/initial/woa13-levitus-L31_woa-pi.nc",
-        "{eocene.output_dir}/nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc",
+        "{output}/nemo/initial/zdfiwm_forcing_r720x360.nc",
+        "{output}/nemo/initial/Goutorbe_ghflux.nc",
+        "{output}/nemo/initial/woa13-levitus-L31_deepmip-30.nc",
+        "{output}/nemo/initial/woa13-levitus-L31_woa-pi.nc",
+        "{output}/nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc",
     ]
 
-    def __init__(self, herold_folder, input_folder, output_folder, grid="r720x360"):
+    def __init__(self, herold_folder, input_folder, output_folder, grid="r720x360", nemo_grid="PALEORCA2"):
         self.herold_folder = herold_folder
         self.input_folder = input_folder
         self.output_folder = output_folder
         self.cdo = get_cdo()
 
         self.grid = grid
+        # NEMO grid (grids.nemo.name): directory under nemo/domain/ and suffix of the runoff climatology
+        self.nemo_grid = nemo_grid
 
     @classmethod
     def from_context(cls, ctx: Context) -> "EoceneNEMO":
-        config = ctx.config
         return cls(
-            herold_folder=config.inputs.herold,
-            input_folder=config.inputs.ece4_data,
-            output_folder=config.eocene.output_dir,
+            herold_folder=ctx.section.herold,
+            input_folder=ctx.section.input,
+            output_folder=ctx.section.output,
+            nemo_grid=ctx.config.grids.nemo.name,
         )
 
     def run(self) -> None:
@@ -272,7 +275,7 @@ class EoceneNEMO(ComponentStep):
             raise ValueError(f"Unknown profile: {profile}. Options are: deepmip_cold, woa_pi")
 
         woa_file = os.path.join(self.input_folder, "nemo/initial/woa13-levitus-L31.nc")
-        domain_file = os.path.join(self.input_folder, "nemo/domain/PALEORCA2/domain_cfg.nc")
+        domain_file = os.path.join(self.input_folder, f"nemo/domain/{self.nemo_grid}/domain_cfg.nc")
         woa = xr.open_dataset(woa_file)
         domain = xr.open_dataset(domain_file)
 
@@ -341,8 +344,8 @@ class EoceneNEMO(ComponentStep):
 
     def create_runoff(self):
 
-        runoff = os.path.join(self.input_folder, "nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc")
-        runoff_output = os.path.join(self.output_folder, "nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc")
+        runoff = os.path.join(self.input_folder, f"nemo/climatology/runoff_DaiTrenberth_{self.nemo_grid}.nc")
+        runoff_output = os.path.join(self.output_folder, f"nemo/climatology/runoff_DaiTrenberth_{self.nemo_grid}.nc")
 
         ds_rnf = xr.open_dataset(runoff)
 

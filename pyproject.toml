@@ -86,18 +86,18 @@ select = ["E9", "F63", "F7", "F82"]
 
 [tool.ruff.lint.per-file-ignores]
 # prepare_vegetation() is unused and refers to an undefined name NC4; to be removed or fixed in a later task.
-"src/ecefast/paleo/eocene/oifs/vegetation.py" = ["F821"]
+"src/ecefast/periods/eocene/oifs/vegetation.py" = ["F821"]
 
 # Architecture rules of AGENTS.md, checked with `lint-imports` (CI)
 [tool.importlinter]
 root_package = "ecefast"
 
 [[tool.importlinter.contracts]]
-name = "Layers: core -> tools -> components -> paleo -> cli"
+name = "Layers: core -> tools -> components -> periods -> cli"
 type = "layers"
 layers = [
     "ecefast.cli",
-    "ecefast.paleo",
+    "ecefast.periods",
     "ecefast.components",
     "ecefast.tools",
     "ecefast.core",
@@ -111,4 +111,12 @@ modules = [
     "ecefast.components.nemo",
     "ecefast.components.oasis",
     "ecefast.components.rnfm",
+]
+
+[[tool.importlinter.contracts]]
+name = "Periods do not import each other"
+type = "independence"
+modules = [
+    "ecefast.periods.present",
+    "ecefast.periods.eocene",
 ]

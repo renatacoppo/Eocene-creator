@@ -26,11 +26,7 @@ L31 = Path(ecearth.__file__).parents[1] / "components" / "nemo" / "grids" / "L31
 
 
 def config_file(tmp_path: Path, machine: dict | None = None) -> Path:
-    (tmp_path / "input").mkdir(exist_ok=True)
-    (tmp_path / "herold").mkdir(exist_ok=True)
-    raw = {"schema": 2, "inputs": {"ece4_data": str(tmp_path / "input"), "herold": str(tmp_path / "herold")}}
-    if machine is not None:
-        raw["machine"] = machine
+    raw = {"schema": 2, "machine": {"tmpdir": str(tmp_path / "tmp")} | (machine or {})}
     path = tmp_path / "config.yml"
     path.write_text(yaml.safe_dump(raw))
     return path
@@ -55,10 +51,21 @@ def test_get_backend(tmp_path: Path, backend: str | None, cls: type) -> None:
 
 def test_atos_defaults_and_overrides(tmp_path: Path) -> None:
     config = load_config(config_file(tmp_path))
-    assert (config.machine.atos.profile, config.machine.atos.oasis_lib_dir) == ("atos", None)
-    machine = {"name": "atos", "atos": {"profile": "atos", "oasis_lib_dir": "/path/to/oasis/lib"}}
+    assert (config.machine.atos.profile, config.machine.atos.ecearth4_sources) == ("atos", None)
+    machine = {"name": "atos", "atos": {"profile": "atos", "ecearth4_sources": "/src"}}
     backend = get_backend(load_config(config_file(tmp_path, machine)))
-    assert (backend.profile, backend.oasis_lib_dir) == ("atos", "/path/to/oasis/lib")
+    assert (backend.profile, backend.ecearth4_sources) == ("atos", "/src")
+
+
+def test_atos_paths_from_the_sources() -> None:
+    """DOMAINcfg runs in nemo-4.2/tools/DOMAINcfg of the EC-Earth4 sources; the OASIS libraries are next to it."""
+    backend = AtosBackend(ecearth4_sources="/src")
+    assert backend.namelist_dir() == "/src/nemo-4.2/tools/DOMAINcfg"
+    assert backend.required_paths() == ["/src/nemo-4.2/tools", "/src/oasis3-mct-5.2/arch_ecearth/lib"]
+    assert AtosBackend().namelist_dir() is None
+    with pytest.raises(ConfigError, match="ecearth4_sources is not set"):
+        AtosBackend().required_paths()
+    assert LocalBackend().namelist_dir() is None and FakeBackend().required_paths() == []
 
 
 @pytest.mark.parametrize(
@@ -66,7 +73,7 @@ def test_atos_defaults_and_overrides(tmp_path: Path) -> None:
     [
         ({"name": "hpc"}, "machine.name"),
         ({"atos": {"profile": 1}}, "machine.atos.profile"),
-        ({"atos": {"oasis_lib_dir": 1}}, "machine.atos.oasis_lib_dir"),
+        ({"atos": {"ecearth4_sources": 1}}, "machine.atos.ecearth4_sources"),
         ({"atos": {"modules": []}}, "machine.atos"),
     ],
 )
@@ -106,7 +113,7 @@ def test_atos_command_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
             (namelist_dir / f"mesh_mask_{name}.nc").touch()
 
     monkeypatch.setattr(ecearth.subprocess, "run", fake_run)
-    backend = AtosBackend(profile="atos", oasis_lib_dir="/path/to/oasis/lib")
+    backend = AtosBackend(profile="atos", ecearth4_sources="/src")
     outputs = backend.domaincfg(namelist_dir, ["present_day", "eocene"])
 
     ((cmd, check, env),) = calls
@@ -115,7 +122,7 @@ def test_atos_command_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     assert check is True
     assert env["ECEFAST_PYTHON"] == sys.executable
     assert env["ECEFAST_HPC_PROFILE"] == "atos"
-    assert env["ECEFAST_OASIS_LIB_DIR"] == "/path/to/oasis/lib"
+    assert env["ECEFAST_OASIS_LIB_DIR"] == "/src/oasis3-mct-5.2/arch_ecearth/lib"
     assert outputs["eocene"] == (namelist_dir / "domain_cfg_eocene.nc", namelist_dir / "mesh_mask_eocene.nc")
 
 
@@ -148,7 +155,7 @@ def test_availability(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_local_backend_error(tmp_path: Path) -> None:
-    with pytest.raises(RuntimeError, match=r"'machine\.name: local'.*eocene\.domain\.from.*machine\.name: atos"):
+    with pytest.raises(RuntimeError, match=r"'machine\.name: local'.*eocene\.nemo\.domain.*machine\.name: atos"):
         LocalBackend().domaincfg(tmp_path, ["eocene"])
 
 
