@@ -214,6 +214,10 @@ Fixed
 Removed
 ~~~~~~~
 
+- ``present.oifs.vertical_grids_dir``: the vertical interpolation of the OIFS generator builds the grid with cell
+  corners of the target (``T<kind><N>_grid.nc``) itself, in ``<machine.tmpdir>/present/oifs``, from the
+  ``ICMGGECE4INIT`` of the ``gridpoint`` step (``corners`` in the plan, ``ecefast.components.oifs.corners``);
+  ``create_corners.py`` is now a thin command over the same functions. Configs that set the key must drop it.
 - The OIFS generator's hardcoded Atos paths, its own argument parser (``-t``, ``--clean``) and its option to
   delete the intermediate files: they stay in ``<oifs.data.output_dir>/work/`` (the default before) (#47).
 - Config key ``nemo_domain.aliases`` and the pipeline-internal placeholders (``{output_dir}``,

@@ -53,16 +53,16 @@ def test_defaults(tmp_path: Path) -> None:
     config = load_config(write_config(tmp_path))
     data, grid = config.present.oifs, config.grids.oifs
     assert (data.source_grid, grid.startdate, grid.climate_version) == ("TL255L91", "19900101", "climate.v020")
-    assert (data.climate_dir, data.precomputed_climate_dir, data.vertical_grids_dir) == (None, None, None)
+    assert (data.climate_dir, data.precomputed_climate_dir) == (None, None)
     assert (data.steps.spectral, data.steps.gridpoint, data.steps.boundary) == (True, True, False)
 
 
 def test_overrides_and_placeholders(tmp_path: Path) -> None:
-    raw = {"source_grid": "TL159L91", "steps": {"boundary": True}, "vertical_grids_dir": "{present.input}/grids"}
+    raw = {"source_grid": "TL159L91", "steps": {"boundary": True}, "climate_dir": "{present.input}/climate"}
     data = load_config(write_config(tmp_path, raw)).present.oifs
     assert data.source_grid == "TL159L91"
     assert (data.steps.spectral, data.steps.boundary) == (True, True)
-    assert data.vertical_grids_dir == f"{tmp_path / 'input'}/grids"
+    assert data.climate_dir == f"{tmp_path / 'input'}/climate"
 
 
 @pytest.mark.parametrize(
@@ -100,14 +100,15 @@ def test_intermediate_files_in_tmpdir(tmp_path: Path) -> None:
 
 def test_plan_with_vertical_interpolation(tmp_path: Path) -> None:
     """TL63L31 from TL255L91: different levels, so the initial state is interpolated vertically."""
-    gen = generator_of(write_config(tmp_path, {"vertical_grids_dir": "/grids"}))
+    gen = generator_of(write_config(tmp_path))
     assert (gen.spectral, gen.vertical, gen.target_spectral, gen.ecmwf_name) == (63, 31, "TL63", "63l_2")
     assert gen.do_vertical
     plan = {name: (reads, writes) for name, reads, writes in gen.plan()}
-    assert list(plan) == ["spectral", "gridpoint", "vertical"]
+    assert list(plan) == ["spectral", "gridpoint", "corners", "vertical"]
     out, work = tmp_path / "out", tmp_path / "tmp" / "present" / "oifs"
     assert plan["vertical"][1] == [str(out / "oifs" / "TL63L31" / "19900101" / f) for f in generator.IC_FILES]
-    assert "/grids/TL63_grid.nc" in plan["vertical"][0]
+    assert plan["corners"] == ([str(work / "ICMGGECE4INIT")], [str(work / "TL63_grid.nc")])
+    assert str(work / "TL63_grid.nc") in plan["vertical"][0]
     assert str(GRIDS_DIR / "L31.txt") in plan["vertical"][0]
     assert all(path.startswith(str(work)) for path in plan["spectral"][1] + plan["gridpoint"][1])
 
@@ -138,13 +139,13 @@ def test_plan_boundary(tmp_path: Path, precomputed: bool, expected: str) -> None
 
 def test_check_lists_every_missing_input(tmp_path: Path) -> None:
     gen = generator_of(write_config(tmp_path))
-    with pytest.raises(PipelineError, match="4 input files are missing") as error:
+    with pytest.raises(PipelineError, match="3 input files are missing") as error:
         gen.check()
     message = str(error.value)
     source = tmp_path / "input" / "oifs" / "TL255L91" / "19900101"
     for name in generator.IC_FILES:
         assert str(source / name) in message
-    assert "present.oifs.vertical_grids_dir is not set" in message
+    assert "TL63_grid.nc" not in message  # built by the corners step
 
 
 def test_check_passes_with_inputs(tmp_path: Path) -> None:
@@ -156,7 +157,7 @@ def test_check_passes_with_inputs(tmp_path: Path) -> None:
 
 
 def test_final_files_exclude_intermediates(tmp_path: Path) -> None:
-    gen = generator_of(write_config(tmp_path, {"vertical_grids_dir": "/grids"}))
+    gen = generator_of(write_config(tmp_path))
     target = tmp_path / "out" / "oifs" / "TL63L31" / "19900101"
     assert gen.final_files() == [str(target / f) for f in generator.IC_FILES]
 

@@ -118,7 +118,6 @@ class PresentOIFS:
     source_grid: str = "TL255L91"
     climate_dir: str | None = None
     precomputed_climate_dir: str | None = None
-    vertical_grids_dir: str | None = None
     steps: OIFSDataSteps = field(default_factory=OIFSDataSteps)
 
 
@@ -496,7 +495,7 @@ def _validate(config: Config) -> None:
             _check_type(getattr(present, name), str, f"present.{name}", file)
         if present.oifs is not None:
             _check_type(present.oifs.source_grid, str, "present.oifs.source_grid", file)
-            for name in ("climate_dir", "precomputed_climate_dir", "vertical_grids_dir"):
+            for name in ("climate_dir", "precomputed_climate_dir"):
                 _check_type(getattr(present.oifs, name), (str, type(None)), f"present.oifs.{name}", file)
             _check_steps(present.oifs.steps, "present.oifs.steps", file)
         if present.nemo is not None:

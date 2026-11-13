@@ -202,11 +202,6 @@ already, unless ``--overwrite`` is given.
      - ``null``
      - Ready climate files (``<grid>/<climate_version>/ICMCLECE4``); the ``boundary`` step copies
        the file of ``grids.oifs.name`` when it is there.
-   * - ``present.oifs.vertical_grids_dir``
-     - str
-     - ``null``
-     - Grids with cell corners (``T<kind><N>_grid.nc``, made by ``create_corners.py``), read by the
-       vertical interpolation. Needed only then.
    * - ``present.oifs.steps.spectral``, ``.gridpoint``, ``.boundary``
      - bool
      - ``true``, ``true``, ``false``

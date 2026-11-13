@@ -8,7 +8,8 @@ Builds the present-day OIFS initial state of ``grids.oifs`` (e.g. TL63L31) from 
   Gaussian grid, GRIB1 and GRIB2 messages remapped separately;
 - ``boundary``: ``ICMCLECE4``, copied from ``present.oifs.precomputed_climate_dir`` if it is there, else built from
   the monthly ECMWF climate fields of ``present.oifs.climate_dir`` (``ICMCLECE4-1990``);
-- vertical interpolation (``cdo remapeta``) when the source and target have a different number of levels.
+- vertical interpolation (``cdo remapeta``) when the source and target have a different number of levels, with the
+  grid with cell corners of the target (``corners``) built first in ``<machine.tmpdir>/present/oifs``.
 
 Inputs exist on ECMWF Atos only. The final files are written under ``present.output`` as in an EC-Earth tree
 (``oifs/<grid>/<startdate>/``, ``oifs/<grid>/<climate_version>/``), the intermediate files in
@@ -16,8 +17,8 @@ Inputs exist on ECMWF Atos only. The final files are written under ``present.out
 paths come from the configuration.
 
 The reduced Gaussian grid descriptions (``grids/T<kind><N>.txt``) and the hybrid level coefficients
-(``grids/L<levels>.txt``) ship with the package; ``create_corners.py``, ``descriptor_generator.py`` and
-``convert_aka_bika.py`` are the scripts that made them and the grids of ``vertical_grids_dir``.
+(``grids/L<levels>.txt``) ship with the package; ``descriptor_generator.py`` and ``convert_aka_bika.py`` are the
+scripts that made them.
 """
 
 import logging
@@ -26,6 +27,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from ecefast.components.oifs.corners import create_corner_grid
 from ecefast.core.cdo import get_cdo
 from ecefast.core.config import ConfigError, OIFSDataSteps
 from ecefast.core.grib import GRIB2, ecmwf_grid, extract_grid_info, repack_grib_file, unpack_grib_file
@@ -246,8 +248,8 @@ class OIFSData:
         Grid names like ``TL63L31``.
     startdate, climate_version : str
         Folders of the initial state and of the climate files.
-    climate_dir, precomputed_climate_dir, vertical_grids_dir : str or None
-        Monthly ECMWF climate fields, ready ``ICMCLECE4`` files, ``T<kind><N>_grid.nc`` corner grids.
+    climate_dir, precomputed_climate_dir : str or None
+        Monthly ECMWF climate fields, ready ``ICMCLECE4`` files.
     steps : OIFSDataSteps
         Which steps run.
 
@@ -268,13 +270,11 @@ class OIFSData:
         climate_version: str,
         climate_dir: str | None,
         precomputed_climate_dir: str | None,
-        vertical_grids_dir: str | None,
         steps: OIFSDataSteps,
     ):
         self.target_grid = target_grid
         self.source_grid = source_grid
         self.climate_version = climate_version
-        self.vertical_grids_dir = vertical_grids_dir
         grids = {}
         for key, name in (("grids.oifs.name", target_grid), ("present.oifs.source_grid", source_grid)):
             info = extract_grid_info(name)
@@ -283,9 +283,9 @@ class OIFSData:
             grids[key] = info
 
         # target grid info
-        grid_type, self.spectral, self.vertical = grids["grids.oifs.name"]
-        self.ecmwf_name = str(self.spectral) + ecmwf_grid(grid_type)
-        self.target_spectral = "T" + grid_type + str(self.spectral)
+        self.grid_type, self.spectral, self.vertical = grids["grids.oifs.name"]
+        self.ecmwf_name = str(self.spectral) + ecmwf_grid(self.grid_type)
+        self.target_spectral = "T" + self.grid_type + str(self.spectral)
         # source grid info: vertical interpolation when the number of levels differs
         _, _, ic_vertical = grids["present.oifs.source_grid"]
         self.do_vertical = ic_vertical != self.vertical
@@ -324,9 +324,12 @@ class OIFSData:
             grid.climate_version,
             oifs.climate_dir,
             oifs.precomputed_climate_dir,
-            oifs.vertical_grids_dir,
             oifs.steps,
         )
+
+    def corner_grid_file(self) -> str:
+        """The grid with cell corners of the target, built in ``workdir`` for the vertical interpolation."""
+        return os.path.join(self.workdir, f"{self.target_spectral}_grid.nc")
 
     def final_files(self) -> list[str]:
         """The files the enabled steps write into the output tree."""
@@ -366,8 +369,9 @@ class OIFSData:
             name = "vertical" if self.do_vertical else "install"
             reads = [f"{work}/{f}" for f in IC_FILES]
             if self.do_vertical:
-                grids_dir = self.vertical_grids_dir or "<present.oifs.vertical_grids_dir is not set>"
-                reads += [f"{grids_dir}/{self.target_spectral}_grid.nc", grid_file]
+                # remapcon needs the cell corners, which the grid description of grids/ does not have
+                plan.append(("corners", [f"{work}/ICMGGECE4INIT"], [self.corner_grid_file()]))
+                reads += [self.corner_grid_file(), grid_file]
                 reads.append(str(GRIDS_DIR / f"L{self.vertical}.txt"))
             plan.append((name, reads, [f"{ic_target}/{f}" for f in IC_FILES]))
         return plan
@@ -435,8 +439,9 @@ class OIFSData:
                     with atomic_write(f"{self.ic_target}/{file}") as tmp:
                         shutil.move(f"{TMPDIR}/{file}", tmp)
             else:
-                vertical_interpolation(
-                    TMPDIR, self.vertical_grids_dir, self.target_spectral, self.vertical, self.ic_target, do_clean
+                create_corner_grid(
+                    f"{TMPDIR}/ICMGGECE4INIT", self.grid_type, self.spectral, self.corner_grid_file(), TMPDIR
                 )
+                vertical_interpolation(TMPDIR, TMPDIR, self.target_spectral, self.vertical, self.ic_target, do_clean)
 
         logger.info("Done")

@@ -310,7 +310,9 @@ Its steps, switched on or off in ``present.oifs.steps`` (or ``--oifs a,b``):
 When ``spectral`` or ``boundary`` is on, the three initial-state files go to
 ``<present.output>/oifs/<grid>/<startdate>/``: moved from the intermediate folder when the source and
 target have the same number of levels, else interpolated vertically first (``cdo remapeta`` with the hybrid
-coefficients of ``grids/L<levels>.txt``; temperature, divergence and vorticity through the Gaussian grid and
+coefficients of ``grids/L<levels>.txt``; the conservative remapping to the reduced Gaussian grid needs the cell
+corners of the target grid, so ``corners`` first writes ``<machine.tmpdir>/present/oifs/T<kind><N>_grid.nc`` from
+the ``ICMGGECE4INIT`` of ``gridpoint``; temperature, divergence and vorticity through the Gaussian grid and
 back to spectral, moisture and cloud fields on the reduced Gaussian grid, orography and surface pressure
 unchanged). The climate file goes to ``<present.output>/oifs/<grid>/<climate_version>/``. ``<grid>``,
 ``<startdate>`` and ``<climate_version>`` come from ``grids.oifs``. Intermediate files stay in
@@ -321,10 +323,9 @@ Before the first step the command checks that every file an enabled step reads e
 earlier step), and lists all missing ones at once; ``--dry-run`` does only this and logs the plan.
 
 The reduced Gaussian grid descriptions (``grids/T<kind><N>.txt``) and hybrid coefficients ship with the package
-in ``ecefast/components/oifs/grids/``. The scripts that made them, and the grids of
-``present.oifs.vertical_grids_dir``, stay scripts: ``create_corners.py`` (grids with cell corners),
-``descriptor_generator.py`` (reduced Gaussian descriptions) and ``convert_aka_bika.py`` (hybrid coefficients
-from the ECMWF tables).
+in ``ecefast/components/oifs/grids/``. The scripts that made them stay scripts: ``descriptor_generator.py`` (reduced Gaussian descriptions) and ``convert_aka_bika.py`` (hybrid coefficients
+from the ECMWF tables). ``create_corners.py`` writes the grids with cell corners of an input tree, with their
+masked variants, outside a run.
 
 Writing a step
 --------------

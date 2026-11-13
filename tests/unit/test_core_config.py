@@ -54,7 +54,7 @@ def test_present_section_loads_with_defaults(tmp_path: Path) -> None:
     raw = minimal(tmp_path) | {"present": present(tmp_path) | {"oifs": {}, "nemo": {"minimum_depth": 30}}}
     section = load_config(write(tmp_path, raw)).present
     assert section.oifs.source_grid == "TL255L91"
-    assert (section.oifs.climate_dir, section.oifs.vertical_grids_dir) == (None, None)
+    assert (section.oifs.climate_dir, section.oifs.precomputed_climate_dir) == (None, None)
     assert vars(section.oifs.steps) == {"spectral": True, "gridpoint": True, "boundary": False}
     assert (section.nemo.source_grid, section.nemo.source_staggering, section.nemo.minimum_depth) == ("eORCA1", "T", 30)
     assert all(vars(section.nemo.steps).values())
