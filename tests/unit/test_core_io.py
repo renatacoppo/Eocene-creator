@@ -8,7 +8,7 @@ import pytest
 import xarray as xr
 
 from ecefast.core import io
-from ecefast.core.io import atomic_write, temporary_path
+from ecefast.core.io import atomic_symlink, atomic_write, temporary_path
 
 pytestmark = pytest.mark.unit
 
@@ -98,3 +98,14 @@ def test_replace_directory_without_target(tmp_path: Path) -> None:
 
 def test_partial_path() -> None:
     assert io.partial_path("/data/out/") == "/data/out.partial"
+
+
+def test_atomic_symlink_creates_and_replaces(tmp_path: Path) -> None:
+    (tmp_path / "a.nc").write_text("a")
+    (tmp_path / "b.nc").write_text("b")
+    link = tmp_path / "link.nc"
+    atomic_symlink("a.nc", link)
+    assert link.is_symlink() and link.read_text() == "a"
+    atomic_symlink("b.nc", link)  # replaces an existing link
+    assert link.readlink() == Path("b.nc") and link.read_text() == "b"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["a.nc", "b.nc", "link.nc"]

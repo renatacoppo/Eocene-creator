@@ -200,7 +200,9 @@ In the paths below ``{input}``, ``{output}`` and ``{herold}`` are ``eocene.input
    and bathymetry), ``nemo/initial/Goutorbe_ghflux.nc`` (geothermal flux from Eocene ocean-floor
    age), the three ocean initial states in ``initial_state/nemo/ts_state/``: ``deepmip-L31_cold-30.nc`` and
    ``deepmip-L31_warm-34.nc`` (idealised DeepMIP profiles, 30 and 34 °C at the equator surface, 10 and 15 °C at
-   depth) and ``woa13-levitus-L31_woa-pi.nc`` (zonal mean of WOA13), and ``nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc`` (runoff set to zero;
+   depth) and ``woa13-levitus-L31_woa-pi.nc`` (zonal mean of WOA13), each with a relative link in
+   ``nemo/initial/``, where EC-Earth reads the ocean initial state (as ECE4-DATA does for
+   ``woa13-levitus-L31.nc``), and ``nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc`` (runoff set to zero;
    the runoff mapper handles rivers).
 
 ``rnfm`` (``EoceneRNFM``)

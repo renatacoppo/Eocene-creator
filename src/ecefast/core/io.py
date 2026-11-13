@@ -71,6 +71,22 @@ def atomic_write(path: str | os.PathLike) -> Iterator[str]:
     os.replace(tmp, path)
 
 
+def atomic_symlink(target: str, link: str | os.PathLike) -> None:
+    """Create or replace the symlink ``link`` -> ``target`` atomically (temporary link, then ``os.replace``).
+
+    Parameters
+    ----------
+    target : str
+        What the link points to, as stored in the link (e.g. a relative path).
+    link : str or os.PathLike
+        Path of the link. Its directory must exist.
+    """
+    tmp = temporary_path(link)
+    tmp.unlink(missing_ok=True)
+    os.symlink(target, tmp)
+    os.replace(tmp, link)
+
+
 def partial_path(directory: str) -> str:
     """Directory where a run builds the tree of ``directory`` before :func:`replace_directory`: a sibling,
     ``<directory>.partial``, on the same filesystem so the final move is a rename.

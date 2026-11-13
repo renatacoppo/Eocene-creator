@@ -1,5 +1,6 @@
 """Unit tests for the ``domain`` and ``nemo`` steps of the Eocene pipeline."""
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -124,14 +125,20 @@ def test_deepmip_profiles(ctx: Context, profile: str, file: str, surface_max: fl
     np.testing.assert_allclose(out["thetao"].values[0, :, :, 0], expected, rtol=1e-6)
     assert float(out["thetao"].min()) == deep
     np.testing.assert_allclose(out["so"].values, 34.7)
+    # EC-Earth reads it from nemo/initial: a relative link into ts_state, as ECE4-DATA has for woa13-levitus-L31.nc
+    link = Path(ctx.expand(f"{{output}}/nemo/initial/{file}"))
+    assert link.is_symlink() and os.readlink(link) == f"../../initial_state/nemo/ts_state/{file}"
+    assert link.resolve() == Path(ctx.expand(f"{{output}}/initial_state/nemo/ts_state/{file}")).resolve()
 
 
 def test_nemo_ocean_initial_states_are_in_ts_state() -> None:
-    """The WOA initial state is read from, and its Eocene variants written to, initial_state/nemo/ts_state."""
+    """The WOA initial state is read from, and its Eocene variants written to, initial_state/nemo/ts_state; each
+    variant also gets a link in nemo/initial, where EC-Earth reads it. The step never reads nemo/initial/woa13."""
     assert "{input}/initial_state/nemo/ts_state/woa13-levitus-L31.nc" in EoceneNEMO.reads
-    ocean = [t for t in EoceneNEMO.writes if "L31" in t]
-    assert ocean and all(t.startswith("{output}/initial_state/nemo/ts_state/") for t in ocean)
-    assert not [t for t in EoceneNEMO.reads + EoceneNEMO.writes if "nemo/initial/woa13" in t]
+    files = [Path(t).name for t in EoceneNEMO.writes if t.startswith("{output}/initial_state/nemo/ts_state/")]
+    links = [Path(t).name for t in EoceneNEMO.writes if "L31" in t and t.startswith("{output}/nemo/initial/")]
+    assert len(files) == 3 and sorted(files) == sorted(links)
+    assert not [t for t in EoceneNEMO.reads if "nemo/initial/woa13" in t]
 
 
 # --- domain step on synthetic files --------------------------------------------------------------------------------

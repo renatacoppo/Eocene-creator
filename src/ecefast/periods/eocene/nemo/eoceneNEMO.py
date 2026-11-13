@@ -13,7 +13,7 @@ import xarray as xr
 import pandas as pd
 from scipy.spatial import cKDTree
 from ecefast.core.cdo import get_cdo
-from ecefast.core.io import atomic_write
+from ecefast.core.io import atomic_symlink, atomic_write
 from ecefast.core.layout import nemo_ts_state_dir
 from ecefast.core.steps import ComponentStep
 from ecefast.core.workspace import Context
@@ -77,6 +77,9 @@ DEEPMIP_PROFILES = {
 }
 TS_STATE_IN = nemo_ts_state_dir("{input}")
 TS_STATE_OUT = nemo_ts_state_dir("{output}")
+# EC-Earth reads the ocean initial state from nemo/initial/: as ECE4-DATA does for woa13-levitus-L31.nc, each file
+# written in ts_state gets a relative link there (nemo/initial/<file> -> ../../initial_state/nemo/ts_state/<file>)
+NEMO_INITIAL = "nemo/initial"
 
 
 class EoceneNEMO(ComponentStep):
@@ -108,6 +111,9 @@ class EoceneNEMO(ComponentStep):
         f"{TS_STATE_OUT}/{OCEAN_INIT_FILES['deepmip_cold']}",
         f"{TS_STATE_OUT}/{OCEAN_INIT_FILES['deepmip_warm']}",
         f"{TS_STATE_OUT}/{OCEAN_INIT_FILES['woa_pi']}",
+        f"{{output}}/{NEMO_INITIAL}/{OCEAN_INIT_FILES['deepmip_cold']}",
+        f"{{output}}/{NEMO_INITIAL}/{OCEAN_INIT_FILES['deepmip_warm']}",
+        f"{{output}}/{NEMO_INITIAL}/{OCEAN_INIT_FILES['woa_pi']}",
         "{output}/nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc",
     ]
 
@@ -272,7 +278,8 @@ class EoceneNEMO(ComponentStep):
         output_file : str or None
             Output path for a single profile. Default: the file of the profile in
             ``OCEAN_INIT_FILES``, in ``initial_state/nemo/ts_state`` of the output
-            folder. Not allowed with ``profile=None``.
+            folder, with a relative link to it in ``nemo/initial`` (where EC-Earth
+            reads it). Not allowed with ``profile=None``.
 
         Returns
         -------
@@ -345,8 +352,10 @@ class EoceneNEMO(ComponentStep):
         )
 
         # === Decide output path ===
+        link = None
         if output_file is None:
             output_file = os.path.join(nemo_ts_state_dir(self.output_folder), OCEAN_INIT_FILES[profile])
+            link = os.path.join(self.output_folder, NEMO_INITIAL, OCEAN_INIT_FILES[profile])
 
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
@@ -358,6 +367,10 @@ class EoceneNEMO(ComponentStep):
             woa.to_netcdf(tmp, mode="w")
 
         logger.debug("Ocean initial conditions written to %s", output_file)
+        if link is not None:
+            os.makedirs(os.path.dirname(link), exist_ok=True)
+            atomic_symlink(os.path.relpath(output_file, os.path.dirname(link)), link)
+            logger.debug("Linked %s -> %s", link, output_file)
 
         return woa
 

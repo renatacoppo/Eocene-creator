@@ -281,6 +281,9 @@ Output
   point to the new file.
 - New file ``initial_state/nemo/ts_state/deepmip-L31_warm-34.nc`` (warm DeepMIP-like ocean initial state, see
   *Added*).
+- Each ocean initial state written by ``EoceneNEMO`` gets a relative link ``nemo/initial/<file>`` ->
+  ``../../initial_state/nemo/ts_state/<file>``, where EC-Earth reads it (the job stopped on a missing
+  ``nemo/initial/deepmip-L31_cold-30.nc``).
 - ``present.output`` (``BASELINE/nemo-domain``) now also holds the copy of the input tree made by ``stage``
   (``oifs/``, ``nemo/``, ``oasis/<grid>/``, ``runoff-mapper/``, the ``cmip6-data`` link); the domain files are
   unchanged. ``eocene.output`` gains nothing new (``runoff-mapper/`` holds only ``runoff_maps.nc``, which ``rnfm``
