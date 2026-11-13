@@ -54,7 +54,7 @@ def test_present_section_loads_with_defaults(tmp_path: Path) -> None:
     raw = minimal(tmp_path) | {"present": present(tmp_path) | {"oifs": {}, "nemo": {"minimum_depth": 30}}}
     section = load_config(write(tmp_path, raw)).present
     assert section.oifs.source_grid == "TL255L91"
-    assert (section.oifs.climate_dir, section.oifs.vertical_grids_dir) == (None, None)
+    assert (section.oifs.climate_dir, section.oifs.precomputed_climate_dir) == (None, None)
     assert vars(section.oifs.steps) == {"spectral": True, "gridpoint": True, "boundary": False}
     assert (section.nemo.source_grid, section.nemo.source_staggering, section.nemo.minimum_depth) == ("eORCA1", "T", 30)
     assert all(vars(section.nemo.steps).values())
@@ -378,7 +378,9 @@ def test_missing_and_empty_file(tmp_path: Path) -> None:
 def test_templates_load(tmp_path: Path, template: str) -> None:
     """The committed templates are valid, both periods present."""
     config = load_config(REPO / "configs" / template)
-    assert config.eocene.input == config.present.input
+    # on Atos the Eocene starts from the present-day tree of `ecefast present run`; on a laptop from ECE4-DATA
+    start = config.present.output if template == "atos.tmpl" else config.present.input
+    assert config.eocene.input == start
     assert config.present.nemo.source_grid == "eORCA1"
     assert (config.present.oifs is not None) == (template == "atos.tmpl")  # the generator's inputs are on Atos
     assert (config.eocene.nemo.domain == "build") == (template == "atos.tmpl")

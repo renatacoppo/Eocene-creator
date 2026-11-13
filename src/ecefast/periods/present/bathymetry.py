@@ -90,10 +90,17 @@ class PresentDayBathymetry(BathymetryProcessor):
         return corrected
 
     def _plot(self, xfield, output_dir):
-        """Land-sea mask of every domain of the input tree, then of the processed bathymetry."""
+        """Land-sea mask of every domain of the input tree, then of the processed bathymetry.
+
+        A domain without ``bathy_metry`` is left out with a warning (e.g. ``ORCA1`` in ECE4-DATA 4.1.11 names it
+        ``bathy_meter``): the plot is a diagnostic, it does not stop the run.
+        """
         panels, labels = [], []
         for path in self.reference_domains():
             with xr.open_dataset(path) as domain:
+                if "bathy_metry" not in domain:
+                    logger.warning("Mask plot: %s has no bathy_metry, left out of the plot", path)
+                    continue
                 panels.append(xr.where(domain["bathy_metry"] > 0, 1, 0).load())
             labels.append(f"{os.path.basename(os.path.dirname(path))} (input tree)")
         panels.append(xr.where(xfield["bathy_metry"] > 0, 1, 0))
@@ -112,7 +119,7 @@ class PresentDayBathymetry(BathymetryProcessor):
         plt.tight_layout()
         plot_file = os.path.join(output_dir, PLOT_FILE)
         plt.savefig(plot_file, dpi=150, bbox_inches="tight")
-        logger.info("Plot saved: %s", plot_file)
+        logger.debug("Plot saved: %s", plot_file)
         plt.close()
 
 

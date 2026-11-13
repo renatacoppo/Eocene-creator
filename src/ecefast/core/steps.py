@@ -64,6 +64,17 @@ class ComponentStep:
     def dry_run(self) -> None:
         """Log what :meth:`run` would do beyond the declared ``writes`` (default: nothing)."""
 
+    def planned_writes(self) -> list[str]:
+        """Paths this step writes beyond the class-level ``writes``, because they depend on the configuration
+        (e.g. the final and intermediate files of a component pipeline). Listed in the recap of the run.
+
+        Returns
+        -------
+        list of str
+            Absolute paths; empty by default.
+        """
+        return []
+
 
 def step_summary(step: type[ComponentStep]) -> str:
     """First line of the step docstring (shown by the dry run and ``ecefast eocene steps``)."""
@@ -112,7 +123,8 @@ def _check_unselected_needs(steps: list[type[ComponentStep]], selected: list[typ
             if missing:
                 raise PipelineError(
                     f"Step '{step.name}' needs '{need}', which is not selected and has not run before "
-                    f"(missing: {', '.join(missing)}). Select '{need}' too."
+                    f"(missing: {', '.join(missing)}). Select '{need}' too: "
+                    f"ecefast {ctx.period} run --steps {need},{step.name}"
                 )
 
 
@@ -205,10 +217,12 @@ def run_pipeline(
         width = max((len(n) for n in names), default=0)
         logger.info("Dry run: nothing is written. Plan:")
         for step in selected:
-            outputs = ", ".join(ctx.expand(t) for t in step.writes)
-            logger.info("  %-*s  %s%s", width, step.name, step_summary(step), f"  → {outputs}" if outputs else "")
+            logger.info("  %-*s  %s", width, step.name, step_summary(step))
+            for template in step.writes:
+                logger.debug("      → %s", ctx.expand(template))
         for instance in instances:
             instance.dry_run()
+        logger.info("%s", files_recap(selected, instances, ctx, dry_run=True))
         return names
 
     for step, instance in zip(selected, instances):
@@ -217,4 +231,59 @@ def run_pipeline(
         missing = [p for p in (ctx.expand(t) for t in step.writes) if not os.path.exists(p)]
         if missing:
             raise PipelineError(f"Step '{step.name}' did not write: {', '.join(missing)}")
+    logger.info("%s", files_recap(selected, instances, ctx, dry_run=False))
     return names
+
+
+def files_recap(
+    selected: list[type[ComponentStep]], instances: list[ComponentStep], ctx: "Context", dry_run: bool
+) -> str:
+    """Text listing every file the selected steps write, grouped by the period's ``output``, ``machine.tmpdir``
+    and other places, with paths relative to their group.
+
+    In a dry run, files that exist already are marked ``(exists)``; after a run, files that are not there are
+    marked ``(not found)``.
+
+    Parameters
+    ----------
+    selected : list of ComponentStep subclasses
+        The steps that ran (or would run).
+    instances : list of ComponentStep
+        Their instances, in the same order: :meth:`ComponentStep.planned_writes` adds the configuration-dependent
+        paths to the class-level ``writes``.
+    ctx : Context
+        Run context: path expansion, the period's output and the tmpdir.
+    dry_run : bool
+        Phrase it as files that would be written.
+
+    Returns
+    -------
+    str
+        The recap, one file per line.
+    """
+    paths = []
+    for step, instance in zip(selected, instances):
+        for path in [ctx.expand(t) for t in step.writes] + instance.planned_writes():
+            if path not in paths:
+                paths.append(path)
+    shown_output = ctx.final_output or ctx.section.output  # a run with stage builds a partial tree, then moves it
+    groups = {
+        f"{ctx.period}.output ({shown_output})": ctx.section.output,
+        f"machine.tmpdir ({ctx.config.machine.tmpdir})": ctx.config.machine.tmpdir,
+    }
+    lines = {label: [] for label in [*groups, "elsewhere"]}
+    for path in paths:
+        if dry_run:
+            mark = "  (exists)" if os.path.exists(path) else ""
+        else:
+            mark = "" if os.path.exists(path) else "  (not found)"
+        label = next((label for label, root in groups.items() if _covered(path, [root])), "elsewhere")
+        shown = path if label == "elsewhere" else os.path.relpath(path, groups[label])
+        lines[label].append(f"    {shown}{mark}")
+
+    title = "Files that would be written" if dry_run else "Files written"
+    text = [f"{title} ({len(paths)}):"]
+    for label, entries in lines.items():
+        if entries:
+            text += [f"  in {label}:" if label != "elsewhere" else "  elsewhere:", *entries]
+    return "\n".join(text)

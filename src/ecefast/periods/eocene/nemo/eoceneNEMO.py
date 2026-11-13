@@ -14,6 +14,7 @@ import pandas as pd
 from scipy.spatial import cKDTree
 from ecefast.core.cdo import get_cdo
 from ecefast.core.io import atomic_write
+from ecefast.core.layout import nemo_ts_state_dir
 from ecefast.core.steps import ComponentStep
 from ecefast.core.workspace import Context
 
@@ -56,6 +57,27 @@ def woa_zonal_mean(thetao, ocean_mask):
 # ASCII columns lon, lat, age (Myr), depth-to-basement, bathymetry (m); create_geothermal_flux reads the 55 Ma one
 AGE_GRID_URL = "https://www.earthbyte.org/webdav/ftp/earthbyte/agegrid/Palaeo/2008/Data/age_depth_bath_55.xyadb.bz2"
 
+# present-day ocean initial state (World Ocean Atlas 2013, 31 levels) and the Eocene ones made from it, in
+# initial_state/nemo/ts_state (the old path nemo/initial/woa13-levitus-L31.nc is a link to it). deepmip_cold and
+# deepmip_warm are idealised DeepMIP-like profiles, not WOA data: their names say so (the number is the surface
+# temperature at the equator, degC); woa_pi is still WOA data, a variant of the file.
+WOA_FILE = "woa13-levitus-L31.nc"
+OCEAN_INIT_FILES = {
+    "deepmip_cold": "deepmip-L31_cold-30.nc",
+    "deepmip_warm": "deepmip-L31_warm-34.nc",
+    "woa_pi": "woa13-levitus-L31_woa-pi.nc",
+}
+# Idealised DeepMIP-like temperature profiles: T = (depth - z) / depth * amplitude * cos(lat) + deep above ``depth``
+# (m), ``deep`` (degC) below. cold: the profile used so far (30 degC at the equator surface); warm: the deeper
+# variant of the original code (5000 m, 15 degC below), with the amplitude set to 19 degC for 34 degC at the equator
+# surface (choice of the authors, Nov 2026).
+DEEPMIP_PROFILES = {
+    "deepmip_cold": {"depth": 1000.0, "amplitude": 20.0, "deep": 10.0},
+    "deepmip_warm": {"depth": 5000.0, "amplitude": 19.0, "deep": 15.0},
+}
+TS_STATE_IN = nemo_ts_state_dir("{input}")
+TS_STATE_OUT = nemo_ts_state_dir("{output}")
+
 
 class EoceneNEMO(ComponentStep):
     """Modify NEMO input files for the Eocene: tidal mixing, geothermal flux, ocean initial state, runoff."""
@@ -71,7 +93,7 @@ class EoceneNEMO(ComponentStep):
         "{herold}/age_depth_bath_55.xyadb",
         "{input}/nemo/initial/zdfiwm_forcing_r720x360.nc",
         "{input}/nemo/initial/Goutorbe_ghflux.nc",
-        "{input}/nemo/initial/woa13-levitus-L31.nc",
+        f"{TS_STATE_IN}/{WOA_FILE}",
         "{input}/nemo/domain/{grids.nemo.name}/domain_cfg.nc",
         "{input}/nemo/domain/ORCA2/domain_cfg.nc",
         "{input}/nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc",
@@ -83,8 +105,9 @@ class EoceneNEMO(ComponentStep):
     writes = [
         "{output}/nemo/initial/zdfiwm_forcing_r720x360.nc",
         "{output}/nemo/initial/Goutorbe_ghflux.nc",
-        "{output}/nemo/initial/woa13-levitus-L31_deepmip-30.nc",
-        "{output}/nemo/initial/woa13-levitus-L31_woa-pi.nc",
+        f"{TS_STATE_OUT}/{OCEAN_INIT_FILES['deepmip_cold']}",
+        f"{TS_STATE_OUT}/{OCEAN_INIT_FILES['deepmip_warm']}",
+        f"{TS_STATE_OUT}/{OCEAN_INIT_FILES['woa_pi']}",
         "{output}/nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc",
     ]
 
@@ -127,7 +150,7 @@ class EoceneNEMO(ComponentStep):
 
         if cleanup and os.path.exists(output_file):
             os.remove(output_file)
-            logger.info("Cleaning file: %s", output_file)
+            logger.debug("Cleaning file: %s", output_file)
 
         herold_file_remap = self.cdo.remapcon(self.grid, input=herold_file_orig)
         herold_bath_remap = self.cdo.remapcon(self.grid, input=herold_bath_orig)
@@ -168,7 +191,7 @@ class EoceneNEMO(ComponentStep):
         os.makedirs(os.path.join(self.output_folder, "nemo/initial"), exist_ok=True)
         with atomic_write(output_file) as tmp:
             ds_out.to_netcdf(tmp)
-        logger.info("Written NEMO 4.2 tidal file: %s", output_file)
+        logger.debug("Written NEMO 4.2 tidal file: %s", output_file)
 
         ds_m2.close()
         ds_pd.close()
@@ -183,7 +206,7 @@ class EoceneNEMO(ComponentStep):
 
         if cleanup and os.path.exists(gh_file_out):
             os.remove(gh_file_out)
-            logger.info("Cleaning file: %s", gh_file_out)
+            logger.debug("Cleaning file: %s", gh_file_out)
 
         # Loading Geothermal flux NEMO file
         ds_gh = xr.open_dataset(gh_file)
@@ -226,7 +249,7 @@ class EoceneNEMO(ComponentStep):
 
         with atomic_write(gh_file_out) as tmp:
             ds_gh.to_netcdf(tmp)
-        logger.info("Written NEMO 4.2 tidal file: %s", gh_file_out)
+        logger.debug("Written NEMO 4.2 tidal file: %s", gh_file_out)
         ds_gh.close()
 
         return None
@@ -239,16 +262,17 @@ class EoceneNEMO(ComponentStep):
         Parameters
         ----------
         profile : str or None
-            None (default): build both profiles below, one file each.
-            "deepmip_cold": idealized cold DeepMIP-like profile (output suffix deepmip-30).
+            None (default): build all the profiles below, one file each.
+            "deepmip_cold": idealized cold DeepMIP-like profile (``deepmip-L31_cold-30.nc``).
+            "deepmip_warm": idealized warm DeepMIP-like profile (``deepmip-L31_warm-34.nc``).
             "woa_pi": zonal mean of present-day WOA over the present-day ocean,
-            broadcast in longitude (output suffix woa-pi).
+            broadcast in longitude (``woa13-levitus-L31_woa-pi.nc``).
         so_value : float
             Salinity to assign everywhere (default = 34.7).
         output_file : str or None
-            Output path for a single profile. Default: the input path of
-            ``nemo/initial/woa13-levitus-L31.nc`` under the output folder, with
-            ``_<suffix>`` before the extension. Not allowed with ``profile=None``.
+            Output path for a single profile. Default: the file of the profile in
+            ``OCEAN_INIT_FILES``, in ``initial_state/nemo/ts_state`` of the output
+            folder. Not allowed with ``profile=None``.
 
         Returns
         -------
@@ -264,17 +288,15 @@ class EoceneNEMO(ComponentStep):
         if profile is None:
             if output_file is not None:
                 raise ValueError(
-                    "output_file needs a single profile ('deepmip_cold' or 'woa_pi'); "
-                    "profile=None builds both files with their default names"
+                    f"output_file needs a single profile ({', '.join(OCEAN_INIT_FILES)}); "
+                    "profile=None builds all the files with their default names"
                 )
-            return {
-                name: self.create_ocean_init(profile=name, so_value=so_value) for name in ("deepmip_cold", "woa_pi")
-            }
+            return {name: self.create_ocean_init(profile=name, so_value=so_value) for name in OCEAN_INIT_FILES}
 
-        if profile not in ("deepmip_cold", "woa_pi"):
-            raise ValueError(f"Unknown profile: {profile}. Options are: deepmip_cold, woa_pi")
+        if profile not in OCEAN_INIT_FILES:
+            raise ValueError(f"Unknown profile: {profile}. Options are: {', '.join(OCEAN_INIT_FILES)}")
 
-        woa_file = os.path.join(self.input_folder, "nemo/initial/woa13-levitus-L31.nc")
+        woa_file = os.path.join(nemo_ts_state_dir(self.input_folder), WOA_FILE)
         domain_file = os.path.join(self.input_folder, f"nemo/domain/{self.nemo_grid}/domain_cfg.nc")
         woa = xr.open_dataset(woa_file)
         domain = xr.open_dataset(domain_file)
@@ -291,12 +313,13 @@ class EoceneNEMO(ComponentStep):
         # Build 3D mesh (depth, lat, lon)
         Z, LAT, LON = np.meshgrid(depths, lat_rad[:, 0], lon[0, :], indexing="ij")
 
-        if profile == "deepmip_cold":
+        if profile in DEEPMIP_PROFILES:
             # Temperature profile formula
+            depth, amplitude, deep = (DEEPMIP_PROFILES[profile][k] for k in ("depth", "amplitude", "deep"))
             thetao = np.where(
-                Z <= 1000,
-                ((1000 - Z) / 1000) * 20 * np.cos(LAT) + 10,
-                10,
+                Z <= depth,
+                ((depth - Z) / depth) * amplitude * np.cos(LAT) + deep,
+                deep,
             )
 
             # thetao = np.where(
@@ -306,14 +329,12 @@ class EoceneNEMO(ComponentStep):
             # )
 
             thetao = np.broadcast_to(thetao, woa["thetao"].shape)  # keep the 12 months
-            suffix = "deepmip-30"
 
         elif profile == "woa_pi":
             # Present-day ocean mask from the ORCA2 domain (WOA is filled over land)
             orca2_file = os.path.join(self.input_folder, "nemo/domain/ORCA2/domain_cfg.nc")
             pd_ocean_mask = present_day_ocean_mask(orca2_file, lon, lat, len(depths))
             thetao = woa_zonal_mean(woa["thetao"], pd_ocean_mask).values
-            suffix = "woa-pi"
 
         # Salinity constant
         so = np.full_like(thetao, so_value)
@@ -325,9 +346,7 @@ class EoceneNEMO(ComponentStep):
 
         # === Decide output path ===
         if output_file is None:
-            rel_path = os.path.relpath(woa_file, self.input_folder)
-            base, ext = os.path.splitext(rel_path)
-            output_file = os.path.join(self.output_folder, f"{base}_{suffix}{ext}")
+            output_file = os.path.join(nemo_ts_state_dir(self.output_folder), OCEAN_INIT_FILES[profile])
 
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
@@ -338,7 +357,7 @@ class EoceneNEMO(ComponentStep):
         with atomic_write(output_file) as tmp:
             woa.to_netcdf(tmp, mode="w")
 
-        logger.info("Ocean initial conditions written to %s", output_file)
+        logger.debug("Ocean initial conditions written to %s", output_file)
 
         return woa
 
@@ -360,7 +379,7 @@ class EoceneNEMO(ComponentStep):
         os.makedirs(os.path.join(self.output_folder, "nemo/climatology"), exist_ok=True)
         with atomic_write(runoff_output) as tmp:
             ds_out.to_netcdf(tmp)
-        logger.info("Written NEMO 4.2 runoff file: %s", runoff_output)
+        logger.debug("Written NEMO 4.2 runoff file: %s", runoff_output)
 
         ds_rnf.close()
 

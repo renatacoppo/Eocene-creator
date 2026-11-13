@@ -19,7 +19,7 @@ machine:
 grids:
   # oifs:
   #   name: TL63L31             # OIFS resolution (directory under oifs/)
-  #   startdate: '19900101'     # initial-state folder under oifs/<name>/; quote it
+  #   startdate: '19900101'     # initial-state folder under initial_state/oifs/<name>/; quote it
   #   climate_version: climate.v020   # climate files folder under oifs/<name>/: climate.v020 for cy48, v015 for cy43
   nemo:
     # name: PALEORCA2           # NEMO grid (directory under oasis/ and nemo/domain/)
@@ -29,7 +29,7 @@ grids:
 # Present-day period: `ecefast nemo run` (and `ecefast oifs run`, inputs on Atos only)
 present:
   input: /path/to/ECE4-DATA-V3        # EC-Earth4 input tree, read-only (required)
-  output: /path/to/OUTPUT/present     # nemo/domain/<grid>/, oifs/<grid>/ (required)
+  output: /path/to/OUTPUT/present     # the present-day tree: stage copies the input, then nemo/domain/ (required)
   # oifs: OIFS base data from a finer grid; its inputs are on Atos only, see configs/atos.tmpl
   nemo:                               # present-day NEMO domain, bathymetry of {input}/nemo/domain/<source_grid>/
     source_grid: eORCA1               # NEMO grid of the present-day bathymetry (needs strait corrections for it)
@@ -45,7 +45,7 @@ present:
 
 # Eocene (DeepMIP) period: `ecefast eocene run`
 eocene:
-  input: "{present.input}"            # EC-Earth tree to start from: the present-day one (required)
+  input: "{present.input}"            # EC-Earth tree to start from: ECE4-DATA (no present-day domain on a laptop) (required)
   herold: /path/to/herold-et-al-2014/Supp   # Herold et al. (2014) supplementary data, read-only (required)
   output: /path/to/OUTPUT/eocene      # the Eocene EC-Earth tree; --overwrite replaces it (required)
   nemo:

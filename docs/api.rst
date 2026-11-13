@@ -31,6 +31,22 @@ NEMO domain pipeline
 .. automodule:: ecefast.components.nemo.domain.pipeline
    :members: NEMOWorkflow
 
+OIFS base data
+--------------
+
+.. automodule:: ecefast.components.oifs.generator
+   :members: OIFSData
+
+.. automodule:: ecefast.components.oifs.initial_state
+
+.. automodule:: ecefast.components.oifs.climate
+
+.. automodule:: ecefast.components.oifs.corners
+   :members:
+
+.. automodule:: ecefast.components.oifs.grid_files
+   :members:
+
 Present-day period
 ------------------
 

@@ -5,9 +5,24 @@ CDO binary. The binary is the one python-cdo finds itself (the ``CDO`` environme
 ``cdo`` on ``PATH``).
 """
 
+import os
+import shutil
 from functools import cache
 
 from cdo import Cdo
+
+from .steps import PipelineError
+
+
+def find_cdo_binary() -> str | None:
+    """Return the CDO binary python-cdo will use, or ``None`` if there is none.
+
+    Same lookup as python-cdo: the ``CDO`` environment variable if it names a file, else ``cdo`` on ``PATH``.
+    """
+    from_env = os.environ.get("CDO")
+    if from_env and os.path.isfile(from_env):
+        return from_env
+    return shutil.which("cdo")
 
 
 @cache
@@ -18,7 +33,18 @@ def get_cdo() -> Cdo:
     -------
     cdo.Cdo
         The same instance on every call.
+
+    Raises
+    ------
+    PipelineError
+        If no CDO binary is found, with a hint on how to get one.
     """
+    if find_cdo_binary() is None:
+        raise PipelineError(
+            "CDO not found: no 'cdo' on PATH and no CDO environment variable pointing to it. "
+            "Load it first: 'module load cdo' on an HPC system (e.g. ECMWF Atos), "
+            "'conda install -c conda-forge cdo' or 'brew install cdo' elsewhere."
+        )
     return Cdo()
 
 

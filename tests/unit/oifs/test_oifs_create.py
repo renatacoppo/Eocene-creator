@@ -30,6 +30,7 @@ from oifs_helpers import (
     spectral_coefficients,
 )
 
+from ecefast.core.layout import oifs_initial_dir
 from ecefast.periods.eocene.oifs.eoceneOIFS import EoceneOIFS
 
 pytestmark = [pytest.mark.unit, needs_grib_tools]
@@ -102,7 +103,7 @@ def write_climate(path: Path) -> None:
 def oifs(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
     """The step on the synthetic tree, with the Herold fields and both land-sea masks prepared once."""
     root = tmp_path_factory.mktemp("oifs")
-    init = root / "input" / "oifs" / RESOLUTION / STARTDATE
+    init = Path(oifs_initial_dir(str(root / "input"), RESOLUTION, STARTDATE))
     climate = root / "input" / "oifs" / RESOLUTION / "climate.v020"
     herold = root / "herold"
     for folder in (init, climate, herold):
@@ -143,6 +144,9 @@ def oifs(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
 
 
 def output(oifs: SimpleNamespace, relative: str) -> Path:
+    """An output file: ``<startdate>/<file>`` in the initial state, ``<climate_version>/<file>`` in oifs/<grid>."""
+    if relative.startswith(STARTDATE + "/"):
+        return Path(oifs_initial_dir(oifs.step.odir, RESOLUTION, relative))
     return Path(oifs.step.odir) / "oifs" / RESOLUTION / relative
 
 

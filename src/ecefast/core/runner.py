@@ -2,15 +2,18 @@
 ``ecefast <component> run --period <period>``.
 """
 
+import copy
 import logging
 import os
+import shutil
 from datetime import datetime
 
 from .cdo import cdo_version
 from .config import load_config, override_steps
+from .io import partial_path, replace_directory
 from .provenance import write_provenance
 from .steps import ComponentStep, PipelineError, run_pipeline
-from .workspace import Context
+from .workspace import Context, pause_before_overwrite
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +46,10 @@ def run_period(
 ) -> tuple[list[str], Context]:
     """Read the configuration, check the inputs of ``period`` and run its pipeline.
 
-    Unless it is a dry run, ``provenance.yml`` is written into the period's ``output``.
+    A run with ``stage`` makes a new output tree: every step writes into ``<output>.partial``, which replaces
+    ``output`` only when all of them have succeeded (a failed run leaves ``output`` as it was). If ``output`` holds
+    files already, this needs ``overwrite``. A run without ``stage`` modifies the existing tree in place, one atomic
+    file at a time. Unless it is a dry run, ``provenance.yml`` is written into the period's ``output``.
 
     Parameters
     ----------
@@ -63,7 +69,7 @@ def run_period(
     dry_run : bool
         Only check the inputs and log the plan; write nothing.
     overwrite : bool
-        Let the steps replace existing outputs.
+        With ``stage``: replace an output tree that holds files. Without: let the steps replace existing outputs.
 
     Returns
     -------
@@ -94,10 +100,49 @@ def run_period(
         if missing:
             logger.info("Skipping %s: no section for it in '%s'", ", ".join(missing), period)
         select = [s.name for s in steps if s.name not in missing]
-    ctx = Context(config, period, overwrite=overwrite)
-    names = run_pipeline(steps, ctx, select=select, dry_run=dry_run)
-    if not dry_run:
-        os.makedirs(section.output, exist_ok=True)
-        path = write_provenance(section.output, names, config_file, cdo, start, datetime.now().astimezone())
-        logger.info("Provenance written to %s", path)
-    return names, ctx
+    if "stage" not in select:
+        ctx = Context(config, period, overwrite=overwrite)
+        names = run_pipeline(steps, ctx, select=select, dry_run=dry_run)
+        if not dry_run:
+            os.makedirs(section.output, exist_ok=True)
+            path = write_provenance(section.output, names, config_file, cdo, start, datetime.now().astimezone())
+            logger.info("Provenance written to %s", path)
+        return names, ctx
+
+    # a new output tree: built in the partial tree, moved to the output when every step has succeeded
+    final = section.output
+    replaces = has_files(final)
+    if replaces and not overwrite:
+        raise PipelineError(
+            f"Step 'stage': output directory {final} is not empty. Nothing was written. Use --overwrite to replace "
+            "it, or select steps without 'stage' to rerun them on it."
+        )
+    if dry_run:
+        ctx = Context(config, period, overwrite=overwrite)
+        return run_pipeline(steps, ctx, select=select, dry_run=True), ctx
+    partial = partial_path(final)
+    if replaces:
+        pause_before_overwrite([final], "stage")
+    if os.path.exists(partial):
+        logger.info("Removing the partial tree of an earlier run: %s", partial)
+        shutil.rmtree(partial)
+    os.makedirs(partial)
+    building = copy.deepcopy(config)
+    building.period(period).output = partial
+    try:
+        names = run_pipeline(steps, Context(building, period, overwrite, final), select=select)
+        write_provenance(partial, names, config_file, cdo, start, datetime.now().astimezone())
+    except Exception:
+        if has_files(partial):
+            logger.error("The run stopped: %s is unchanged; the partial tree is kept in %s", final, partial)
+        else:
+            shutil.rmtree(partial)
+        raise
+    replace_directory(partial, final)
+    logger.info("Output tree moved to %s (provenance.yml in it)", final)
+    return names, Context(config, period, overwrite)
+
+
+def has_files(directory: str) -> bool:
+    """``directory`` exists and holds at least one file (empty folders do not count)."""
+    return os.path.isdir(directory) and any(files for _, _, files in os.walk(directory))

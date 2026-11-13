@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
+from ecefast.core import io
 from ecefast.core.io import atomic_write, temporary_path
 
 pytestmark = pytest.mark.unit
@@ -75,3 +76,25 @@ def test_cdo_output(tmp_path: Path) -> None:
     with xr.open_dataset(target) as back:
         np.testing.assert_array_equal(back["sst"].values, np.full((2, 3), 580.0))
     assert sorted(p.name for p in tmp_path.iterdir()) == ["in.nc", "out.nc"]
+
+
+def test_replace_directory(tmp_path: Path) -> None:
+    target, source = tmp_path / "out", tmp_path / "out.partial"
+    target.mkdir()
+    (target / "old.txt").write_text("old")
+    source.mkdir()
+    (source / "new.txt").write_text("new")
+    io.replace_directory(str(source), str(target))
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["out"]
+    assert sorted(p.name for p in target.iterdir()) == ["new.txt"]
+
+
+def test_replace_directory_without_target(tmp_path: Path) -> None:
+    source = tmp_path / "out.partial"
+    source.mkdir()
+    io.replace_directory(str(source), str(tmp_path / "out"))
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["out"]
+
+
+def test_partial_path() -> None:
+    assert io.partial_path("/data/out/") == "/data/out.partial"

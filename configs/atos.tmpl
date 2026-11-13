@@ -22,7 +22,7 @@ machine:
 grids:
   # oifs:
   #   name: TL63L31             # OIFS resolution (directory under oifs/)
-  #   startdate: '19900101'     # initial-state folder under oifs/<name>/; quote it
+  #   startdate: '19900101'     # initial-state folder under initial_state/oifs/<name>/; quote it
   #   climate_version: climate.v020   # climate files folder under oifs/<name>/: climate.v020 for cy48, v015 for cy43
   nemo:
     # name: PALEORCA2           # NEMO grid (directory under oasis/ and nemo/domain/)
@@ -32,12 +32,11 @@ grids:
 # Present-day period: `ecefast present run`, or `ecefast oifs run` and `ecefast nemo run`
 present:
   input: /path/to/ECE4-DATA-V3        # EC-Earth4 input tree, read-only (required)
-  output: /path/to/OUTPUT/present     # nemo/domain/<grid>/, oifs/<grid>/ (required)
+  output: /path/to/OUTPUT/present     # the present-day tree: stage copies the input, then oifs/, nemo/domain/ (required)
   oifs:                               # OIFS base data of grids.oifs made from a finer grid
-    # source_grid: TL255L91           # read from {input}/oifs/<source_grid>/<startdate>
+    # source_grid: TL255L91           # read from {input}/initial_state/oifs/<source_grid>/<startdate>
     climate_dir: /path/to/climate/climate.v020   # ECMWF monthly climate fields; read by the boundary step
     precomputed_climate_dir: /path/to/oifs48-icmcl # ready ICMCLECE4 files (<grid>/<climate_version>/), copied if there
-    vertical_grids_dir: /path/to/oifs-grids      # T<kind><N>_grid.nc made by create_corners.py (vertical interpolation)
     # steps:
     #   spectral: true                # truncate ICMSHECE4INIT
     #   gridpoint: true               # remap ICMGGECE4INIT, ICMGGECE4INIUA
@@ -56,7 +55,7 @@ present:
 
 # Eocene (DeepMIP) period: `ecefast eocene run`
 eocene:
-  input: "{present.input}"            # EC-Earth tree to start from: the present-day one (required)
+  input: "{present.output}"           # EC-Earth tree to start from: the one of `ecefast present run` (required)
   herold: /path/to/herold-et-al-2014/Supp   # Herold et al. (2014) supplementary data, read-only (required)
   output: /path/to/OUTPUT/eocene      # the Eocene EC-Earth tree; --overwrite replaces it (required)
   nemo:

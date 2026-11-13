@@ -1,6 +1,7 @@
 """Unit tests for the step runner, the run context and the stage step."""
 
 import logging
+import os
 from pathlib import Path
 
 import pytest
@@ -140,11 +141,39 @@ def test_read_inside_directory_written_by_earlier_step_is_not_missing(ctx: Conte
 def test_dry_run_writes_nothing(ctx: Context, caplog: pytest.LogCaptureFixture) -> None:
     ran = []
     a = make_step("a", reads=["{input}/a.txt"], writes=["{output}/a.txt"], ran=ran)
-    with caplog.at_level(logging.INFO, logger="ecefast"):
+    with caplog.at_level(logging.DEBUG, logger="ecefast"):
         assert run_pipeline([a], ctx, dry_run=True) == ["a"]
     assert ran == []
     assert outputs(ctx) == []
-    assert f"Dummy step.  → {ctx.section.output}/a.txt" in caplog.text
+    plan = {r.getMessage().strip(): r.levelno for r in caplog.records}
+    assert plan["a  Dummy step."] == logging.INFO  # the step at INFO
+    assert plan[f"→ {ctx.section.output}/a.txt"] == logging.DEBUG  # its files at DEBUG
+
+
+def test_dry_run_recaps_files_by_place(ctx: Context, caplog: pytest.LogCaptureFixture) -> None:
+    a = make_step("a", writes=["{output}/a.txt"])
+    tmpfile = f"{ctx.config.machine.tmpdir}/present/nemo/b.nc"
+    elsewhere = "/somewhere/else/namelist_cfg"
+    a.planned_writes = lambda self: [tmpfile, elsewhere, f"{ctx.section.output}/a.txt"]  # a.txt only once
+    Path(tmpfile).parent.mkdir(parents=True)
+    Path(tmpfile).write_text("x")
+    with caplog.at_level(logging.INFO, logger="ecefast"):
+        run_pipeline([a], ctx, dry_run=True)
+    recap = caplog.text[caplog.text.index("Files that would be written") :]
+    assert "Files that would be written (3):" in recap
+    assert f"in {ctx.period}.output ({ctx.section.output}):\n    a.txt\n" in recap
+    assert f"in machine.tmpdir ({ctx.config.machine.tmpdir}):\n    present/nemo/b.nc  (exists)\n" in recap
+    assert f"elsewhere:\n    {elsewhere}" in recap
+
+
+def test_run_recaps_written_files(ctx: Context, caplog: pytest.LogCaptureFixture) -> None:
+    a = make_step("a", writes=["{output}/a.txt"])
+    a.planned_writes = lambda self: [f"{ctx.section.output}/never.txt"]
+    with caplog.at_level(logging.INFO, logger="ecefast"):
+        run_pipeline([a], ctx)
+    assert "Files written (2):" in caplog.text
+    assert "    a.txt\n" in caplog.text
+    assert "    never.txt  (not found)" in caplog.text
 
 
 def test_dry_run_still_checks_reads(ctx: Context) -> None:
@@ -206,6 +235,18 @@ def test_write_into_input_is_refused_before_start(ctx: Context) -> None:
     with pytest.raises(PipelineError, match="Step 'a' would write .* read-only '(present|eocene).input'"):
         run_pipeline([a], ctx)
     assert ran == []
+
+
+def test_eocene_starting_from_present_output(tmp_path: Path) -> None:
+    """With ``eocene.input: "{present.output}"`` the present day still writes its own output, and the Eocene may
+    not write into it."""
+    config = make_config(tmp_path)
+    config.eocene.input = config.present.output
+    present = Context(config, "present")
+    present.check_writable(present.expand("{output}/a.txt"))
+    eocene = Context(config, "eocene")
+    with pytest.raises(PipelineError, match="read-only 'eocene.input'"):
+        eocene.check_writable(present.expand("{output}/a.txt"))
 
 
 def test_base_class_must_be_overridden() -> None:
@@ -271,20 +312,31 @@ def test_check_writable_follows_symlinks(ctx: Context, tmp_path: Path) -> None:
 
 
 def input_tree(root: Path) -> None:
-    """A tiny input tree with the kept and the skipped subdirectories."""
+    """A tiny input tree with the kept and the skipped subdirectories, laid out as ECE4-DATA 4.1.10: the initial
+    state in initial_state/, and relative links to it at the old paths."""
     for sub in [
-        "oifs/TL63L31",
         "oifs/TL255L91",
         "oifs/ifsdata",
         "nemo/initial",
         "nemo/domain",
-        "oasis/PALEORCA2",
         "oasis/ORCA1",
         "runoff-mapper",
         "cmip6-data",
+        "initial_state/oifs/TL63L31/19900101",
+        "initial_state/oifs/TL255L91/19900101",
+        "initial_state/oasis/PALEORCA2/default",
+        "initial_state/oasis/ORCA1/default",
+        "initial_state/nemo/ts_state",
+        "initial_state/nemo/pisces_state",
+        "initial_state/lpjg/TL255",
     ]:
         (root / sub).mkdir(parents=True, exist_ok=True)
         (root / sub / "f.txt").write_text(sub)
+    (root / "oifs" / "TL63L31").mkdir()
+    (root / "oifs" / "TL63L31" / "19900101").symlink_to("../../initial_state/oifs/TL63L31/19900101")
+    (root / "oasis" / "PALEORCA2").mkdir()
+    (root / "oasis" / "PALEORCA2" / "rstos.nc").symlink_to("../../initial_state/oasis/PALEORCA2/default/f.txt")
+    (root / "nemo" / "initial" / "woa.nc").symlink_to("../../initial_state/nemo/ts_state/f.txt")
 
 
 def test_stage_copies_the_subset(ctx: Context, caplog: pytest.LogCaptureFixture, monkeypatch) -> None:
@@ -297,12 +349,14 @@ def test_stage_copies_the_subset(ctx: Context, caplog: pytest.LogCaptureFixture,
     with caplog.at_level(logging.WARNING, logger="ecefast"):
         run_pipeline([Stage], ctx)
     assert f"Step 'stage' (--overwrite) replaces {out}" in caplog.text
-    copied = sorted(str(p.relative_to(out)) for p in out.rglob("f.txt"))
+    copied = sorted(str(p.relative_to(out)) for p in out.rglob("*") if p.is_file() and not p.is_symlink())
     assert copied == [
+        "initial_state/nemo/ts_state/f.txt",
+        "initial_state/oasis/PALEORCA2/default/f.txt",
+        "initial_state/oifs/TL63L31/19900101/f.txt",
         "nemo/initial/f.txt",
-        "oasis/PALEORCA2/f.txt",
-        "oifs/TL63L31/f.txt",
         "oifs/ifsdata/f.txt",
+        "runoff-mapper/f.txt",
     ]
     assert (out / "cmip6-data").is_symlink()
     assert (out / "cmip6-data" / "f.txt").read_text() == "cmip6-data"
@@ -323,7 +377,7 @@ def test_stage_accepts_output_with_empty_folders(ctx: Context) -> None:
     input_tree(Path(ctx.section.input))
     (Path(ctx.section.output) / "oifs" / "TL63L31").mkdir(parents=True)
     run_pipeline([Stage], ctx)
-    assert (Path(ctx.section.output) / "oifs" / "TL63L31" / "f.txt").exists()
+    assert (Path(ctx.section.output) / "oifs" / "ifsdata" / "f.txt").exists()
 
 
 def test_stage_refuses_output_containing_input(tmp_path: Path) -> None:
@@ -335,5 +389,64 @@ def test_stage_refuses_output_containing_input(tmp_path: Path) -> None:
 
 
 def test_stage_preflight_reports_missing_input(ctx: Context) -> None:
-    with pytest.raises(PipelineError, match="3 input files are missing"):
+    with pytest.raises(PipelineError, match="7 input files are missing"):
         run_pipeline([Stage], ctx)
+
+
+def test_stage_keeps_the_links_into_initial_state(ctx: Context) -> None:
+    """The old paths stay relative links to the copy of initial_state/, as in ECE4-DATA."""
+    input_tree(Path(ctx.section.input))
+    run_pipeline([Stage], ctx)
+    out = Path(ctx.section.output)
+    for link, target in [
+        ("oifs/TL63L31/19900101", "../../initial_state/oifs/TL63L31/19900101"),
+        ("oasis/PALEORCA2/rstos.nc", "../../initial_state/oasis/PALEORCA2/default/f.txt"),
+        ("nemo/initial/woa.nc", "../../initial_state/nemo/ts_state/f.txt"),
+    ]:
+        assert (out / link).is_symlink() and os.readlink(out / link) == target
+        assert (out / link).resolve().is_relative_to(out.resolve())
+    assert (out / "oifs/TL63L31/19900101/f.txt").read_text() == "initial_state/oifs/TL63L31/19900101"
+
+
+def test_stage_copies_the_initial_state_of_the_grids_in_use(ctx: Context) -> None:
+    """initial_state/: the oifs and oasis folders of the grids in use and nemo/ts_state are copied; other grids
+    and nemo states are left out; the other components are links to the real folders of the input tree."""
+    root = Path(ctx.section.input)
+    input_tree(root)
+    run_pipeline([Stage], ctx)
+    state = Path(ctx.section.output) / "initial_state"
+    assert sorted(p.name for p in state.iterdir()) == ["lpjg", "nemo", "oasis", "oifs"]
+    for component in ["oifs", "oasis", "nemo"]:
+        assert not (state / component).is_symlink()
+    assert [p.name for p in (state / "oifs").iterdir()] == ["TL63L31"]
+    assert [p.name for p in (state / "oasis").iterdir()] == ["PALEORCA2"]
+    assert [p.name for p in (state / "nemo").iterdir()] == ["ts_state"]
+    assert (state / "lpjg").is_symlink() and os.readlink(state / "lpjg") == str((root / "initial_state/lpjg").resolve())
+
+
+def test_stage_links_to_the_real_folder(ctx: Context, tmp_path: Path) -> None:
+    """An initial_state/ that is itself a link (as in ECE4-DATA 4.1.11 on Atos): the links of the other
+    components point to the real folders, not through the link."""
+    real = tmp_path / "real"
+    input_tree(real)
+    root = Path(ctx.section.input)
+    for item in real.iterdir():
+        (root / item.name).symlink_to(item)
+    run_pipeline([Stage], ctx)
+    lpjg = Path(ctx.section.output) / "initial_state" / "lpjg"
+    assert os.readlink(lpjg) == str((real / "initial_state" / "lpjg").resolve())
+    assert not (Path(ctx.section.output) / "initial_state" / "oifs").is_symlink()
+
+
+def test_stage_follows_links_out_of_the_copy(ctx: Context, tmp_path: Path) -> None:
+    """A link to a file the output does not hold, or an absolute one, becomes a real file in the output."""
+    root = Path(ctx.section.input)
+    input_tree(root)
+    (tmp_path / "elsewhere.nc").write_text("elsewhere")
+    (root / "nemo" / "initial" / "abs.nc").symlink_to(tmp_path / "elsewhere.nc")
+    (root / "nemo" / "initial" / "pisces.nc").symlink_to("../../initial_state/nemo/pisces_state/f.txt")
+    run_pipeline([Stage], ctx)
+    initial = Path(ctx.section.output) / "nemo" / "initial"
+    assert not (initial / "abs.nc").is_symlink() and (initial / "abs.nc").read_text() == "elsewhere"
+    assert not (initial / "pisces.nc").is_symlink()
+    assert (initial / "pisces.nc").read_text() == "initial_state/nemo/pisces_state"

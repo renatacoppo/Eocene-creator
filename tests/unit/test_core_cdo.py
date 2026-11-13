@@ -13,6 +13,7 @@ pytestmark = pytest.mark.unit
 def test_get_cdo_returns_one_shared_instance(monkeypatch: pytest.MonkeyPatch) -> None:
     created = []
     monkeypatch.setattr(core_cdo, "Cdo", lambda: created.append(object()) or created[-1])
+    monkeypatch.setattr(core_cdo, "find_cdo_binary", lambda: "/usr/bin/cdo")
     core_cdo.get_cdo.cache_clear()
     try:
         first = core_cdo.get_cdo()
@@ -22,12 +23,35 @@ def test_get_cdo_returns_one_shared_instance(monkeypatch: pytest.MonkeyPatch) ->
         core_cdo.get_cdo.cache_clear()
 
 
+def test_get_cdo_without_binary_suggests_module_load(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CDO", raising=False)
+    monkeypatch.setenv("PATH", "")
+    core_cdo.get_cdo.cache_clear()
+    try:
+        with pytest.raises(core_cdo.PipelineError, match="module load cdo"):
+            core_cdo.get_cdo()
+    finally:
+        core_cdo.get_cdo.cache_clear()
+
+
+def test_find_cdo_binary_prefers_cdo_variable(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    binary = tmp_path / "my-cdo"
+    binary.write_text("")
+    monkeypatch.setenv("CDO", str(binary))
+    monkeypatch.setenv("PATH", "")
+    assert core_cdo.find_cdo_binary() == str(binary)
+
+
 # Modules that used to create a Cdo() at import time.
 CDO_MODULES = [
     "ecefast.cli.main",
     "ecefast.periods.eocene.pipeline",
     "ecefast.components.nemo.domain.pipeline",
     "ecefast.components.oifs.generator",
+    "ecefast.components.oifs.initial_state",
+    "ecefast.components.oifs.climate",
+    "ecefast.components.oifs.corners",
+    "ecefast.components.oifs.grid_files",
     "ecefast.periods.eocene.oifs.albedo",
     "ecefast.periods.eocene.oifs.eoceneOIFS",
     "ecefast.periods.eocene.oifs.subgrid_orog",

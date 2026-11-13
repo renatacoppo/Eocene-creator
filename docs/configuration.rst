@@ -166,7 +166,7 @@ Example for Atos:
 -----------------------------------
 
 Read by ``ecefast present run``, ``ecefast oifs run`` and ``ecefast nemo run``. Its final files go
-to ``present.output`` as in ECE4-DATA (``oifs/<grid>/<startdate>/``,
+to ``present.output`` as in ECE4-DATA (``initial_state/oifs/<grid>/<startdate>/``,
 ``oifs/<grid>/<climate_version>/``, ``nemo/domain/<grid>/``). A run stops if one of them exists
 already, unless ``--overwrite`` is given.
 
@@ -185,12 +185,14 @@ already, unless ``--overwrite`` is given.
    * - ``present.output``
      - str
      - required
-     - Tree of the present-day files made by ``ecefast``.
+     - The present-day EC-Earth tree: ``stage`` copies the base files of ``present.input`` here, the
+       ``oifs`` and ``nemo`` steps add their files. Built in ``<output>.partial`` and moved here at
+       the end of a run with ``stage``; if it holds files, that needs ``--overwrite``.
    * - ``present.oifs.source_grid``
      - str
      - ``TL255L91``
      - OIFS generator: the grid the data is made from, read from
-       ``{input}/oifs/<source_grid>/<startdate>/``. With another number of levels than
+       ``{input}/initial_state/oifs/<source_grid>/<startdate>/``. With another number of levels than
        ``grids.oifs.name`` the initial state is interpolated vertically.
    * - ``present.oifs.climate_dir``
      - str
@@ -202,11 +204,6 @@ already, unless ``--overwrite`` is given.
      - ``null``
      - Ready climate files (``<grid>/<climate_version>/ICMCLECE4``); the ``boundary`` step copies
        the file of ``grids.oifs.name`` when it is there.
-   * - ``present.oifs.vertical_grids_dir``
-     - str
-     - ``null``
-     - Grids with cell corners (``T<kind><N>_grid.nc``, made by ``create_corners.py``), read by the
-       vertical interpolation. Needed only then.
    * - ``present.oifs.steps.spectral``, ``.gridpoint``, ``.boundary``
      - bool
      - ``true``, ``true``, ``false``
@@ -261,9 +258,11 @@ Read by ``ecefast eocene run`` and by ``ecefast <component> run --period eocene`
    * - ``eocene.input``
      - str
      - required
-     - The EC-Earth tree to start from, read-only: the present-day one, written
-       ``"{present.input}"`` in the templates. ``stage`` copies its base files to ``output``; the
-       ``domain`` step checks the vertical grid against its ``nemo/domain/<grid>/domain_cfg.nc``.
+     - The EC-Earth tree to start from, read-only. On Atos ``"{present.output}"``: the present-day
+       tree made by ``ecefast present run``, with the present-day PALEORCA2 domain built by the same
+       DOMAINcfg. On a laptop ``"{present.input}"`` (no DOMAINcfg there, so no present-day domain is
+       built). ``stage`` copies its base files to ``output``; the ``domain`` step and ``EoceneNEMO``
+       check the vertical grid against its ``nemo/domain/<grid>/domain_cfg.nc``.
    * - ``eocene.herold``
      - str
      - required
@@ -271,8 +270,9 @@ Read by ``ecefast eocene run`` and by ``ecefast <component> run --period eocene`
    * - ``eocene.output``
      - str
      - required
-     - The Eocene EC-Earth input tree. The ``stage`` step refuses it if it holds files, unless
-       ``--overwrite`` is given: then it warns, waits 5 s (Ctrl-C to stop) and recreates it.
+     - The Eocene EC-Earth input tree. Built in ``<output>.partial`` and moved here at the end of a
+       run with ``stage``. If it holds files, the run stops unless ``--overwrite`` is given: then it
+       warns, waits 5 s (Ctrl-C to stop) and replaces it at the end.
    * - ``eocene.nemo.domain``
      - str
      - required
