@@ -123,7 +123,7 @@ def track_rivers(flowdir):
             elif res == 2:
                 rnf_map[i, j] = -2
 
-    logger.info("Found %s rivers!", len(rivers))
+    logger.debug("Found %s rivers", len(rivers))
 
     return rnf_map, rivers, rivers_dir
 
@@ -203,7 +203,7 @@ def calc_basins_dim(rnf_map, lat):
 def get_largest_basins(rnf_map, rivers, rivers_dir, lat, basin_thres=50):
     basins = calc_basins_dim(rnf_map, lat=lat)
 
-    logger.info("Selecting %s largest basins!", np.sum(basins > basin_thres))
+    logger.debug("Selecting %s largest basins", np.sum(basins > basin_thres))
 
     big_basins = list(np.where(basins > basin_thres)[0])
 
@@ -313,7 +313,7 @@ def track_rivers_and_merge(
             elif res == 2:
                 rnf_map_merged[i, j] = -2
 
-        logger.info("Found %s rivers with %s big rivers!", len(rivers_v2), len(big_rivers))
+        logger.debug("Found %s rivers with %s big rivers", len(rivers_v2), len(big_rivers))
 
     return rnf_map_merged, rivers_merged, rivers_v2, rivers_v2_dir
 
@@ -329,7 +329,7 @@ def drop_assign_fill(rnf_map_merged, rivers_merged, rivers_v2, rivers_v2_dir, la
 
     for ind in range(len(rivers_v2)):
         if ind not in list(ok_indx):
-            logger.info("%s: small basin, deassigning..", ind)
+            logger.debug("%s: small basin, deassigning", ind)
             rnf_map_merged[rnf_map_merged == ind] = -1
 
     rnf_map_filled = rnf_map_merged.copy()
@@ -338,7 +338,7 @@ def drop_assign_fill(rnf_map_merged, rivers_merged, rivers_v2, rivers_v2_dir, la
     missing = True
     i_count = 0
     while missing and i_count < 20:
-        logger.info("We are at %s round of assignments", i_count)
+        logger.debug("Assignment round %s", i_count)
         i_count += 1
         missing = False
         not_assigned = []
@@ -375,9 +375,7 @@ def drop_assign_fill(rnf_map_merged, rivers_merged, rivers_v2, rivers_v2_dir, la
         rnf_map_newnum[rnf_map_filled == inum] = ii
         rivers_newnum[ii] = rivers_merged[inum]
 
-    logger.info("Sanity check")
-    logger.info("max basin id: %s", rnf_map_newnum.max())
-    logger.info("num rivers: %s", len(rivers_newnum))
+    logger.debug("Sanity check: max basin id %s, %s rivers", rnf_map_newnum.max(), len(rivers_newnum))
 
     if int(rnf_map_newnum.max()) != len(rivers_newnum) - 1:
         raise ValueError("Inconsistency between number of basins and rivers!!")
@@ -403,9 +401,7 @@ def iter_track(flowdir, basin_thres=50, riv_thres=30, dir_thres=1, lat=None, n_i
         lat=lat,
     )
 
-    logger.info("Check!")
-    logger.info("merged min/max: %s %s", rnf_map_merged.min(), rnf_map_merged.max())
-    logger.info("merged rivers: %s", len(rivers_merged))
+    logger.debug("Merged basin ids %s to %s, %s rivers", rnf_map_merged.min(), rnf_map_merged.max(), len(rivers_merged))
 
     ### Now, loop: keep only largest, assign remaining according to a fixed rivers_merged (not updating and not adding new rivers)
     rnf_map_merged_final, rivers_final, not_assigned = drop_assign_fill(
@@ -495,7 +491,7 @@ class EoceneRNFM(ComponentStep):
     def run(self) -> None:
         """Track the river basins and regrid them to the runoff-mapper grid (was ``cli/eocene.py:run_runoff``)."""
 
-        logger.info("Reading oroslope file...")
+        logger.debug("Reading the Herold flow directions")
         oroslopefile = os.path.join(self.herold, "herold_etal_eocene_runoff_1x1.nc")
         runoff_file = os.path.join(self.idir, "runoff-mapper/runoff_maps.nc")
         final_file = os.path.join(self.odir, "runoff-mapper/runoff_maps.nc")
@@ -504,14 +500,14 @@ class EoceneRNFM(ComponentStep):
         oroslope = oroslope.assign_coords(longitude=oroslope.longitude[0], latitude=oroslope.latitude[:, 0])
         flowdir = oroslope["RTM_FLOW_DIRECTION"].values
 
-        logger.info("Launching calc!")
+        logger.info("Tracking the Eocene river basins")
         rnf_map_merged_final, rivers_merged_final, rivers_end_point, not_assigned = iter_track(
             flowdir, lat=oroslope.latitude
         )
 
         if len(not_assigned) > 0:
-            logger.warning("Some points have not been assigned:")
-            logger.warning(not_assigned)
+            logger.warning("%s points have not been assigned to a river basin", len(not_assigned))
+            logger.debug("Points not assigned: %s", not_assigned)
 
         # Building arrival point id
         arrival_id = np.zeros(rnf_map_merged_final.shape) - 2
@@ -519,12 +515,17 @@ class EoceneRNFM(ComponentStep):
             for po in rivers_merged_final[num]:
                 arrival_id[po[0], po[1]] = num
 
-        logger.info("Check!")
-        logger.info(f"{rnf_map_merged_final.min()} {rnf_map_merged_final.max()}")
-        logger.info(f"{arrival_id.min()} {arrival_id.max()}")
+        logger.info("%s river basins", len(rivers_merged_final))
+        logger.debug(
+            "Basin ids %s to %s, arrival ids %s to %s",
+            rnf_map_merged_final.min(),
+            rnf_map_merged_final.max(),
+            arrival_id.min(),
+            arrival_id.max(),
+        )
 
         ## Setting calving equal to runoff
-        logger.warning("WARNING!! Setting calving_id equal to arrival_id! To be changed if ice sheets are present")
+        logger.info("calving_id set equal to arrival_id (no ice sheets)")
         calving_id = arrival_id.copy()
 
         rnf_pd = xr.load_dataset(runoff_file)

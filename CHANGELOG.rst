@@ -98,6 +98,9 @@ Added
 Changed
 ~~~~~~~
 
+- ``EoceneRNFM`` logs less: one INFO line when the basin tracking starts and one with the number of basins; the
+  per-basin and per-round messages and the id checks moved to DEBUG (``-l DEBUG`` shows them), and the unassigned
+  points are one WARNING with their count, the list at DEBUG (#TBD).
 - CDO 2.5.x is required for ``data_version: v1`` (``module load cdo/2.5.3`` on Atos, conda-forge ``cdo=2.5``
   elsewhere, ``cdo=2.5`` in CI): it reproduces the domains of the existing experiments, while 2.6.x moves land-sea
   mask cells whose ocean fraction is exactly 0.5 (25 Eocene, 4 present-day cells). ``AGENTS.md``,
