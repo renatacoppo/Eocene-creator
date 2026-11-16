@@ -78,10 +78,12 @@ class PresentDayBathymetry(BathymetryProcessor):
 
         # Apply open regions (set to local average depth)
         for region in open_regions.keys():
+            logger.debug("Opening region: %s", region)
             xfield = open_region(xfield, region, open_regions)
 
         # Apply close regions (set to land/0)
         for region in close_regions.keys():
+            logger.debug("Closing region: %s", region)
             xfield = close_region(xfield, region, close_regions)
 
         self._plot(xfield, output_dir)
@@ -171,6 +173,8 @@ def close_region(xfield, region, close_regions):
 def open_region(xfield, region, open_regions):
     """Open a region by setting cells to the local average depth.
 
+    A cell that is ocean already (depth > 0) is left as it is, with a warning: averaging it would change its depth.
+
     Args:
         xfield: xarray Dataset
         region: Region name (str)
@@ -183,5 +187,11 @@ def open_region(xfield, region, open_regions):
         raise ValueError(f"Region '{region}' not in open_regions dictionary.")
 
     for y, x in open_regions[region]:
+        current_depth = xfield["bathy_metry"][:, y, x].values.item()
+        if current_depth > 0:
+            logger.warning(
+                "Cell (%s, %s) in region '%s' is already open (depth=%.1f m). Skipping.", y, x, region, current_depth
+            )
+            continue
         xfield = average_depth(xfield, y, x, region)
     return xfield

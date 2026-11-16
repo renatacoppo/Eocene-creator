@@ -28,8 +28,10 @@ eORCA1_to_PALEORCA2_remapnn:
     - region: Japan
       cells: [[129, 16]]
     - region: Indonesia
-      cells: [[115, 12], [101, 11], [102, 11], [105, 15], [106, 15],
-               [94, 16], [86, 15], [81, 41], [96, 7]]
+      cells: [[115, 12], [101, 11], [102, 11], [103, 11], [104, 11], [105, 11], [105, 15], [106, 15],
+              [86, 15], [81, 41], [96, 7]]
+    - region: Philippines
+      cells: [[111, 13], [112, 13]]
     - region: Spain
       cells: [[134, 128]]
     - region: Madagascar
@@ -51,7 +53,7 @@ eORCA1_to_PALEORCA2_remapnn:
     - region: Cuba
       cells: [[121, 121, 92, 96]]
     - region: Thailand
-      cells: [[104, 116, 2, 2], [104, 112, 3, 3], [88, 90, 5, 5]]
+      cells: [[104, 116, 2, 2], [104, 107, 3, 3], [98, 106, 4, 4], [88, 90, 5, 5]]
     - region: Italy
       cells: [[134, 136, 139, 139]]
     - region: Barents
