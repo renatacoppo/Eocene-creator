@@ -124,8 +124,14 @@ The `stage` step does not clone the full input tree. It copies only the subsets 
 
 - `oifs/`: `composition`, `ifsdata`, `vtables`, `rtables` and the OIFS grid (`TL63L31`)
 - `nemo/`: `cfc`, `climatology`, `initial`, `weights`
-- `oasis/<nemo grid>`
+- `oasis/<nemo grid>`, `runoff-mapper/`
+- `initial_state/` (ECE4-DATA 4.1.10 and later): `oifs/<oifs grid>`, `oasis/<nemo grid>` and `nemo/ts_state` are
+  copied; the other components (`lpjg`, `pism`, ...) are symlinked
 - `cmip6-data` is symlinked, not copied
+
+The old paths that ECE4-DATA keeps as links into `initial_state/` (`oifs/<grid>/<startdate>`,
+`oasis/<grid>/rstos.nc`, `nemo/initial/woa13-levitus-L*.nc`) stay relative links to the copy. The steps read and
+write only the `initial_state/` paths.
 
 ## Workflow notes
 

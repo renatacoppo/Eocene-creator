@@ -417,7 +417,9 @@ class NEMOWorkflow:
         if dry_run:
             logger.info("Dry run: nothing is written. Bathymetry: %s. Plan:", self.name)
             for name, _, writes in self.plan():
-                logger.info("  %-18s  -> %s", name, ", ".join(writes) or "-")
+                logger.info("  %s", name)
+                for path in writes:
+                    logger.debug("      -> %s", path)
             return
 
         if self.steps.get("coordinates"):

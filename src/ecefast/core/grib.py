@@ -22,7 +22,7 @@ def unpack_grib_file(inputfile, tmpfile):
     Unpack a GRIB file using grib_copy.
     This is used to split the GRIB messages into GRIB1 and GRIB2.
     """
-    logger.info(f"Unpacking GRIB file {inputfile} into {tmpfile}_grib1 and {tmpfile}_grib2")
+    logger.debug(f"Unpacking GRIB file {inputfile} into {tmpfile}_grib1 and {tmpfile}_grib2")
     subprocess.run(["grib_copy", "-w", "edition=1", inputfile, f"{tmpfile}_grib1"], check=True)
     subprocess.run(["grib_copy", "-w", "edition=2", inputfile, f"{tmpfile}_grib2"], check=True)
     return f"{tmpfile}_grib1", f"{tmpfile}_grib2"
@@ -36,13 +36,13 @@ def repack_grib_file(grib1, grib2, outputfile, clean=True):
     if os.path.exists(outputfile):
         os.remove(outputfile)
     if not os.path.exists(grib1):
-        logger.info(f"Repacking GRIB file {grib2} into {outputfile}")
+        logger.debug(f"Repacking GRIB file {grib2} into {outputfile}")
         subprocess.run(["grib_copy", grib2, outputfile], check=True)
     elif not os.path.exists(grib2):
-        logger.info(f"Repacking GRIB file {grib1} into {outputfile}")
+        logger.debug(f"Repacking GRIB file {grib1} into {outputfile}")
         subprocess.run(["grib_copy", grib1, outputfile], check=True)
     else:
-        logger.info(f"Repacking GRIB file {grib1} and {grib2} into {outputfile}")
+        logger.debug(f"Repacking GRIB file {grib1} and {grib2} into {outputfile}")
         subprocess.run(["grib_copy", grib1, grib2, outputfile], check=True)
 
     # cleanup

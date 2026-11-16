@@ -41,11 +41,22 @@ class Dummy(ComponentStep):
         Path(self.output, "dummy.txt").write_text("dummy")
 
 
+class Fails(Dummy):
+    """Write a file, then fail."""
+
+    name = "fails"
+    writes = ["{output}/fails.txt"]
+
+    def run(self):
+        Path(self.output, "fails.txt").write_text("half")
+        raise RuntimeError("step failed")
+
+
 class NeedsMissing(Dummy):
     """Read a file that does not exist."""
 
     name = "missing"
-    reads = ["{input}/nemo/initial/woa13-levitus-L31.nc", "{herold}/topo.nc"]
+    reads = ["{input}/initial_state/nemo/ts_state/woa13-levitus-L31.nc", "{herold}/topo.nc"]
     writes = ["{output}/missing.txt"]
 
 
@@ -53,7 +64,15 @@ class NeedsMissing(Dummy):
 def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     """A tiny input tree, a config file, and the pipeline [Stage, Dummy]."""
     data = tmp_path / "input"
-    for sub, name in [("oifs/TL63L31", "ICMGG"), ("nemo/initial", "woa.nc"), ("oasis/PALEORCA2", "rstos.nc")]:
+    for sub, name in [
+        ("oifs/TL63L31/climate.v020", "ICMCL"),
+        ("nemo/initial", "woa.nc"),
+        ("oasis/PALEORCA2", "rstos.nc"),
+        ("runoff-mapper", "runoff_maps.nc"),
+        ("initial_state/oifs/TL63L31/19900101", "ICMGG"),
+        ("initial_state/oasis/PALEORCA2/default", "rstos.nc"),
+        ("initial_state/nemo/ts_state", "woa13.nc"),
+    ]:
         (data / sub).mkdir(parents=True)
         (data / sub / name).write_text(name)
     (tmp_path / "herold").mkdir()
@@ -74,7 +93,7 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
         )
     )
     monkeypatch.setattr(pipeline, "PIPELINE", [Stage, Dummy])
-    monkeypatch.setattr(runner, "cdo_version", lambda: "9.9.9")
+    monkeypatch.setattr(runner, "cdo_version", lambda: "2.5.3")
     monkeypatch.setattr(workspace, "OVERWRITE_PAUSE", 0)
     return {"config": str(config), "output": output}
 
@@ -103,8 +122,10 @@ def test_steps_lists_every_step_on_one_line(capsys: pytest.CaptureFixture) -> No
     nemo = lines[4]
     assert "component: nemo" in nemo and "component: -" in lines[0]
     assert "needs: stage" in nemo
-    assert "{input}/nemo/initial/woa13-levitus-L31.nc" in nemo
-    assert "{output}/nemo/initial/woa13-levitus-L31_woa-pi.nc" in nemo
+    assert "{input}/initial_state/nemo/ts_state/woa13-levitus-L31.nc" in nemo
+    assert "{output}/initial_state/nemo/ts_state/woa13-levitus-L31_woa-pi.nc" in nemo
+    assert "{output}/initial_state/nemo/ts_state/deepmip-L31_cold-30.nc" in nemo
+    assert "{output}/initial_state/nemo/ts_state/deepmip-L31_warm-34.nc" in nemo
 
 
 def test_pipeline_order() -> None:
@@ -120,17 +141,19 @@ def test_run_writes_outputs_and_provenance(tree: dict, log) -> None:
     out = tree["output"]
     assert (out / "dummy.txt").read_text() == "dummy"
     assert (out / "nemo" / "initial" / "woa.nc").exists()
-    assert "CDO version: 9.9.9" in log.text
+    assert "CDO version: 2.5.3" in log.text
+    assert "Data version: v1" in log.text
 
     record = yaml.safe_load((out / "provenance.yml").read_text())
-    assert list(record) == ["steps", "config", "ecefast", "versions", "start", "end"]
+    assert list(record) == ["steps", "config", "data_version", "ecefast", "versions", "start", "end"]
+    assert record["data_version"] == "v1"
     assert record["steps"] == ["stage", "dummy"]
     assert record["config"]["file"] == tree["config"]
     assert record["config"]["sha256"] == hashlib.sha256(Path(tree["config"]).read_bytes()).hexdigest()
     assert record["ecefast"]["version"] == __version__
     assert record["ecefast"]["git_commit"]
     assert set(record["versions"]) == {"python", "cdo", "eccodes"}
-    assert record["versions"]["cdo"] == "9.9.9"
+    assert record["versions"]["cdo"] == "2.5.3"
     assert datetime.fromisoformat(record["start"]) <= datetime.fromisoformat(record["end"])
 
 
@@ -140,6 +163,18 @@ def test_dry_run_writes_nothing(tree: dict, log) -> None:
     assert not tree["output"].exists()
     assert "Dry run: nothing is written" in log.text
     assert "dummy" in log.text
+
+
+@pytest.mark.parametrize("extra", [[], ["--dry-run"]])
+def test_wrong_cdo_for_data_version_exits_and_writes_nothing(
+    tree: dict, monkeypatch: pytest.MonkeyPatch, log, extra: list[str]
+) -> None:
+    monkeypatch.setattr(runner, "cdo_version", lambda: "2.6.0")
+    with pytest.raises(SystemExit) as exit_info:
+        run("-c", tree["config"], *extra)
+    assert exit_info.value.code != 0
+    assert not tree["output"].exists()
+    assert "data_version v1 needs CDO 2.5.x, found CDO 2.6.0" in log.text
 
 
 def test_missing_input_exits_and_writes_nothing(tree: dict, monkeypatch: pytest.MonkeyPatch, log) -> None:
@@ -166,6 +201,34 @@ def test_stage_refuses_non_empty_output_without_overwrite(tree: dict, log) -> No
     assert not (out / "old.txt").exists()
     assert (out / "dummy.txt").exists()
     assert f"Step 'stage' (--overwrite) replaces {out}. Starting in 0 s, Ctrl-C to stop." in log.text
+
+
+def test_stage_builds_a_partial_tree_and_moves_it(tree: dict, log) -> None:
+    out = tree["output"]
+    out.mkdir()
+    (out / "old.txt").write_text("old")
+    run("-c", tree["config"], "--overwrite")
+    assert sorted(p.name for p in out.parent.iterdir() if p.name.startswith("out")) == ["out"]  # no .partial, .old
+    assert (out / "dummy.txt").exists() and (out / "provenance.yml").exists()
+    assert f"in eocene.output ({out}):" in log.text  # the recap names the final tree, not the partial one
+
+
+def test_failed_run_leaves_the_output_unchanged(tree: dict, monkeypatch: pytest.MonkeyPatch, log) -> None:
+    out = tree["output"]
+    out.mkdir()
+    (out / "old.txt").write_text("old")
+    monkeypatch.setattr(pipeline, "PIPELINE", [Stage, Dummy, Fails])
+    with pytest.raises(RuntimeError, match="step failed"):
+        run("-c", tree["config"], "--overwrite")
+    assert sorted(p.name for p in out.iterdir()) == ["old.txt"]
+    partial = out.parent / "out.partial"
+    assert (partial / "dummy.txt").exists() and (partial / "fails.txt").exists()
+    assert f"{out} is unchanged; the partial tree is kept in {partial}" in log.text
+
+    monkeypatch.setattr(pipeline, "PIPELINE", [Stage, Dummy])
+    run("-c", tree["config"], "--overwrite")  # the next run removes the old partial tree
+    assert not partial.exists()
+    assert sorted(p.name for p in out.iterdir() if p.suffix == ".txt") == ["dummy.txt"]
 
 
 def test_stage_accepts_empty_output(tree: dict) -> None:

@@ -118,7 +118,7 @@ class BathymetryProcessor:
                     os.remove(tmp)
 
         self.output_file = self.postprocess(remap_file, output_dir)
-        logger.info("Done: %s", self.output_file)
+        logger.debug("Done: %s", self.output_file)
 
     def postprocess(self, remap_file, output_dir):
         """

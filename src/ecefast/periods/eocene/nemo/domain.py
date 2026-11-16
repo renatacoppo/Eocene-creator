@@ -143,6 +143,12 @@ class EoceneDomain(ComponentStep):
             raise PipelineError(f"Step 'domain' builds the Eocene domain with the NEMO domain pipeline. {e}") from e
         return cls(domain_dir, *args, workflow=workflow)
 
+    def planned_writes(self) -> list[str]:
+        """With build, the files of the NEMO domain pipeline (in machine.tmpdir and the DOMAINcfg directory)."""
+        if self.workflow is None:
+            return []
+        return [path for _, _, writes in self.workflow.plan() for path in writes]
+
     def run(self) -> None:
         """Build the domain if there is a workflow, install it, then check the vertical grid rule."""
         if self.workflow is not None:
@@ -174,7 +180,7 @@ class EoceneDomain(ComponentStep):
             src = os.path.join(self.domain_dir, filename)
             dst = os.path.join(self.output_folder, "nemo", "domain", self.nemo_grid, filename)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
-            logger.info(f"Copying {src} to {dst}")
+            logger.debug(f"Copying {src} to {dst}")
             with atomic_write(dst) as tmp:
                 shutil.copy(src, tmp)
 

@@ -254,7 +254,7 @@ def write_subbasins(ds: xr.Dataset, tgt_dir: str) -> None:
     os.makedirs(tgt_dir, exist_ok=True)
     output_path = os.path.join(tgt_dir, "subbasins.nc")
     ds.to_netcdf(output_path)
-    logger.info("Written subbasin masks to %s", output_path)
+    logger.debug("Written subbasin masks to %s", output_path)
 
 
 if __name__ == "__main__":

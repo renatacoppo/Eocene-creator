@@ -16,9 +16,7 @@ MODULES = sorted(
     for path in (SRC / "ecefast").rglob("*.py")
 )
 
-NOT_IMPORTABLE = {
-    "ecefast.components.oifs.convert_aka_bika": "script: converts grids/*.csv relative to the cwd at import time",
-}
+NOT_IMPORTABLE: dict[str, str] = {}
 
 
 @pytest.mark.unit

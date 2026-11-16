@@ -7,7 +7,8 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from ecefast.core.io import atomic_write, temporary_path
+from ecefast.core import io
+from ecefast.core.io import atomic_symlink, atomic_write, temporary_path
 
 pytestmark = pytest.mark.unit
 
@@ -75,3 +76,36 @@ def test_cdo_output(tmp_path: Path) -> None:
     with xr.open_dataset(target) as back:
         np.testing.assert_array_equal(back["sst"].values, np.full((2, 3), 580.0))
     assert sorted(p.name for p in tmp_path.iterdir()) == ["in.nc", "out.nc"]
+
+
+def test_replace_directory(tmp_path: Path) -> None:
+    target, source = tmp_path / "out", tmp_path / "out.partial"
+    target.mkdir()
+    (target / "old.txt").write_text("old")
+    source.mkdir()
+    (source / "new.txt").write_text("new")
+    io.replace_directory(str(source), str(target))
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["out"]
+    assert sorted(p.name for p in target.iterdir()) == ["new.txt"]
+
+
+def test_replace_directory_without_target(tmp_path: Path) -> None:
+    source = tmp_path / "out.partial"
+    source.mkdir()
+    io.replace_directory(str(source), str(tmp_path / "out"))
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["out"]
+
+
+def test_partial_path() -> None:
+    assert io.partial_path("/data/out/") == "/data/out.partial"
+
+
+def test_atomic_symlink_creates_and_replaces(tmp_path: Path) -> None:
+    (tmp_path / "a.nc").write_text("a")
+    (tmp_path / "b.nc").write_text("b")
+    link = tmp_path / "link.nc"
+    atomic_symlink("a.nc", link)
+    assert link.is_symlink() and link.read_text() == "a"
+    atomic_symlink("b.nc", link)  # replaces an existing link
+    assert link.readlink() == Path("b.nc") and link.read_text() == "b"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["a.nc", "b.nc", "link.nc"]

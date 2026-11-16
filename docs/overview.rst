@@ -40,7 +40,7 @@ final files only to that section's ``output``. Intermediate files of every comma
    grids:   oifs, nemo        (the model resolution, shared by every period)
 
    present:                   ecefast present run      present.output = OUTPUT/present/
-     input       (read-only)    oifs  (Atos inputs)      oifs/<grid>/<startdate>/, oifs/<grid>/<climate_version>/
+     input       (read-only)    oifs  (Atos inputs)      initial_state/oifs/<grid>/<startdate>/, oifs/<grid>/<climate_version>/
      oifs, nemo                 nemo                     nemo/domain/<grid>/  domain_cfg.nc, maskutil.nc, subbasins.nc
                                                          provenance.yml
 
@@ -153,23 +153,24 @@ alone (``--steps oifs``) on an existing output.
    * - ``oasis``
      - Coupler restart: sea-ice fraction, thickness, snow, ice albedo and temperature set to 0;
        SST set to ``eocene.oasis.constant_sst`` (290 K).
-     - ``oasis/PALEORCA2/rstos.nc``
+     - ``initial_state/oasis/PALEORCA2/default/rstos.nc``
    * - ``oifs``
      - Atmosphere and land surface on the Herold geography: land-sea mask and its gradient,
        orography (spectral ``z``), subgrid orography and slope, vegetation types and cover, soil
        type, albedos and LAI, bare-soil albedos; snow, lake and other present-day fields set to 0;
        dry upper-air state (humidity and clouds 0), spectral fields truncated to their mean.
        Optional Eocene aerosols (``eocene.oifs.aerosols``).
-     - ``oifs/TL63L31/19900101/ICMGGECE4INIT``, ``ICMGGECE4INIUA``, ``ICMSHECE4INIT``;
+     - ``initial_state/oifs/TL63L31/19900101/ICMGGECE4INIT``, ``ICMGGECE4INIUA``, ``ICMSHECE4INIT``;
        ``oifs/TL63L31/climate.v020/ICMCLECE4``, ``bare_soil_albedos.grb`` (grid, start date and
        climate version from ``grids.oifs``)
    * - ``nemo``
      - Ocean forcing and initial state: M2 tidal dissipation and bathymetry from Green & Huber;
-       geothermal flux from the Eocene ocean-floor age; two ocean initial states (DeepMIP
-       ``deepmip_cold`` profile and present-day WOA ``woa_pi``) on the present-day levels; runoff
+       geothermal flux from the Eocene ocean-floor age; three ocean initial states (DeepMIP
+       ``deepmip_cold`` and ``deepmip_warm`` profiles, present-day WOA ``woa_pi``) on the present-day levels; runoff
        climatology set to 0 (rivers go through the runoff-mapper).
-     - ``nemo/initial/zdfiwm_forcing_r720x360.nc``, ``Goutorbe_ghflux.nc``,
-       ``woa13-levitus-L31_deepmip-30.nc``, ``woa13-levitus-L31_woa-pi.nc``;
+     - ``nemo/initial/zdfiwm_forcing_r720x360.nc``, ``Goutorbe_ghflux.nc``;
+       ``initial_state/nemo/ts_state/deepmip-L31_cold-30.nc``, ``deepmip-L31_warm-34.nc``,
+       ``woa13-levitus-L31_woa-pi.nc``;
        ``nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc``
    * - ``rnfm``
      - River basins traced on the Herold river flow direction, small basins merged, then regridded

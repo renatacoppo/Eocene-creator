@@ -45,7 +45,7 @@ def nullify_grib(
     Returns:
         None. The zeroed output is written to ``outputfile``.
     """
-    logger.info(f"Nullifying variables {variables} in GRIB file {inputfile}")
+    logger.debug(f"Nullifying variables {variables} in GRIB file {inputfile}")
 
     if not os.path.exists(inputfile):
         logger.warning(f"{inputfile} does not exist!")
@@ -73,14 +73,14 @@ def modify_grib(inputfile, outputfile, myfunction, spectral=False, **kwargs):
     This is deprecated in OIFS cy48 since all data should be GRIB2
     """
 
-    logger.info(f"Modifying GRIB file {inputfile} using {myfunction.__name__}")
+    logger.debug(f"Modifying GRIB file {inputfile} using {myfunction.__name__}")
 
     # Unpack the GRIB file
     grib1, grib2 = unpack_grib_file(inputfile, "tmp")
 
     for file in [grib1, grib2]:
         if os.path.exists(file):
-            logger.info(f"Converting to netcdf file {file}")
+            logger.debug(f"Converting to netcdf file {file}")
 
             # Convert to netcdf: if spectral use sp2gpl, else use setgridtype
             if spectral:
@@ -89,7 +89,7 @@ def modify_grib(inputfile, outputfile, myfunction, spectral=False, **kwargs):
             else:
                 logger.debug("Using gridtype conversion (regular)")
                 netcdf = get_cdo().setgridtype("regular", input=file, options=NC4)
-            logger.info(f"Modifying GRIB file {file} using function {myfunction.__name__}")
+            logger.debug(f"Modifying GRIB file {file} using function {myfunction.__name__}")
 
             # open the netcdf and modify it
             logger.debug(f"Opening dataset {netcdf}")
@@ -102,7 +102,7 @@ def modify_grib(inputfile, outputfile, myfunction, spectral=False, **kwargs):
             field.to_netcdf(temp_path)
             shutil.move(temp_path, netcdf)
 
-            logger.info(f"Converting back to GRIB file {file}")
+            logger.debug(f"Converting back to GRIB file {file}")
             grib = GRIB1 if file == grib1 else GRIB2
             if spectral:
                 get_cdo().gp2spl(input=netcdf, output=file, options=grib)
@@ -155,7 +155,7 @@ def modify_single_grib(
         logger.warning(f"{inputfile} does not exist!")
         return
 
-    logger.info(f"Modifying variables {variables} in {inputfile}")
+    logger.debug(f"Modifying variables {variables} in {inputfile}")
 
     varlist = ",".join(variables)
     singlefile = get_cdo().selname(varlist, input=inputfile, options="--eccodes")
@@ -167,7 +167,7 @@ def modify_single_grib(
         netcdf = get_cdo().sp2gpl(input=singlefile, options=NC4)
     else:
         netcdf = get_cdo().setgridtype("regular", input=singlefile, options=NC4)
-    logger.info(f"Modifying GRIB file {inputfile} using function {myfunction.__name__}")
+    logger.debug(f"Modifying GRIB file {inputfile} using function {myfunction.__name__}")
 
     # Open the netcdf and modify it
     field = xr.open_dataset(netcdf, engine="netcdf4", decode_times=False)
@@ -179,8 +179,8 @@ def modify_single_grib(
     field.to_netcdf(temp_path)
     shutil.move(temp_path, netcdf)
 
-    logger.info(f"Repacking modified GRIB for {variables}")
-    logger.info(f"Converting back to GRIB file {singlefile}")
+    logger.debug(f"Repacking modified GRIB for {variables}")
+    logger.debug(f"Converting back to GRIB file {singlefile}")
 
     grib = GRIB1 if grib_version == 1 else GRIB2
 
@@ -202,7 +202,7 @@ def truncate_grib_file(inputfile, outputfile, variables, orig=63, trunc=1):
     Truncate the GRIB file to a specific size.
     """
     varlist = ",".join(variables)
-    logger.info(f"Truncating variables {varlist} from {inputfile}")
+    logger.debug(f"Truncating variables {varlist} from {inputfile}")
 
     trunc = get_cdo().sp2sp(str(trunc), input=f"-selname,{varlist} {inputfile}", options=NC4)
     compact = get_cdo().sp2sp(str(orig), input=trunc, options=GRIB2)
@@ -377,7 +377,7 @@ def flatten_grib_steps(inputfile, n_messages=None):
     if n_messages is None:
         n_messages = count_grib_messages(inputfile)
 
-    logger.info(f"Flattening {n_messages} messages in {inputfile}")
+    logger.debug(f"Flattening {n_messages} messages in {inputfile}")
 
     with tempfile.NamedTemporaryFile(suffix=".grb", delete=False) as in_f:
         tmp_in = in_f.name

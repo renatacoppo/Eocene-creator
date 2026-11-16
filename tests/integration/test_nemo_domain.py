@@ -19,6 +19,7 @@ from ecefast.components.nemo.config import get_corrections_for_grid
 from ecefast.components.nemo.domain import pipeline as domain_pipeline
 from ecefast.components.nemo.domain.pipeline import NEMOWorkflow
 from ecefast.core import workspace
+from ecefast.core.layout import initial_state_copies
 from ecefast.core.config import NEMO_DOMAIN_STEPS, ConfigError, load_config, override_steps
 from ecefast.core.runner import component_steps
 from ecefast.core.steps import PipelineError, run_pipeline
@@ -40,6 +41,15 @@ def write_config(tmp_path: Path, machine: str = "fake", steps: dict | None = Non
     ``local``."""
     for name in ("input", "herold"):
         (tmp_path / name).mkdir(exist_ok=True)
+    copied = (
+        "oifs",
+        "nemo/domain/ORCA2",
+        "oasis/PALEORCA2",
+        "runoff-mapper",
+        *initial_state_copies("TL63L31", "PALEORCA2"),
+    )
+    for sub in copied:  # what the present stage copies
+        (tmp_path / "input" / sub).mkdir(parents=True, exist_ok=True)
     for period in ("present", "eocene"):
         write_domain_work(tmp_path / "tmp" / period / "nemo", period)
     steps = STEPS_WITHOUT_GRIDS if steps is None else steps
@@ -120,7 +130,7 @@ def test_coords_ori_needed(tmp_path: Path) -> None:
 def test_present_nemo_end_to_end(tmp_path: Path) -> None:
     """The namelist and the fake DOMAINcfg output go to the tmpdir, the post-processed domain to
     ``present.output/nemo/domain/<grid>/``, as in an EC-Earth input tree."""
-    cli.main(["nemo", "run", "-c", str(write_config(tmp_path)), "-l", "WARNING"])
+    cli.main(["present", "run", "-c", str(write_config(tmp_path)), "--steps", "stage,nemo", "-l", "WARNING"])
     work = tmp_path / "tmp" / "present" / "nemo" / "domaincfg"
     assert sorted(p.name for p in work.iterdir()) == [
         "domain_cfg_present_day.nc",
@@ -129,17 +139,26 @@ def test_present_nemo_end_to_end(tmp_path: Path) -> None:
     ]
     domain_dir = tmp_path / "present" / "nemo" / "domain" / "PALEORCA2"
     assert sorted(p.name for p in domain_dir.iterdir()) == ["domain_cfg.nc", "maskutil.nc"]
-    assert sorted(p.name for p in (tmp_path / "present").iterdir()) == ["nemo", "provenance.yml"]
+    assert sorted(p.name for p in (tmp_path / "present").iterdir()) == [
+        "initial_state",
+        "nemo",
+        "oasis",
+        "oifs",
+        "provenance.yml",
+        "runoff-mapper",
+    ]
+    assert not (tmp_path / "present.partial").exists()
     with xr.open_dataset(domain_dir / "domain_cfg.nc") as domain:
         assert domain.sizes["z"] == 31
         assert domain["bottom_level"].values[0, 2, 4] == 5  # the 50 m point
 
 
 def test_present_nemo_overwrite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
-    """A second run refuses the existing domain without --overwrite; with it, warns, pauses, replaces."""
+    """A rerun of the nemo step on the staged tree refuses the existing domain without --overwrite; with it, warns,
+    pauses, replaces. A rerun with stage refuses the whole tree in the same way."""
     monkeypatch.setattr(workspace, "OVERWRITE_PAUSE", 0)
     config = str(write_config(tmp_path))
-    cli.main(["nemo", "run", "-c", config, "-l", "WARNING"])
+    cli.main(["present", "run", "-c", config, "--steps", "stage,nemo", "-l", "WARNING"])
     capsys.readouterr()
     with pytest.raises(SystemExit):
         cli.main(["nemo", "run", "-c", config])
@@ -147,6 +166,19 @@ def test_present_nemo_overwrite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     assert "exist already" in log and "--overwrite" in log
     cli.main(["nemo", "run", "-c", config, "--overwrite"])
     assert "Step 'nemo' (--overwrite) replaces" in capsys.readouterr().err
+
+    with pytest.raises(SystemExit):
+        cli.main(["present", "run", "-c", config, "--steps", "stage,nemo"])
+    assert "is not empty" in capsys.readouterr().err
+    cli.main(["present", "run", "-c", config, "--steps", "stage,nemo", "--overwrite"])
+    assert f"Step 'stage' (--overwrite) replaces {tmp_path / 'present'}" in capsys.readouterr().err
+
+
+def test_present_nemo_needs_a_staged_tree(tmp_path: Path, capsys) -> None:
+    with pytest.raises(SystemExit):
+        cli.main(["nemo", "run", "-c", str(write_config(tmp_path))])
+    assert "Select 'stage' too: ecefast present run --steps stage,nemo" in capsys.readouterr().err
+    assert not (tmp_path / "present").exists()
 
 
 def test_subbasins_per_period(tmp_path: Path) -> None:
@@ -176,11 +208,12 @@ def tree(root: Path) -> list[Path]:
 def test_dry_run_writes_nothing(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     config = write_config(tmp_path)
     before = tree(tmp_path)
-    cli.main(["nemo", "run", "-c", str(config), "--dry-run"])
+    cli.main(["present", "run", "-c", str(config), "--steps", "stage,nemo", "--dry-run"])
     assert tree(tmp_path) == before
     log = capsys.readouterr().err
     assert "Dry run" in log
-    assert str(tmp_path / "present" / "nemo" / "domain" / "PALEORCA2" / "maskutil.nc") in log
+    assert f"in present.output ({tmp_path / 'present'}):" in log  # the recap of the files
+    assert "    nemo/domain/PALEORCA2/maskutil.nc\n" in log
 
 
 def test_plan_follows_enabled_steps(tmp_path: Path) -> None:
@@ -222,7 +255,7 @@ def test_bathymetry_reads(tmp_path: Path) -> None:
     input tree (the comparison plot)."""
     config = write_config(tmp_path)
     for grid in ("ORCA2", "eORCA1"):
-        (tmp_path / "input" / "nemo" / "domain" / grid).mkdir(parents=True)
+        (tmp_path / "input" / "nemo" / "domain" / grid).mkdir(parents=True, exist_ok=True)
         (tmp_path / "input" / "nemo" / "domain" / grid / "domain_cfg.nc").write_text("x")
     bounds = tmp_path / "tmp" / "{}" / "nemo" / "coordinates"
     eocene = workflow(config, period="eocene")._make_processor().reads()
@@ -278,7 +311,7 @@ def test_help_lists_steps(capsys: pytest.CaptureFixture) -> None:
     for argv, title, names in (
         (["nemo", "run", "-h"], "--nemo steps", NEMO_DOMAIN_STEPS),
         (["eocene", "run", "-h"], "steps, in run order", [step.name for step in eocene_pipeline.PIPELINE]),
-        (["present", "run", "-h"], "steps, in run order", ["oifs", "nemo"]),
+        (["present", "run", "-h"], "steps, in run order", ["stage", "oifs", "nemo"]),
     ):
         with pytest.raises(SystemExit) as exit_info:
             cli.main(argv)
@@ -395,6 +428,6 @@ def test_eocene_dry_run_checks_domain_pipeline_inputs(tmp_path: Path) -> None:
 
 
 def test_present_run_skips_components_without_section(tmp_path: Path) -> None:
-    """``ecefast present run`` on a config without ``present.oifs`` (as on a laptop) runs the ``nemo`` step only."""
+    """``ecefast present run`` on a config without ``present.oifs`` (as on a laptop) skips the ``oifs`` step."""
     cli.main(["present", "run", "-c", str(write_config(tmp_path)), "-l", "WARNING"])
-    assert yaml.safe_load((tmp_path / "present" / "provenance.yml").read_text())["steps"] == ["nemo"]
+    assert yaml.safe_load((tmp_path / "present" / "provenance.yml").read_text())["steps"] == ["stage", "nemo"]

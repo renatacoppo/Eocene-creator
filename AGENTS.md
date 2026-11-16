@@ -202,14 +202,27 @@ the docs.
   floating-point rounding between DOMAINcfg builds, `VERTICAL_GRID_ATOL`). `EoceneNEMO` reads the
   present-day domain from the input tree on purpose; do not change which domain it reads. The
   check in `EoceneDomain` / `verify` is a hard error on a mismatch, never a warning.
-- **CDO.** CDO is not pinned and not part of `environment.yaml`: use the most recent release
-  available on each machine (Homebrew on macOS, conda-forge `cdo` on Linux and in CI, the module
-  on the HPC). `BASELINE/BASELINE.txt` records the exact CDO version of the baseline, and
-  compares are only valid with that version: a different CDO legitimately changes results (e.g.
-  the remapped bathymetries). Follow the grid naming scheme of that version (ECMWF style: `F<N>`
-  regular Gaussian, `N<N>` reduced Gaussian, e.g. `F32` for TL63); do not add version checks to
-  support old names. Upgrading the CDO used for the baseline is its own PR: regenerate the
-  baseline and list the output changes in the changelog.
+- **Data versions and CDO.** The config key `data_version` (default `v1`) names the data a run
+  reproduces, and each version needs one CDO series (`DATA_VERSIONS` in `core/config.py`).
+  `run_period` checks the CDO version before anything else, dry runs included, and raises a
+  `PipelineError` on a mismatch; never turn this into a warning. `v1` is the only version and
+  needs **CDO 2.5.x**; `v2` is reserved and rejected until it is defined (a new version, its CDO
+  and its output changes need an agreed issue). CDO is not part of `environment.yaml`: on Atos
+  `module load cdo/2.5.3`, elsewhere conda-forge `cdo=2.5` (Homebrew ships only the latest
+  release), CI pins `cdo=2.5`. Reason: the land-sea mask of a NEMO bathymetry is the
+  `remapcon` ocean fraction thresholded at 0.5, and many PALEORCA2 cells have a fraction of
+  exactly 0.5 (200 for the Eocene, 135 for the present day). Floating-point rounding decides on
+  which side they fall, and it changes between CDO versions: 2.6.x moves 25 Eocene and 4
+  present-day cells compared with 2.5.x. The domains of the existing experiments
+  (`PALEORCA2-definitive`, ECE4-DATA-V3) were made with CDO 2.5.0; 2.5.1 and 2.5.3 reproduce them
+  bit for bit, 2.6.0 and 2.6.5 do not (`REMAP_AREA_MIN` has no effect). Do not use another CDO
+  to build domains or bathymetries, and do not "fix" the ties with an epsilon on the threshold
+  without an agreed issue: it cannot reproduce the existing domains (2.5.x splits the ties
+  between ocean and land). `BASELINE/BASELINE.txt` records the exact CDO version of the
+  baseline, and compares are only valid with that version. Follow the grid naming scheme of 2.5
+  (ECMWF style: `F<N>` regular Gaussian, `N<N>` reduced Gaussian, e.g. `F32` for TL63). Changing
+  the required CDO is its own PR: regenerate the baseline and list the output changes in the
+  changelog.
 
 ## Data formats: NetCDF and GRIB
 
@@ -340,8 +353,8 @@ published on Read the Docs.
 
 - **Ask before adding any dependency.** It must be on conda-forge.
 - Add it to both `environment.yaml` and `pyproject.toml`.
-- Do not bump pinned versions in a non-science PR. CDO is not pinned; changing the CDO used for the
-  baseline follows [Scientific integrity](#scientific-integrity).
+- Do not bump pinned versions in a non-science PR. CDO is pinned to 2.5.x outside
+  `environment.yaml`; changing it follows [Scientific integrity](#scientific-integrity).
 
 ## Git and pull requests
 

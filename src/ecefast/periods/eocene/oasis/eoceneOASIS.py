@@ -11,6 +11,7 @@ import logging
 import xarray as xr
 
 from ecefast.core.io import atomic_write
+from ecefast.core.layout import oasis_restart_dir
 from ecefast.core.steps import ComponentStep
 from ecefast.core.workspace import Context
 
@@ -23,8 +24,9 @@ class EoceneOASIS(ComponentStep):
     name = "oasis"
     component = "oasis"
     needs = ["stage"]
-    reads = ["{input}/oasis/{grids.nemo.name}/rstos.nc"]
-    writes = ["{output}/oasis/{grids.nemo.name}/rstos.nc"]
+    # initial_state/oasis/<grid>/default/rstos.nc; the old path oasis/<grid>/rstos.nc is a link to it
+    reads = [oasis_restart_dir("{input}", "{grids.nemo.name}") + "/rstos.nc"]
+    writes = [oasis_restart_dir("{output}", "{grids.nemo.name}") + "/rstos.nc"]
 
     def __init__(self, idir, odir, nemo_resolution="PALEORCA2", constant_sst=290.0):
 
@@ -57,12 +59,13 @@ class EoceneOASIS(ComponentStep):
         Simply copy the present-day file, remove sea ice and set a constant SST (to be improved in the future)
         """
 
-        rstos_file = os.path.join(self.idir, "oasis", self.nemo_resolution, "rstos.nc")
+        rstos_file = os.path.join(oasis_restart_dir(self.idir, self.nemo_resolution), "rstos.nc")
 
         xfield = xr.open_dataset(rstos_file)
         for var in ["OIceFrc", "OIceTck", "OSnwTck", "O_AlbIce", "O_TepIce"]:
             xfield[var].data[:] = 0.0
         xfield["O_SSTSST"].data[:] = constant_sst
-        os.makedirs(os.path.join(self.odir, "oasis", self.nemo_resolution), exist_ok=True)
-        with atomic_write(os.path.join(self.odir, "oasis", self.nemo_resolution, "rstos.nc")) as tmp:
+        output_dir = oasis_restart_dir(self.odir, self.nemo_resolution)
+        os.makedirs(output_dir, exist_ok=True)
+        with atomic_write(os.path.join(output_dir, "rstos.nc")) as tmp:
             xfield.to_netcdf(tmp)

@@ -198,6 +198,6 @@ def prepare_vegetation(self):
 
     eocene_icmgg.to_netcdf(output_path)
 
-    logger.info(f"Vegetation dataset saved to {output_path}")
+    logger.debug(f"Vegetation dataset saved to {output_path}")
 
     return os.path.join(self.odir_init, "ICMGG_vegetation.nc")

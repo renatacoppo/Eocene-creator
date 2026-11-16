@@ -28,13 +28,13 @@ jobs:
             exit 1
           fi
 
-      - name: Set up the environment from environment.yaml (Python 3.14, CDO from conda-forge)
+      - name: Set up the environment from environment.yaml (Python 3.14, CDO 2.5 from conda-forge, see AGENTS.md)
         uses: mamba-org/setup-micromamba@v3.2.1
         with:
           environment-file: environment.yaml
           create-args: >-
             python=3.14
-            cdo
+            cdo=2.5
             pytest
             pytest-cov
             ruff

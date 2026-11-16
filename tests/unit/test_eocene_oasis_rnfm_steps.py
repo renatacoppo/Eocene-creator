@@ -37,8 +37,9 @@ def write_rstos(path: Path) -> None:
 
 def test_oasis_paths_expand(ctx: Context) -> None:
     root = Path(ctx.section.input).parent
-    assert [ctx.expand(t) for t in EoceneOASIS.reads] == [str(root / "input/oasis/PALEORCA2/rstos.nc")]
-    assert [ctx.expand(t) for t in EoceneOASIS.writes] == [str(root / "out/oasis/PALEORCA2/rstos.nc")]
+    restart = "initial_state/oasis/PALEORCA2/default/rstos.nc"
+    assert [ctx.expand(t) for t in EoceneOASIS.reads] == [str(root / "input" / restart)]
+    assert [ctx.expand(t) for t in EoceneOASIS.writes] == [str(root / "out" / restart)]
     assert (EoceneOASIS.name, EoceneOASIS.component, EoceneOASIS.needs) == ("oasis", "oasis", ["stage"])
 
 
