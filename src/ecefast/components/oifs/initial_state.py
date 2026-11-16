@@ -27,6 +27,10 @@ logger = logging.getLogger(__name__)
 IC_FILES = ["ICMSHECE4INIT", "ICMGGECE4INIT", "ICMGGECE4INIUA"]
 # ecCodes tools called directly by the vertical interpolation
 GRIB_TOOLS = ["grib_set", "grib_copy"]
+# The upper-air gridpoint fields of ICMGGECE4INIUA that OIFS reads: the moisture and ozone fields of the
+# TL63L31 file of ECE4-DATA. A source file may hold more (in ECE4-DATA 4.1.11 TL255L91 also has ~130 composition
+# fields, some with the same shortName); only these are interpolated and written.
+UPPER_AIR_FIELDS = ["q", "o3", "crwc", "cswc", "clwc", "ciwc", "cc"]
 
 
 def generate_spectral_conditions(OIFS_IC, spectral, TMPDIR):
@@ -90,6 +94,19 @@ def install_initial_state(TMPDIR: str, IC_TGT: str) -> None:
             shutil.move(f"{TMPDIR}/{file}", tmp)
 
 
+def select_upper_air_fields(source: str, output: str) -> None:
+    """Copy the messages of ``UPPER_AIR_FIELDS`` of the GRIB file ``source`` to ``output``, in their order.
+
+    Parameters
+    ----------
+    source : str
+        An ``ICMGGECE4INIUA`` file; it may hold other fields too.
+    output : str
+        GRIB file to write.
+    """
+    subprocess.run(["grib_copy", "-w", f"shortName={'/'.join(UPPER_AIR_FIELDS)}", source, output], check=True)
+
+
 def vertical_interpolation(TMPDIR, GRIDS, target_spectral, vertical, IC_TGT, do_clean):
     """
     Perform vertical interpolation for spectral and gridpoint data.
@@ -129,10 +146,12 @@ def vertical_interpolation(TMPDIR, GRIDS, target_spectral, vertical, IC_TGT, do_
     remapped = get_cdo().remapcon(f"{GRIDS}/{target_spectral}_grid.nc", input=f"{TMPDIR}/sp2gauss.grb", options=GRIB2)
     get_cdo().setgrid(str(grid_description(target_spectral)), input=remapped, output=f"{TMPDIR}/sp2gauss_reduced.grb")
 
-    # Merge files for interpolation
+    # Merge files for interpolation: the upper-air fields that are kept, and the spectral fields on the reduced grid.
+    # Other fields of the source ICMGGECE4INIUA would make remapeta drop the hybrid levels.
     logger.info("Merging files")
+    select_upper_air_fields(f"{TMPDIR}/ICMGGECE4INIUA", f"{TMPDIR}/upper_air.grb")
     subprocess.run(
-        ["grib_copy", f"{TMPDIR}/ICMGGECE4INIUA", f"{TMPDIR}/sp2gauss_reduced.grb", f"{TMPDIR}/single.grb"], check=True
+        ["grib_copy", f"{TMPDIR}/upper_air.grb", f"{TMPDIR}/sp2gauss_reduced.grb", f"{TMPDIR}/single.grb"], check=True
     )
     # subprocess.call(f"cat {TMPDIR}/ICMGGECE4INIUA {TMPDIR}/sp2gauss_reduced.grb > {TMPDIR}/single.grb", shell=True)
 
@@ -146,7 +165,7 @@ def vertical_interpolation(TMPDIR, GRIDS, target_spectral, vertical, IC_TGT, do_
     with atomic_write(f"{IC_TGT}/ICMGGECE4INIUA") as tmp:
         get_cdo().setgrid(
             str(grid_description(target_spectral)),
-            input=f"-selname,q,o3,crwc,cswc,clwc,ciwc,cc {TMPDIR}/remapped.grb",
+            input=f"-selname,{','.join(UPPER_AIR_FIELDS)} {TMPDIR}/remapped.grb",
             output=tmp,
             options=GRIB2,
         )
@@ -177,6 +196,7 @@ def vertical_interpolation(TMPDIR, GRIDS, target_spectral, vertical, IC_TGT, do_
         for file in [
             "sp2gauss.grb",
             "sp2gauss_reduced.grb",
+            "upper_air.grb",
             "single.grb",
             "remapped.grb",
             "ICMSHECE4INIT",

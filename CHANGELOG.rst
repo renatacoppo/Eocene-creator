@@ -239,6 +239,15 @@ Changed
 Fixed
 ~~~~~
 
+- The OIFS vertical interpolation (``ecefast oifs run`` and ``present run`` from TL255L91 of ECE4-DATA 4.1.11) no
+  longer stops at ``gp2spl`` ("Variable name t not found"): the source ``ICMGGECE4INIUA`` also holds ~130 composition
+  fields, some with the same shortName, and with them ``remapeta`` dropped the hybrid levels. Only the fields that are
+  written (``UPPER_AIR_FIELDS``: q, o3, crwc, cswc, clwc, ciwc, cc) go into ``remapeta`` now; the written files have
+  the fields and levels of the TL63L31 files of ECE4-DATA.
+- The OIFS generator (``ecefast oifs run``, ``present run``) no longer stops when it builds the grid with cell corners:
+  ``ICMGGECE4INIT`` holds GRIB1 and GRIB2 messages after the gridpoint step, and the land-sea mask was read with
+  CDO's own GRIB decoder (``var172``), which reads GRIB1 only. It is now read through ecCodes (``--eccodes``,
+  ``lsm``). The grid (latitudes, reduced points) is the same; no output changes.
 - The present-day ``stage`` (``PresentStage``) also copies ``nemo/domain/ORCA2``: ``EoceneNEMO`` reads it, and with
   ``eocene.input: "{present.output}"`` the Eocene could not start. A unit test checks that the present-day tree holds
   every input the Eocene reads.
