@@ -1,4 +1,4 @@
-"""Unit tests for the OIFS initial state processes (``ecefast.components.oifs.initial_state``)."""
+"""Unit tests for the OIFS initial-state processes (``ecefast.components.oifs.initial_state``)."""
 
 import shutil
 import subprocess
@@ -6,13 +6,31 @@ from pathlib import Path
 
 import pytest
 
-from ecefast.components.oifs.initial_state import UPPER_AIR_FIELDS, select_upper_air_fields
+from ecefast.components.oifs.initial_state import (
+    IC_FILES,
+    UPPER_AIR_FIELDS,
+    install_initial_state,
+    select_upper_air_fields,
+)
 
 pytestmark = pytest.mark.unit
 
 needs_tools = pytest.mark.skipif(
     shutil.which("cdo") is None or shutil.which("grib_copy") is None, reason="needs cdo and grib_copy"
 )
+
+
+def test_install_initial_state_moves_the_files(tmp_path: Path) -> None:
+    work, target = tmp_path / "work", tmp_path / "target"
+    work.mkdir()
+    target.mkdir()
+    for name in IC_FILES:
+        (work / name).write_text(name)
+    install_initial_state(str(work), str(target))
+    assert list(work.iterdir()) == []
+    assert sorted(p.name for p in target.iterdir()) == sorted(IC_FILES)
+    for name in IC_FILES:
+        assert (target / name).read_text() == name
 
 
 def grib_field(path: Path, param: str) -> Path:
