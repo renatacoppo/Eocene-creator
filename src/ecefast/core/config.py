@@ -105,10 +105,11 @@ class OIFSDataSteps:
 
 @dataclass
 class DomainSteps:
-    """Steps of the NEMO domain pipeline, in run order. DOMAINcfg and the steps after it need ``atos`` or ``fake``.
+    """Steps of the present-day NEMO domain pipeline, in run order. DOMAINcfg and the steps after it need ``atos``
+    or ``fake``.
 
-    ``sections`` (the transport sections of NEMO ``diadct``, ``section_ijglobal.diadct``) is off by default: the
-    domain trees made so far do not have it.
+    ``sections`` writes the transport sections of NEMO ``diadct`` (``section_ijglobal.diadct``), as in the domain
+    trees of ECE4-DATA.
     """
 
     coordinates: bool = True
@@ -117,6 +118,14 @@ class DomainSteps:
     domain_cfg: bool = True
     generate_mask: bool = True
     generate_subbasins: bool = True
+    sections: bool = True
+
+
+@dataclass
+class EoceneDomainSteps(DomainSteps):
+    """Steps of the Eocene NEMO domain pipeline: those of :class:`DomainSteps`, without the ``diadct`` transport
+    sections, which follow present-day straits and passages (``EoceneBathymetry.transport_sections`` is False)."""
+
     sections: bool = False
 
 
@@ -164,7 +173,7 @@ class EoceneNEMO:
 
     domain: str  # "build", or a directory holding domain_cfg.nc and maskutil.nc
     minimum_depth: float
-    steps: DomainSteps = field(default_factory=DomainSteps)
+    steps: EoceneDomainSteps = field(default_factory=EoceneDomainSteps)
 
 
 @dataclass
@@ -299,7 +308,7 @@ NESTED = {
     "present.oifs": {"steps": OIFSDataSteps},
     "present.nemo": {"steps": DomainSteps},
     "eocene": {"nemo": EoceneNEMO, "oifs": EoceneOIFS, "oasis": EoceneOASIS},
-    "eocene.nemo": {"steps": DomainSteps},
+    "eocene.nemo": {"steps": EoceneDomainSteps},
 }
 # a placeholder: {name} or {section.key}, names are Python identifiers
 PLACEHOLDER = re.compile(r"\{([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\}")

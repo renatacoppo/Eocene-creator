@@ -15,12 +15,13 @@ Unreleased
 Added
 ~~~~~
 
-- NEMO domain step ``sections`` (``present.nemo.steps.sections``, default ``false``): writes
+- NEMO domain step ``sections`` (``present.nemo.steps.sections``, default ``true``): writes
   ``nemo/domain/<grid>/section_ijglobal.diadct``, the transport sections of the NEMO diagnostic ``diadct``, with the
   NEMO tool SECTIONS_DIADCT on the grid of the final ``domain_cfg.nc`` and its 132 global sections. The ``atos``
   backend compiles and runs the tool (``run_sections_diadct.sh``; the module loading moved to ``hpc_env.sh``, shared
   with ``run_domain_cfg.sh``); ``fake`` writes a file without sections. Present day only:
-  ``EoceneBathymetry.transport_sections`` is ``False`` (#TBD).
+  ``EoceneBathymetry.transport_sections`` is ``False`` and ``eocene.nemo.steps.sections`` defaults to ``false``
+  (``EoceneDomainSteps``) (#TBD).
 - ``data_version`` (top-level config key, default ``v1``): the version of the generated data, and the CDO series it
   needs. ``v1`` (the data of the existing experiments, PALEORCA2 domains of ECE4-DATA-V3 and ``PALEORCA2-definitive``)
   needs CDO 2.5.x: every run and dry run stops with an error naming the CDO found and how to load 2.5. ``v2`` is
@@ -104,6 +105,9 @@ Added
 Changed
 ~~~~~~~
 
+- Configuration templates: the ``steps`` of every component are listed in full, the ones that are off included, so a
+  step is switched on or off by changing its value. The ``present.oifs`` steps are all off, because the OIFS initial
+  state of ``data_version: v1`` is the TL63L31 one shipped in the input tree (``docs/configuration.rst``).
 - CDO 2.5.x is required for ``data_version: v1`` (``module load cdo/2.5.3`` on Atos, conda-forge ``cdo=2.5``
   elsewhere, ``cdo=2.5`` in CI): it reproduces the domains of the existing experiments, while 2.6.x moves land-sea
   mask cells whose ocean fraction is exactly 0.5 (25 Eocene, 4 present-day cells). ``AGENTS.md``,
@@ -297,6 +301,8 @@ Removed
 Output
 ~~~~~~
 
+- Present-day tree: ``nemo/domain/<grid>/section_ijglobal.diadct`` is written by default (step ``sections``), as in
+  the domain trees of ECE4-DATA-V3; it was missing from the trees made by ``ecefast`` so far (#TBD).
 - Present-day PALEORCA2 bathymetry and domain (``nemo/domain/PALEORCA2/`` of ``present.output``): the strait
   corrections of ``eORCA1_to_PALEORCA2_remapnn`` are the ones that made ``PALEORCA2-definitive`` and ECE4-DATA-V3
   (data_version v1), kept until now only in a git stash. Indonesia also opens (103-105, 11) and no longer averages

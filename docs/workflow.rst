@@ -264,10 +264,10 @@ Its steps, each switched on or off in ``<period>.nemo.steps`` (or ``--nemo a,b``
 period), ``configure_domain`` (the DOMAINcfg namelist), ``domain_cfg`` (DOMAINcfg, through the
 backend of ``machine.name``, see :doc:`external_tools`), ``generate_mask`` (``domain_cfg.nc`` and
 ``maskutil.nc``), ``generate_subbasins`` (``subbasins.nc``: Atlantic, Pacific, Indian,
-Indo-Pacific and global masks) and ``sections``. On a laptop ``domain_cfg``, ``generate_mask`` and
-``generate_subbasins`` are off.
+Indo-Pacific and global masks) and ``sections``. On a laptop ``domain_cfg``, ``generate_mask``,
+``generate_subbasins`` and ``sections`` are off.
 
-``sections`` (off by default, present day only, Atos) writes ``section_ijglobal.diadct``, the
+``sections`` (on by default for the present day, off for the Eocene; Atos only) writes ``section_ijglobal.diadct``, the
 transport sections of the NEMO diagnostic ``diadct``, with the NEMO tool SECTIONS_DIADCT (see
 :doc:`external_tools`). It reads the final ``domain_cfg.nc``, writes its horizontal grid to
 ``<machine.tmpdir>/present/nemo/sections/coordinates.nc``, runs the tool there on the 132 global

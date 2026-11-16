@@ -1,6 +1,7 @@
 # ecefast configuration, schema 2: laptop / workstation.
 # Copy to configs/laptop.yml (gitignored) and set the paths. Every key is described in docs/configuration.rst.
-# Keys shown commented out are optional; the value shown is the default.
+# Keys shown commented out are optional; the value shown is the default. The `steps` of each component are
+# listed in full, with their default: set one to true or false to run or skip that step.
 #
 # Sections follow the time periods: `machine` (where), `grids` (the model resolution, shared by every period),
 # then one section per period, `present` and `eocene`. A period has `input` (the EC-Earth tree it starts from,
@@ -34,19 +35,23 @@ grids:
 present:
   input: /path/to/ECE4-DATA-V3        # EC-Earth4 input tree, read-only (required)
   output: /path/to/OUTPUT/present     # the present-day tree: stage copies the input, then nemo/domain/ (required)
-  # oifs: OIFS base data from a finer grid; its inputs are on Atos only, see configs/atos.tmpl
+  oifs:                               # OIFS base data from a finer grid: its inputs are on Atos only, see atos.tmpl
+    steps:                            # all off: data_version v1 uses the TL63L31 initial state of the input tree
+      spectral: false                 # truncate ICMSHECE4INIT
+      gridpoint: false                # remap ICMGGECE4INIT, ICMGGECE4INIUA
+      boundary: false                 # climate file ICMCLECE4
   nemo:                               # present-day NEMO domain, bathymetry of {input}/nemo/domain/<source_grid>/
     source_grid: eORCA1               # NEMO grid of the present-day bathymetry (needs strait corrections for it)
     # source_staggering: T            # staggering of its coordinate bounds (used in setgrid), T or F
     minimum_depth: 30                 # m; depths 0 < d < minimum_depth are raised to it (required)
     steps:                            # DOMAINcfg runs only on Atos: its steps are off on a laptop
-      # coordinates: true
-      # bathymetry: true
-      # configure_domain: true
+      coordinates: true               # coordinates and cell bounds of the target and source grids
+      bathymetry: true                # remapped bathymetry with the strait corrections
+      configure_domain: true          # DOMAINcfg namelist
       domain_cfg: false               # run DOMAINcfg (Atos only)
       generate_mask: false            # post-process domain_cfg.nc and extract maskutil.nc (needs DOMAINcfg output)
       generate_subbasins: false       # ocean subbasin masks (needs DOMAINcfg output)
-      # sections: false               # diadct transport sections (SECTIONS_DIADCT, Atos only)
+      sections: false                 # diadct transport sections (SECTIONS_DIADCT, Atos only)
 
 # Eocene (DeepMIP) period: `ecefast eocene run`
 eocene:
@@ -57,6 +62,14 @@ eocene:
     domain: /path/to/data/domain/PALEORCA2/eocene   # directory with the Eocene domain_cfg.nc + maskutil.nc built
                                       # on Atos; `build` builds it, not possible with machine.name: local (required)
     minimum_depth: 30                 # m, used to build the domain (required)
+    steps:                            # steps of the domain pipeline, used only with domain: build (Atos)
+      coordinates: true
+      bathymetry: true                # remapped Herold bathymetry
+      configure_domain: true
+      domain_cfg: true                # run DOMAINcfg (Atos only)
+      generate_mask: true
+      generate_subbasins: true        # global mask only for the Eocene
+      sections: false                 # no diadct sections: they follow present-day straits and passages
   # oifs:
   #   aerosols: false                 # build the Herold Eocene aerosol climatology (EoceneOIFS.aerosols); off
   # oasis:
