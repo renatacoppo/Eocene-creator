@@ -21,7 +21,7 @@ Added
   backend compiles and runs the tool (``run_sections_diadct.sh``; the module loading moved to ``hpc_env.sh``, shared
   with ``run_domain_cfg.sh``); ``fake`` writes a file without sections. Present day only:
   ``EoceneBathymetry.transport_sections`` is ``False`` and ``eocene.nemo.steps.sections`` defaults to ``false``
-  (``EoceneDomainSteps``) (#TBD).
+  (``EoceneDomainSteps``) (#52).
 - ``data_version`` (top-level config key, default ``v1``): the version of the generated data, and the CDO series it
   needs. ``v1`` (the data of the existing experiments, PALEORCA2 domains of ECE4-DATA-V3 and ``PALEORCA2-definitive``)
   needs CDO 2.5.x: every run and dry run stops with an error naming the CDO found and how to load 2.5. ``v2`` is
@@ -302,7 +302,7 @@ Output
 ~~~~~~
 
 - Present-day tree: ``nemo/domain/<grid>/section_ijglobal.diadct`` is written by default (step ``sections``), as in
-  the domain trees of ECE4-DATA-V3; it was missing from the trees made by ``ecefast`` so far (#TBD).
+  the domain trees of ECE4-DATA-V3; it was missing from the trees made by ``ecefast`` so far (#52).
 - Present-day PALEORCA2 bathymetry and domain (``nemo/domain/PALEORCA2/`` of ``present.output``): the strait
   corrections of ``eORCA1_to_PALEORCA2_remapnn`` are the ones that made ``PALEORCA2-definitive`` and ECE4-DATA-V3
   (data_version v1), kept until now only in a git stash. Indonesia also opens (103-105, 11) and no longer averages
