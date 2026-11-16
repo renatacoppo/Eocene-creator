@@ -282,6 +282,13 @@ Removed
 Output
 ~~~~~~
 
+- Present-day PALEORCA2 bathymetry and domain (``nemo/domain/PALEORCA2/`` of ``present.output``): the strait
+  corrections of ``eORCA1_to_PALEORCA2_remapnn`` are the ones that made ``PALEORCA2-definitive`` and ECE4-DATA-V3
+  (data_version v1), kept until now only in a git stash. Indonesia also opens (103-105, 11) and no longer averages
+  (94, 16); new region Philippines opens (111, 13) and (112, 13); Thailand closes column 3 only down to row 107
+  and closes (98-106, 4). With CDO 2.5.3 the corrected bathymetry equals the one of ``PALEORCA2-definitive``
+  (0 differing cells). ``open_region`` leaves a cell that is ocean already as it is, with a warning (no cell of
+  these corrections is). The Eocene domain does not change.
 - The Eocene initial state moves to ``initial_state/`` with the same values: ``oifs/TL63L31/19900101/*`` to
   ``initial_state/oifs/TL63L31/19900101/`` (the old folder is a link to it), ``oasis/PALEORCA2/rstos.nc`` to
   ``initial_state/oasis/PALEORCA2/default/rstos.nc`` (the old file is a link to it). The ocean initial states move

@@ -277,7 +277,10 @@ The present-day bathymetry is the one of ``{input}/nemo/domain/<present.nemo.sou
 (``eORCA1`` by default), remapped by nearest neighbour; then strait corrections are applied. The
 corrections are looked up in ``bathymetry_corrections.yaml`` by source grid, target grid and remap
 method (e.g. ``eORCA1_to_PALEORCA2_remapnn``); a source grid without corrections is a
-configuration error. The step also plots the land-sea mask of the result next to the one of every
+configuration error. The corrections of ``eORCA1_to_PALEORCA2_remapnn`` reproduce the present-day
+domain of the existing experiments (``data_version: v1``, see :doc:`configuration`). Opening a cell
+sets it to the mean depth of its ocean neighbours; a cell that is ocean already is left as it is,
+with a warning. The step also plots the land-sea mask of the result next to the one of every
 ``{input}/nemo/domain/*/domain_cfg.nc``, one panel each, in
 ``<machine.tmpdir>/present/nemo/bathymetry/{grids.nemo.name}/landsea_mask_comparison.png``.
 
