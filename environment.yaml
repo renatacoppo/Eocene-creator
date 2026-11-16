@@ -5,8 +5,8 @@
 #
 # All Python dependencies come from conda-forge, except the python-cdo wrapper: pip installs it from PyPI
 # (package `cdo`, via `-e .`), because conda-forge `python-cdo` depends on the `cdo` binary.
-# The CDO binary is NOT part of this environment: it comes from the system (Homebrew on macOS,
-# conda-forge `cdo` or the HPC module on Linux). A cdo shipped in the env would shadow it on PATH.
+# The CDO binary is NOT part of this environment, but it must be 2.5.x for now (see AGENTS.md): the HPC module
+# (`module load cdo/2.5.3` on Atos) or conda-forge `cdo=2.5`. A cdo shipped in the env would shadow it on PATH.
 # The baseline records the exact CDO version it was made with (see AGENTS.md, Scientific integrity).
 
 name: eocene

@@ -93,7 +93,7 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
         )
     )
     monkeypatch.setattr(pipeline, "PIPELINE", [Stage, Dummy])
-    monkeypatch.setattr(runner, "cdo_version", lambda: "9.9.9")
+    monkeypatch.setattr(runner, "cdo_version", lambda: "2.5.3")
     monkeypatch.setattr(workspace, "OVERWRITE_PAUSE", 0)
     return {"config": str(config), "output": output}
 
@@ -141,17 +141,19 @@ def test_run_writes_outputs_and_provenance(tree: dict, log) -> None:
     out = tree["output"]
     assert (out / "dummy.txt").read_text() == "dummy"
     assert (out / "nemo" / "initial" / "woa.nc").exists()
-    assert "CDO version: 9.9.9" in log.text
+    assert "CDO version: 2.5.3" in log.text
+    assert "Data version: v1" in log.text
 
     record = yaml.safe_load((out / "provenance.yml").read_text())
-    assert list(record) == ["steps", "config", "ecefast", "versions", "start", "end"]
+    assert list(record) == ["steps", "config", "data_version", "ecefast", "versions", "start", "end"]
+    assert record["data_version"] == "v1"
     assert record["steps"] == ["stage", "dummy"]
     assert record["config"]["file"] == tree["config"]
     assert record["config"]["sha256"] == hashlib.sha256(Path(tree["config"]).read_bytes()).hexdigest()
     assert record["ecefast"]["version"] == __version__
     assert record["ecefast"]["git_commit"]
     assert set(record["versions"]) == {"python", "cdo", "eccodes"}
-    assert record["versions"]["cdo"] == "9.9.9"
+    assert record["versions"]["cdo"] == "2.5.3"
     assert datetime.fromisoformat(record["start"]) <= datetime.fromisoformat(record["end"])
 
 
@@ -161,6 +163,18 @@ def test_dry_run_writes_nothing(tree: dict, log) -> None:
     assert not tree["output"].exists()
     assert "Dry run: nothing is written" in log.text
     assert "dummy" in log.text
+
+
+@pytest.mark.parametrize("extra", [[], ["--dry-run"]])
+def test_wrong_cdo_for_data_version_exits_and_writes_nothing(
+    tree: dict, monkeypatch: pytest.MonkeyPatch, log, extra: list[str]
+) -> None:
+    monkeypatch.setattr(runner, "cdo_version", lambda: "2.6.0")
+    with pytest.raises(SystemExit) as exit_info:
+        run("-c", tree["config"], *extra)
+    assert exit_info.value.code != 0
+    assert not tree["output"].exists()
+    assert "data_version v1 needs CDO 2.5.x, found CDO 2.6.0" in log.text
 
 
 def test_missing_input_exits_and_writes_nothing(tree: dict, monkeypatch: pytest.MonkeyPatch, log) -> None:

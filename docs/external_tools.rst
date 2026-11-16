@@ -133,9 +133,10 @@ Coding agents and CI cannot run on Atos, so a person checks each new setup (and 
 before it reaches ``main``) by hand. You need:
 
 - the repository (on the branch to check) and the ``eocene`` environment, created from
-  ``environment.yaml`` with ``pip install -e ".[dev]"``. For CDO use conda-forge ``cdo`` in that
-  environment with the version recorded in ``BASELINE/BASELINE.txt`` (or the module, if you do
-  not compare with the baseline): a different CDO changes the remapped bathymetries;
+  ``environment.yaml`` with ``pip install -e ".[dev]"``. CDO must be 2.5.x
+  (``module load cdo/2.5.3``; the default module is newer): another version changes the land-sea
+  mask of the remapped bathymetries. To compare with the baseline use the version recorded in
+  ``BASELINE/BASELINE.txt``;
 - the inputs: the ECE4-DATA-V3 tree, the Herold et al. (2014) ``Supp/`` folder and the PALEORCA2
   ``coords_ori.nc``;
 - an EC-Earth4 build: its source tree (``machine.atos.ecearth4_sources``), holding the NEMO tools

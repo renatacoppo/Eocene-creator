@@ -10,6 +10,10 @@
 # Any string may refer to another value with a {section.key} placeholder, e.g. {present.input}.
 
 schema: 2                       # configuration schema version (required)
+# data_version: v1              # version of the generated data. v1 = the data of the existing experiments
+                                # (PALEORCA2 domains of ECE4-DATA-V3 / PALEORCA2-definitive). It needs CDO 2.5.x:
+                                # another CDO moves land-sea mask cells of the NEMO bathymetries, so the run stops
+                                # (on Atos: module load cdo/2.5.3). v2 is not supported yet.
 
 machine:
   # name: local                 # where DOMAINcfg runs: local (not available), atos (ECMWF Atos) or fake (tests)

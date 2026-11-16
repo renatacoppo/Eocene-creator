@@ -27,6 +27,15 @@ import yaml
 SCHEMA_VERSION = 2
 TEMPLATE = "configs/laptop.tmpl"
 
+# Versions of the generated data (``data_version``) and the CDO series each one needs. CDO decides the land-sea mask
+# of the NEMO bathymetries: cells whose remapcon ocean fraction is exactly 0.5 fall on either side by floating-point
+# rounding, which changes between CDO versions. v1 is the data of the existing experiments (the PALEORCA2 domains of
+# ECE4-DATA-V3 and PALEORCA2-definitive), made with CDO 2.5.0; 2.5.1 and 2.5.3 reproduce it, 2.6.x does not.
+DATA_VERSIONS = {"v1": "2.5"}
+DEFAULT_DATA_VERSION = "v1"
+# Versions that may be supported in the future, rejected with their own message
+PLANNED_DATA_VERSIONS = ("v2",)
+
 
 class ConfigError(ValueError):
     """The configuration file is missing, unreadable or does not match the schema."""
@@ -190,6 +199,7 @@ class Config:
 
     file: str
     machine: Machine
+    data_version: str = DEFAULT_DATA_VERSION
     grids: Grids = field(default_factory=Grids)
     present: Present | None = None
     eocene: Eocene | None = None
@@ -476,6 +486,7 @@ def _inside(path: str, root: str) -> bool:
 def _validate(config: Config) -> None:
     """Check values: types, allowed choices, where ``tmpdir`` may be. Directories are checked per period."""
     file = config.file
+    _check_data_version(config.data_version, file)
     machine = config.machine
     _check_type(machine.tmpdir, str, "machine.tmpdir", file)
     if machine.name not in BACKENDS:
@@ -534,6 +545,18 @@ def _validate(config: Config) -> None:
                 f"{file}: 'machine.tmpdir' {machine.tmpdir} lies inside '{period}.output' {section.output}: "
                 "keep intermediate files out of the output trees"
             )
+
+
+def _check_data_version(version: Any, file: str) -> None:
+    """``data_version`` is a supported version of the generated data (see ``DATA_VERSIONS``)."""
+    _check_type(version, str, "data_version", file)
+    if version in PLANNED_DATA_VERSIONS:
+        raise ConfigError(
+            f"{file}: 'data_version: {version}' is not supported yet. Supported: "
+            f"{', '.join(DATA_VERSIONS)} (see docs/configuration.rst)"
+        )
+    if version not in DATA_VERSIONS:
+        raise ConfigError(f"{file}: 'data_version' must be one of {', '.join(DATA_VERSIONS)}, got {version!r}")
 
 
 def override_steps(config: Config, period: str, component: str, names: list[str]) -> None:
@@ -595,7 +618,8 @@ def load_config(path: str | Path) -> Config:
     ------
     ConfigError
         If the file is missing or unreadable, uses an old layout (``dirs:``, schema 1, or the component sections
-        of the first schema 2; the error lists the new key names), has a wrong ``schema``, unknown or missing keys,
+        of the first schema 2; the error lists the new key names), has a wrong ``schema``, an unsupported
+        ``data_version``, unknown or missing keys,
         values of the wrong type, a placeholder that names an unknown key or a cycle, or ``machine.tmpdir`` lies
         inside a read-only directory or an output tree.
     """
@@ -617,7 +641,7 @@ def load_config(path: str | Path) -> Config:
     if any(key in raw for key in ("inputs", "oifs", "nemo", "tmpdir")):
         raise _old_layout_error(raw, file, COMPONENT_LAYOUT_KEYS, "configuration with component sections")
 
-    unknown = sorted(set(raw) - set(SECTIONS) - {"schema"})
+    unknown = sorted(set(raw) - set(SECTIONS) - {"schema", "data_version"})
     if unknown:
         raise ConfigError(f"{file}: unknown top-level key(s): {', '.join(unknown)}")
     if not raw.get("machine"):
@@ -625,6 +649,8 @@ def load_config(path: str | Path) -> Config:
 
     def build(raw: dict) -> Config:
         values = {name: _build(cls, raw[name], name, file) for name, cls in SECTIONS.items() if raw.get(name)}
+        if "data_version" in raw:
+            values["data_version"] = raw["data_version"]
         return Config(file=file, **values)
 
     # build once to fill in the defaults, so placeholders can refer to them; then build from the resolved values

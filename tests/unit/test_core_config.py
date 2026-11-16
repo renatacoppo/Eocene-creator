@@ -48,6 +48,7 @@ def test_minimal_config_loads_with_defaults(tmp_path: Path) -> None:
     assert (oifs.name, oifs.startdate, oifs.climate_version) == ("TL63L31", "19900101", "climate.v020")
     assert (nemo.name, nemo.coords_ori, nemo.staggering) == ("PALEORCA2", None, "T")
     assert config.present is None and config.eocene is None
+    assert config.data_version == "v1"
 
 
 def test_present_section_loads_with_defaults(tmp_path: Path) -> None:
@@ -94,6 +95,32 @@ def test_override_default(tmp_path: Path, section, value, read, expected) -> Non
 def test_override_eocene_option(tmp_path: Path, value, read, expected) -> None:
     raw = minimal(tmp_path) | {"eocene": eocene(tmp_path) | value}
     assert read(load_config(write(tmp_path, raw))) == expected
+
+
+# --- data_version --------------------------------------------------------------------------------------------------
+
+
+def test_data_version_explicit(tmp_path: Path) -> None:
+    assert load_config(write(tmp_path, minimal(tmp_path) | {"data_version": "v1"})).data_version == "v1"
+
+
+def test_data_version_in_placeholder(tmp_path: Path) -> None:
+    raw = minimal(tmp_path)
+    raw["machine"]["tmpdir"] = str(tmp_path / "tmp-{data_version}")
+    assert load_config(write(tmp_path, raw)).machine.tmpdir == str(tmp_path / "tmp-v1")
+
+
+@pytest.mark.parametrize(
+    "value, match",
+    [
+        ("v2", "'data_version: v2' is not supported yet. Supported: v1"),
+        ("v3", "'data_version' must be one of v1, got 'v3'"),
+        (1, "'data_version' must be str, got 1"),
+    ],
+)
+def test_bad_data_version(tmp_path: Path, value, match: str) -> None:
+    with pytest.raises(ConfigError, match=match):
+        load_config(write(tmp_path, minimal(tmp_path) | {"data_version": value}))
 
 
 # --- placeholders ---------------------------------------------------------------------------------------------------

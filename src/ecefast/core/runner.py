@@ -8,7 +8,7 @@ import os
 import shutil
 from datetime import datetime
 
-from .cdo import cdo_version
+from .cdo import cdo_version, check_cdo_version
 from .config import load_config, override_steps
 from .io import partial_path, replace_directory
 from .provenance import write_provenance
@@ -82,12 +82,15 @@ def run_period(
         If the configuration is invalid, has no section for ``period``, or a read-only directory of the period is
         missing.
     PipelineError
-        If the pipeline cannot start, or a step did not write a declared output.
+        If the CDO version is not the one ``data_version`` needs, the pipeline cannot start, or a step did not write
+        a declared output.
     """
     start = datetime.now().astimezone()
     cdo = cdo_version()
     logger.info("CDO version: %s", cdo)
     config = load_config(config_file)
+    logger.info("Data version: %s", config.data_version)
+    check_cdo_version(cdo, config.data_version)
     section = config.period(period)
     for name, names in (substeps or {}).items():
         override_steps(config, period, name, names)
@@ -105,7 +108,9 @@ def run_period(
         names = run_pipeline(steps, ctx, select=select, dry_run=dry_run)
         if not dry_run:
             os.makedirs(section.output, exist_ok=True)
-            path = write_provenance(section.output, names, config_file, cdo, start, datetime.now().astimezone())
+            path = write_provenance(
+                section.output, names, config_file, config.data_version, cdo, start, datetime.now().astimezone()
+            )
             logger.info("Provenance written to %s", path)
         return names, ctx
 
@@ -131,7 +136,7 @@ def run_period(
     building.period(period).output = partial
     try:
         names = run_pipeline(steps, Context(building, period, overwrite, final), select=select)
-        write_provenance(partial, names, config_file, cdo, start, datetime.now().astimezone())
+        write_provenance(partial, names, config_file, config.data_version, cdo, start, datetime.now().astimezone())
     except Exception:
         if has_files(partial):
             logger.error("The run stopped: %s is unchanged; the partial tree is kept in %s", final, partial)

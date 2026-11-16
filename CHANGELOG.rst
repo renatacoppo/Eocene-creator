@@ -15,6 +15,13 @@ Unreleased
 Added
 ~~~~~
 
+- ``data_version`` (top-level config key, default ``v1``): the version of the generated data, and the CDO series it
+  needs. ``v1`` (the data of the existing experiments, PALEORCA2 domains of ECE4-DATA-V3 and ``PALEORCA2-definitive``)
+  needs CDO 2.5.x: every run and dry run stops with an error naming the CDO found and how to load 2.5. ``v2`` is
+  reserved and rejected. The data version is logged and written to ``provenance.yml``.
+- ``scripts/compare_trees.py``: compares two EC-Earth input trees and writes a Markdown report (files only in one
+  tree, identical files, and for files that differ the number of differing points, the largest difference and
+  where; for ``domain_cfg.nc`` the vertical grid, the ocean/land changes and ``bottom_level``).
 - ``EoceneNEMO`` writes a third ocean initial state, ``initial_state/nemo/ts_state/deepmip-L31_warm-34.nc``
   (profile ``deepmip_warm``): the deeper DeepMIP-like profile of the original code (``(5000 - z) / 5000 * 19 *
   cos(lat) + 15`` above 5000 m, 15 °C below; 34 °C at the equator surface), salinity 34.7. The profiles are named
@@ -91,6 +98,10 @@ Added
 Changed
 ~~~~~~~
 
+- CDO 2.5.x is required for ``data_version: v1`` (``module load cdo/2.5.3`` on Atos, conda-forge ``cdo=2.5``
+  elsewhere, ``cdo=2.5`` in CI): it reproduces the domains of the existing experiments, while 2.6.x moves land-sea
+  mask cells whose ocean fraction is exactly 0.5 (25 Eocene, 4 present-day cells). ``AGENTS.md``,
+  ``docs/installation.rst``, ``docs/external_tools.rst`` and ``environment.yaml`` updated.
 - The OIFS component is split by process: ``generator`` only plans, checks and runs (``OIFSData``);
   ``initial_state`` holds the spectral truncation, gridpoint remapping, install and vertical interpolation;
   ``climate`` the climate file; ``grid_files`` the paths of the shipped ``grids/`` files. Logic unchanged.

@@ -42,6 +42,21 @@ def test_find_cdo_binary_prefers_cdo_variable(monkeypatch: pytest.MonkeyPatch, t
     assert core_cdo.find_cdo_binary() == str(binary)
 
 
+@pytest.mark.parametrize("found", ["2.5.0", "2.5.3", "2.5.10"])
+def test_check_cdo_version_accepts_the_series(found: str) -> None:
+    core_cdo.check_cdo_version(found, "v1")
+
+
+@pytest.mark.parametrize("found", ["2.6.0", "2.6.5", "2.4.0", "3.5.0", "2.50.1"])
+def test_check_cdo_version_rejects_other_versions(found: str) -> None:
+    with pytest.raises(core_cdo.PipelineError) as error:
+        core_cdo.check_cdo_version(found, "v1")
+    message = str(error.value)
+    assert f"data_version v1 needs CDO 2.5.x, found CDO {found}" in message
+    assert "ocean fraction of exactly 0.5" in message
+    assert "module avail cdo" in message and "cdo=2.5" in message
+
+
 # Modules that used to create a Cdo() at import time.
 CDO_MODULES = [
     "ecefast.cli.main",

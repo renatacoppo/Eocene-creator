@@ -71,8 +71,10 @@ final files that exist already unless ``--overwrite`` is given, with the same wa
    ecefast present run -c configs/atos.yml --steps stage,nemo     # first time: a new present-day tree
    ecefast nemo run -c configs/atos.yml --overwrite                # later: rerun nemo on that tree
 
-The run logs the CDO version first. On a usage error (bad configuration, missing input, unknown
-step, existing output) the command logs one error and exits with code 1.
+The run logs the CDO version and the ``data_version`` first, and stops if CDO is not the series
+that ``data_version`` needs (see :doc:`configuration`). On a usage error (bad configuration,
+missing input, unknown step, existing output, wrong CDO) the command logs one error and exits with
+code 1.
 
 A dry run checks everything and logs the plan, one line per step. A run and a dry run both end
 with a recap of the files written (or that would be written), grouped by the period's ``output``,
@@ -84,7 +86,8 @@ steps log at INFO; the files of each step, and each file copied or written, at D
 .. code-block:: text
 
    $ ecefast eocene run -c configs/laptop.yml --dry-run
-   INFO -> CDO version: 2.6.4
+   INFO -> CDO version: 2.5.3
+   INFO -> Data version: v1
    INFO -> Dry run: nothing is written. Plan:
    INFO ->   stage   Copy base files from the input tree to the output tree.
    INFO ->   domain  Install the Eocene NEMO domain (eocene.nemo.domain: a directory, or build) and check its vertical grid.
@@ -113,12 +116,13 @@ At the end of a successful run (not a dry run) the runner writes ``provenance.ym
    config:
      file: /path/to/configs/laptop.yml
      sha256: 3f1c...                 # of the configuration file
+   data_version: v1                  # see the data_version key in the configuration
    ecefast:
      version: 0.0.2
      git_commit: 821b4e4...          # "unknown" if the package is not in a git checkout
    versions:
      python: 3.14.10
-     cdo: 2.6.4                      # the CDO binary used by the run
+     cdo: 2.5.3                      # the CDO binary used by the run
      eccodes: 2.47.0                 # 'codes_info -v' of the ecCodes tools on PATH
    start: '2026-11-12T12:20:01+01:00'
    end: '2026-11-12T12:20:49+01:00'

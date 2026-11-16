@@ -52,6 +52,7 @@ def write_provenance(
     output_dir: str,
     steps: list[str],
     config_file: str,
+    data_version: str,
     cdo_version: str,
     start: datetime,
     end: datetime,
@@ -66,6 +67,8 @@ def write_provenance(
         Names of the steps that ran, in order.
     config_file : str
         Configuration file of the run; its absolute path and SHA-256 are recorded.
+    data_version : str
+        Version of the generated data (``data_version`` of the configuration).
     cdo_version : str
         Version of the CDO binary used by the run.
     start, end : datetime
@@ -79,6 +82,7 @@ def write_provenance(
     record = {
         "steps": list(steps),
         "config": {"file": os.path.abspath(config_file), "sha256": sha256(config_file)},
+        "data_version": data_version,
         "ecefast": {"version": __version__, "git_commit": git_commit()},
         "versions": {"python": platform.python_version(), "cdo": cdo_version, "eccodes": eccodes_version()},
         "start": start.isoformat(timespec="seconds"),
