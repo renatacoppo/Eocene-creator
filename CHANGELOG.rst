@@ -233,6 +233,10 @@ Changed
 Fixed
 ~~~~~
 
+- The OIFS generator (``ecefast oifs run``, ``present run``) no longer stops when it builds the grid with cell corners:
+  ``ICMGGECE4INIT`` holds GRIB1 and GRIB2 messages after the gridpoint step, and the land-sea mask was read with
+  CDO's own GRIB decoder (``var172``), which reads GRIB1 only. It is now read through ecCodes (``--eccodes``,
+  ``lsm``). The grid (latitudes, reduced points) is the same; no output changes.
 - The present-day ``stage`` (``PresentStage``) also copies ``nemo/domain/ORCA2``: ``EoceneNEMO`` reads it, and with
   ``eocene.input: "{present.output}"`` the Eocene could not start. A unit test checks that the present-day tree holds
   every input the Eocene reads.
