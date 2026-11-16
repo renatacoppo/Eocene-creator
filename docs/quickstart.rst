@@ -1,145 +1,200 @@
 Quickstart
 ==========
 
-All commands run from the repository root, in the ``eocene`` environment
-(see :doc:`installation`).
-
-1. Fetch the input data
------------------------
-
-``scripts/get_ece4_data.sh`` copies the subset of ECE4-DATA-V3 used by the workflow
-(OIFS TL63L31, NEMO PALEORCA2, OASIS PALEORCA2, runoff-mapper) into ``ECE4-DATA-V3/``.
-Give the source as an argument or in ``ECE4_DATA_SRC``:
+``ecefast`` runs on ECMWF Atos, where DOMAINcfg and SECTIONS_DIADCT (the NEMO tools that build a
+domain) are available. A full generation is two commands, the present day first, since the
+Eocene starts from its tree:
 
 .. code-block:: bash
 
-   ECE4_DATA_SRC=user@host:/path/to/ECE4-DATA-V3 ./scripts/get_ece4_data.sh
+   ecefast present run -c configs/atos.yml     # present-day tree, with the PALEORCA2 domain (~3 min)
+   ecefast eocene run -c configs/atos.yml      # Eocene tree, with the Eocene domain (~5 min)
 
-The Herold et al. (2014) datasets and the Eocene PALEORCA2 domain are copied by hand
-(from the HPC or the paper supplement). The ``herold`` folder also holds one file that is not in
-the supplement: the 55 Ma ocean floor age grid of Müller et al. (2008), read by the ``nemo`` step
-for the geothermal heat flux. Download it from EarthByte and decompress it there:
-
-.. code-block:: bash
-
-   cd /path/to/herold-et-al-2014
-   curl -O https://www.earthbyte.org/webdav/ftp/earthbyte/agegrid/Palaeo/2008/Data/age_depth_bath_55.xyadb.bz2
-   bunzip2 age_depth_bath_55.xyadb.bz2
-
-If an input with a known source is missing, the error of ``ecefast eocene run`` says where to get it.
-
-2. Write a configuration file
------------------------------
+1. Set up (once)
+----------------
 
 .. code-block:: bash
 
-   cp configs/laptop.tmpl configs/laptop.yml
+   git clone https://github.com/renatacoppo/Eocene-creator.git
+   cd Eocene-creator
+   module load conda                     # or your own Miniforge
+   mamba env create -f environment.yaml  # environment "eocene", with the package installed in editable mode
 
-Then set the paths in ``configs/laptop.yml`` (see :doc:`configuration`): ``machine.tmpdir``
-(intermediate files), ``grids.nemo.coords_ori``, the read-only ``present.input`` (ECE4-DATA-V3)
-and ``eocene.herold``, the outputs ``present.output`` and ``eocene.output`` (e.g.
-``OUTPUT/present`` and ``OUTPUT/eocene``) and ``eocene.nemo.domain`` (the directory of the Eocene
-domain copied from Atos). ``eocene.input`` stays ``"{present.input}"``. ``configs/*.yml`` is
-ignored by git. On ECMWF Atos start from ``configs/atos.tmpl``.
+What a run needs on Atos:
 
-.. code-block:: yaml
+- **CDO 2.5.x**, outside the environment: ``module load cdo/2.5.3`` (the default module is newer).
+  The run stops with any other CDO, see :ref:`data-version`.
+- **An EC-Earth4 build**: its source tree, holding ``nemo-4.2/tools`` (``maketools``,
+  ``DOMAINcfg/``, ``SECTIONS_DIADCT/``) and ``oasis3-mct-5.2/arch_ecearth/lib``. ``ecefast``
+  compiles DOMAINcfg and SECTIONS_DIADCT there the first time, with the modules of
+  ``src/ecefast/tools/hpc_profiles.yaml``.
+- **The inputs**, all read-only:
 
-   schema: 2
-   machine:
-     tmpdir: /path/to/tmp/ecefast
-   grids:
-     nemo:
-       coords_ori: /path/to/data/PALEORCA2/coords_ori.nc
-   present:
-     input: /path/to/ECE4-DATA-V3
-     output: /path/to/OUTPUT/present
-     nemo:
-       source_grid: eORCA1
-       minimum_depth: 30
-       steps: {domain_cfg: false, generate_mask: false, generate_subbasins: false}
-   eocene:
-     input: "{present.input}"
-     herold: /path/to/herold-et-al-2014/Supp
-     output: /path/to/OUTPUT/eocene
-     nemo:
-       domain: /path/to/data/domain/PALEORCA2/eocene
-       minimum_depth: 30
+  - an ECE4-DATA tree (4.1.10 or later, with ``initial_state/``), e.g. ECE4-DATA-4.1.11;
+  - the Herold et al. (2014) supplementary data (``Supp/``), with the 55 Ma ocean-floor age grid of
+    Müller et al. (2008) added to it, read by the Eocene ``nemo`` step:
 
-3. Run the workflow
+    .. code-block:: bash
+
+       cd /path/to/herold-et-al-2014/Supp
+       curl -O https://www.earthbyte.org/webdav/ftp/earthbyte/agegrid/Palaeo/2008/Data/age_depth_bath_55.xyadb.bz2
+       bunzip2 age_depth_bath_55.xyadb.bz2
+
+  - the PALEORCA2 coordinates with halo, ``coords_ori.nc``.
+
+2. Write the configuration
+--------------------------
+
+.. code-block:: bash
+
+   cp configs/atos.tmpl configs/atos.yml       # configs/*.yml is ignored by git
+
+Set the paths marked ``/path/to/...``: ``machine.tmpdir`` (intermediate files),
+``machine.atos.ecearth4_sources``, ``grids.nemo.coords_ori``, ``present.input`` (the ECE4-DATA
+tree), ``present.output``, ``eocene.herold`` and ``eocene.output``. Leave the rest as it is: the
+template reproduces the existing data (``data_version: v1``). The steps of every component are
+listed in full; set one to ``false`` to skip it. :doc:`configuration` describes every key.
+
+3. Run
+------
+
+On an interactive node (``ecinteractive``) or in a batch job, not on a login node:
+
+.. code-block:: bash
+
+   conda activate eocene
+   module load cdo/2.5.3
+
+   ecefast present run -c configs/atos.yml --dry-run   # check every input, show the plan, write nothing
+   ecefast present run -c configs/atos.yml
+   ecefast eocene run -c configs/atos.yml --dry-run
+   ecefast eocene run -c configs/atos.yml
+
+A run first logs the CDO version and the data version, then checks that every input exists and
+that nothing would be written into an input directory; a missing input stops it with one error
+listing them all, before anything is written. The tree is built in ``<output>.partial`` and moved
+to ``output`` only when every step has succeeded. If ``output`` holds files already, add
+``--overwrite``: the run warns, waits 5 s (Ctrl-C to stop) and replaces the tree at the end.
+
+At the end each tree holds ``provenance.yml``: the steps, the configuration file and its hash,
+the git commit, the data version and the versions of Python, CDO and ecCodes.
+
+What the steps make
 -------------------
 
-Check that every input exists and see what would run, without writing anything:
+``ecefast <period> steps`` lists the steps of a period with what each needs, reads and writes.
+
+.. list-table:: ``ecefast present run`` (section ``present``)
+   :header-rows: 1
+   :widths: 12 50 38
+
+   * - Step
+     - What it does
+     - Files in ``present.output``
+   * - ``stage``
+     - Copies the base files of ``present.input`` (see below), and its ORCA2 domain.
+     - the EC-Earth tree
+   * - ``oifs``
+     - The OIFS generator: OIFS base data of ``grids.oifs`` from a finer grid. Off for
+       ``data_version: v1``, whose TL63L31 initial state is the one of the input tree.
+     - ``initial_state/oifs/TL63L31/``, ``oifs/TL63L31/climate.v020/``
+   * - ``nemo``
+     - The NEMO domain pipeline with the present-day bathymetry: eORCA1 remapped to PALEORCA2,
+       strait corrections, DOMAINcfg, masks, basins, ``diadct`` transport sections.
+     - ``nemo/domain/PALEORCA2/``: ``domain_cfg.nc``, ``maskutil.nc``, ``subbasins.nc``,
+       ``section_ijglobal.diadct``
+
+.. list-table:: ``ecefast eocene run`` (section ``eocene``)
+   :header-rows: 1
+   :widths: 12 50 38
+
+   * - Step
+     - What it does
+     - Files in ``eocene.output``
+   * - ``stage``
+     - Copies the base files of ``eocene.input`` (the present-day tree).
+     - the EC-Earth tree
+   * - ``domain``
+     - Builds the Eocene domain with the NEMO domain pipeline and the Herold bathymetry
+       (``eocene.nemo.domain: build``), installs it, and checks that it has the vertical grid of
+       the present-day domain.
+     - ``nemo/domain/PALEORCA2/domain_cfg.nc``, ``maskutil.nc``
+   * - ``oasis``
+     - Coupler restart without sea ice and with a constant SST (``eocene.oasis.constant_sst``).
+     - ``initial_state/oasis/PALEORCA2/default/rstos.nc``
+   * - ``oifs``
+     - Herold land-sea mask, orography, subgrid orography, vegetation, soil, albedos and LAI; dry
+       upper air; snow, lakes and other present-day fields set to 0.
+     - ``initial_state/oifs/TL63L31/19900101/ICM*``, ``oifs/TL63L31/climate.v020/ICMCLECE4``,
+       ``bare_soil_albedos.grb``
+   * - ``nemo``
+     - Eocene M2 tidal dissipation, geothermal flux from the ocean-floor age, three ocean initial
+       states (DeepMIP cold and warm, present-day WOA) on the present-day levels, runoff set to 0.
+     - ``nemo/initial/zdfiwm_forcing_r720x360.nc``, ``Goutorbe_ghflux.nc``;
+       ``initial_state/nemo/ts_state/*.nc``; ``nemo/climatology/runoff_DaiTrenberth_PALEORCA2.nc``
+   * - ``rnfm``
+     - River basins from the Herold river flow direction, regridded to the runoff-mapper grid.
+     - ``runoff-mapper/runoff_maps.nc``
+
+``stage`` copies only what the steps and EC-Earth need: ``oifs/`` (``composition``, ``ifsdata``,
+``vtables``, ``rtables`` and the OIFS grid), ``nemo/`` (``cfc``, ``climatology``, ``initial``,
+``weights``), ``oasis/PALEORCA2``, ``runoff-mapper/`` and, from ``initial_state/``, the folders of
+the grids in use. Everything else of ``initial_state/`` and ``cmip6-data`` are symlinked. After an
+Eocene run, a check fails the run if a declared output is missing, if a NetCDF output holds NaN,
+or if the Eocene vertical grid differs from the present-day one.
+
+Rerunning part of a run
+-----------------------
+
+``--steps`` runs some steps on an existing tree; ``ecefast <component> run`` runs the steps of
+one component (``--period present`` by default). ``--nemo`` and ``--oifs`` replace the configured
+steps of that component for one run.
 
 .. code-block:: bash
 
-   ecefast eocene run -c configs/laptop.yml --dry-run
+   ecefast eocene run -c configs/atos.yml --steps oifs -l DEBUG    # one step, more logging
+   ecefast nemo run -c configs/atos.yml --overwrite                # present-day domain again
+   ecefast nemo run -c configs/atos.yml --nemo sections --overwrite  # only the transport sections
+   ecefast nemo run -c configs/atos.yml --period eocene            # Eocene steps domain and nemo
 
-Copy the input subtree to the output directory and run every step (``--overwrite`` replaces an
-output directory that is not empty, after a warning and a 5 s pause):
-
-.. code-block:: bash
-
-   ecefast eocene run -c configs/laptop.yml --overwrite
-
-Rerun some steps (``domain``, ``oasis``, ``oifs``, ``nemo``, ``rnfm``) on that output, with more
-logging:
-
-.. code-block:: bash
-
-   ecefast eocene run -c configs/laptop.yml --steps nemo -l DEBUG
-
-Options:
+Options of ``ecefast <period> run`` and ``ecefast <component> run``:
 
 .. code-block:: text
 
-   -c, --config      Configuration file (schema 2), section 'eocene'. Required.
-   --steps a,b       Comma-separated step names. Default: all steps.
-   --nemo a,b        Run only these steps of eocene.nemo.steps (with eocene.nemo.domain: build).
+   -c, --config      Configuration file. Required.
+   --steps a,b       Steps to run, in pipeline order (only ecefast <period> run). Default: all.
+   --period P        present (default) or eocene (only ecefast <component> run).
+   --oifs a,b        Run only these steps of <period>.oifs.steps.
+   --nemo a,b        Run only these steps of <period>.nemo.steps.
    --dry-run         Check all inputs and show the plan; write nothing.
-   --overwrite       Replace existing outputs ('stage' removes the whole Eocene tree), after a 5 s pause.
-   -l, --loglevel    Log level. Default: INFO.
+   --overwrite       Replace existing outputs, after a warning and a 5 s pause.
+   -l, --loglevel    DEBUG, INFO (default), WARNING, ...
 
-To build the present-day NEMO domain (section ``present.nemo``; on a laptop only the coordinates,
-the bathymetry and the DOMAINcfg namelist, in ``<machine.tmpdir>/present/nemo/``; DOMAINcfg itself
-runs on Atos, and the final files go to ``<present.output>/nemo/domain/<grid>/``):
+Intermediate files stay in ``<machine.tmpdir>/<period>/<component>/`` (e.g. the remapped
+bathymetry, the DOMAINcfg namelist), so they can be inspected after a run. DOMAINcfg itself runs
+in ``<ecearth4_sources>/nemo-4.2/tools/DOMAINcfg/``, which receives the namelists and raw output.
 
-.. code-block:: bash
+Check the result
+----------------
 
-   ecefast nemo run -c configs/laptop.yml
-
-``ecefast eocene steps`` and ``ecefast present steps`` list the steps. The pipeline, the steps and ``provenance.yml`` are
-described in :doc:`workflow`.
-
-Tutorials
----------
-
-The notebooks in ``notebooks/tutorials/`` show the workflow step by step, with a plot of each field before
-(present-day input) and after (Eocene output). Read them in order:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 70
-
-   * - Notebook
-     - What it shows
-   * - ``01_quickstart.ipynb``
-     - The steps above from Python: check the input data, write a configuration from ``configs/laptop.tmpl``,
-       ``ecefast eocene steps``, a dry run, a full run, the output tree and ``provenance.yml``.
-   * - ``02_oifs.ipynb``
-     - The ``oifs`` step: land-sea mask, orography, sub-grid orography, vegetation, albedo and leaf area index.
-   * - ``03_nemo.ipynb``
-     - The ``domain`` and ``nemo`` steps: Eocene bathymetry, the vertical grid check, tidal mixing, geothermal heat
-       flux, ocean initial state, runoff; the laptop part of ``ecefast nemo run``.
-   * - ``04_oasis_rnfm.ipynb``
-     - The ``oasis`` and ``rnfm`` steps (both small, so they share a notebook): OASIS restart and river basins.
-
-They run in the ``eocene`` environment with Jupyter (``ipykernel`` is part of the environment), in about two
-minutes in all, on the local test data. Two environment variables give the paths:
+``scripts/compare_trees.py`` compares two trees and writes a Markdown report: files in only one
+of them, identical files and, for each file that differs, where and by how much; for a NEMO
+``domain_cfg.nc`` also the vertical grid, the cells that change between land and ocean and
+``bottom_level``.
 
 .. code-block:: bash
 
-   export ECEFAST_TEST_DATA=/path/to/data          # holds ECE4-DATA-V3/, herold-et-al-2014/, data/
-   export ECEFAST_TUTORIAL_DIR=/path/to/tmp    # optional; default: ecefast-tutorial in the system temp dir
+   python scripts/compare_trees.py /path/to/OUTPUT/present /path/to/ECE4-DATA-V3 \
+       --labels new V3 --include 'nemo/domain/*' -o present_vs_V3.md
 
-``01_quickstart.ipynb`` writes the configuration and the output into ``ECEFAST_TUTORIAL_DIR``; the other notebooks
-read them, so run it first.
+With ``data_version: v1`` the domains match those of the existing experiments
+(``PALEORCA2-definitive``): the same 16870 present-day and 16832 Eocene ocean columns, the same
+levels and depths.
+
+Without Atos
+------------
+
+On a laptop (``configs/laptop.tmpl``, ``machine.name: local``) there is no DOMAINcfg: the
+Eocene run installs the domain built on Atos (``eocene.nemo.domain`` set to its directory), and
+``ecefast nemo run`` goes as far as the DOMAINcfg namelist. ``scripts/get_ece4_data.sh`` fetches the
+subset of ECE4-DATA the Eocene run reads. This is meant for development and tests.

@@ -19,15 +19,12 @@ Herold et al. (2014) paleo datasets.
 
 ## Status: refactor in progress
 
-The repo is being restructured into a single `ecefast` package
-(issue [#16](https://github.com/renatacoppo/Eocene-creator/issues/16), plan in
-[docs/refactor-plan.md](docs/refactor-plan.md)). Some rules below refer to pieces that do not
-exist yet; they are tagged **(from phase N)** and apply as soon as that phase is merged into
-the `refactor` branch. Until then, follow the spirit of the rule in the current layout
-(`src/ecefast/`). Refactor work targets the `refactor` branch, not `main` (see
+The repo has been restructured into a single `ecefast` package
+(issue [#16](https://github.com/renatacoppo/Eocene-creator/issues/16)). The work is in the
+`refactor` branch, not yet in `main`; changes target `refactor` (see
 [Git and pull requests](#git-and-pull-requests)).
 
-Target layout:
+Layout:
 
 ```
 src/ecefast/
@@ -44,7 +41,7 @@ src/ecefast/
 # environment (conda env name: eocene)
 mamba env create -f environment.yaml
 conda activate eocene
-pip install -e .                       # (from phase 1) pip install -e ".[dev,docs]"
+pip install -e ".[dev,docs]"
 
 # local test data, see "Local test data" below
 ECE4_DATA_SRC=user@host:/path/to/ECE4-DATA-V3 ./scripts/get_ece4_data.sh
@@ -62,11 +59,11 @@ ecefast oifs run -c configs/atos.yml                     # OIFS base data of gri
 ecefast present run -c configs/atos.yml                  # every present-day step
 
 # checks before pushing
-ruff check --fix . && ruff format .                             # (from phase 1)
-pytest -m "unit or integration"                                 # (from phase 1)
+ruff check --fix . && ruff format .
+pytest -m "unit or integration"
 python scripts/compare_outputs.py BASELINE/eocene OUTPUT/eocene            # Eocene workflow
 python scripts/compare_outputs.py BASELINE/present <machine.tmpdir>/present/nemo   # present-day domain, laptop part
-sphinx-build -W -b html docs docs/_build/html                   # (from phase 1b)
+sphinx-build -W -b html docs docs/_build/html
 ```
 
 ## Local test data
@@ -79,7 +76,7 @@ All of these live at the repo root and are gitignored; never commit them.
 | `data/` | input of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `eocene.nemo.domain`) | copy from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplementary data | copy from the HPC or the paper supplement |
 | `OUTPUT/<period>/` | output of your runs, one folder per period (`present`, `eocene`): each period's `output` | `ecefast eocene run -c configs/laptop.yml --overwrite`, `ecefast nemo run -c configs/laptop.yml`, `ecefast oifs run` (Atos) |
-| `BASELINE/<period>/` | frozen reference output: `eocene/` (Eocene workflow) and `present/` (intermediate files of the laptop part of the present-day domain pipeline, `<machine.tmpdir>/present/nemo`; its namelist holds absolute paths), with `BASELINE.txt` (how each was run, commit, CDO, Python, ecCodes versions) | phase 0 of the plan; do not modify |
+| `BASELINE/<period>/` | frozen reference output: `eocene/` (Eocene workflow) and `present/` (intermediate files of the laptop part of the present-day domain pipeline, `<machine.tmpdir>/present/nemo`; its namelist holds absolute paths), with `BASELINE.txt` (how each was run, commit, CDO, Python, ecCodes versions) | frozen with the refactor; do not modify |
 
 Tests that need this data use the `local_data` marker and read its location from
 `ECEFAST_TEST_DATA`; they skip when the variable is unset.
@@ -94,7 +91,8 @@ These come first; the more specific rules below follow from them.
 - **Short learning curve.** A new user should be able to run the tool from the README and one
   config file, and a new contributor should be able to add a step by copying an existing one.
   Prefer explicit names over abbreviations, one obvious way to do each thing, and defaults that
-  match the standard EC-Earth4 setup. Tutorial notebooks (see below) show the main workflows.
+  match the standard EC-Earth4 setup. The docs are lean: a quickstart on Atos, the
+  configuration, how to add a bathymetry, and the API generated from the docstrings.
 - **Modularity.** Each module has one job and a small public surface. Components are independent
   of each other; shared logic goes down a layer, not sideways. A change to one component should
   not require edits in another.
@@ -107,14 +105,14 @@ These come first; the more specific rules below follow from them.
 ## Architecture rules
 
 - **Layers** go one way: `core` → `tools` → `components` → `periods` → `cli`. A module may only
-  import from layers to its left. Enforced by import-linter **(from phase 5)**.
+  import from layers to its left. Enforced by import-linter.
 - **Time periods and components are separate axes.** A component (`components/`) is *how*: tools
   that know nothing about a period. A period (`periods/present`, `periods/eocene`) is *what*: its
   data, choices and output tree, with one config section per period. Periods do not import each
   other; a paleo period depends on the present day only through its config (`eocene.input`).
 - **Components do not import each other.** If OIFS and NEMO need the same helper, it belongs in
   `core` or `tools`.
-- **Steps** are classes that subclass `ComponentStep` **(from phase 4a)** and declare `name`, `component`,
+- **Steps** are classes that subclass `ComponentStep` and declare `name`, `component`,
   `needs`, `reads`, `writes`, `from_context()` and `run()`. Keep the signatures and logic of `__init__` and
   the `create_*` methods; the step is a thin wrapper. The only change inside `create_*` is writing
   through the atomic-write helper in `core`. A pipeline is an ordered list of step classes. Do not
@@ -127,7 +125,7 @@ These come first; the more specific rules below follow from them.
 - **External tools** (DOMAINcfg, OASIS lib, HPC modules) are reached only through
   `tools.ecearth` and its backends `atos`, `local`, `fake`. No direct `subprocess` calls to
   EC-Earth binaries elsewhere.
-- **CDO** is used through the one shared wrapper in `core` **(from phase 3)**. No module-level
+- **CDO** is used through the one shared wrapper in `core`. No module-level
   `Cdo()` instances.
 - **CLI code only parses arguments** and calls the runner. No science in `cli/`.
 
@@ -154,7 +152,7 @@ Keep the current naming scheme; new code follows it.
 
 ### Adding a config key
 
-1. Add the key with its type and default to the config schema **(from phase 3)**. The default
+1. Add the key with its type and default to the config schema. The default
    is the current behaviour, so existing configs keep working.
 2. Add it, commented, with its default to the config templates (`*.tmpl`).
 3. Document it in `docs/configuration.rst`: name, type, default, meaning, an example.
@@ -170,7 +168,8 @@ Keep the current naming scheme; new code follows it.
 4. Unit tests for the new `create_*` methods; integration test for the step (dry run and real run
    with the `fake` backend). Each new `reads` path needs a synthetic writer in `READ_WRITERS`
    (`tests/synthetic.py`): the test input tree holds only declared reads.
-5. Describe it in `docs/workflow.rst` (what it reads, what it writes, why).
+5. Describe it in the step tables of `docs/quickstart.rst` (what it does, what it writes) and in
+   its class docstring (the first line is shown by `ecefast <period> steps`).
 6. Add a line to `CHANGELOG.rst`.
 
 ### Adding a component
@@ -182,7 +181,7 @@ the docs.
 ## Scientific integrity
 
 - **Output must not change by accident.** Every refactor must reproduce the frozen baseline
-  (`BASELINE/`), checked with `scripts/compare_outputs.py` **(from phase 0)**: same file
+  (`BASELINE/`), checked with `scripts/compare_outputs.py`: same file
   list, NetCDF data variables equal within `rtol=1e-6` with the same names, order, dtypes and
   attributes, GRIB files identical in values, keys and message order (`grib_compare`);
   `history` and date attributes are ignored. A refactor PR that changes numbers is a bug.
@@ -258,8 +257,8 @@ EC-Earth. Preserve, whenever possible:
 
 ## Code style
 
-- Python >= 3.11 **(from phase 1)**.
-- `ruff` for lint and format, line length 120 **(config from phase 1)**. Run
+- Python >= 3.11.
+- `ruff` for lint and format, line length 120. Run
   `ruff check --fix . && ruff format .` before pushing.
 - NumPy-style docstrings on public functions and classes.
 - Type hints on every new or changed public signature.
@@ -272,15 +271,15 @@ EC-Earth. Preserve, whenever possible:
   code.
 - **Fail early with clear errors.** Check inputs before running (preflight). Error messages name
   the step and the missing or bad path. No bare `except`, no silent fallbacks to defaults.
-- **Atomic writes.** Every output file is written through the `core` helper **(from phase 4a)**:
+- **Atomic writes.** Every output file is written through the `core` helper:
   temporary file in the same directory, then rename. Never leave half-written outputs.
-  Each run records what it did in `provenance.yml` **(from phase 4b)**.
+  Each run records what it did in `provenance.yml`.
 - **`create_*` methods are pure with respect to files**: they read only declared inputs and either
   return data or write their declared outputs.
 
 ## Tests
 
-Test groups (pytest markers **from phase 1**):
+Test groups (pytest markers):
 
 | Marker | Data | Where it runs |
 |---|---|---|
@@ -299,14 +298,8 @@ Test groups (pytest markers **from phase 1**):
 
 ## Notebooks
 
-Notebooks are the fastest way to learn the tool, so tutorials are part of the deliverable.
+The tool is used from the command line; there are no tutorial notebooks.
 
-- **Tutorials** live in `notebooks/tutorials/`, numbered in reading order: `01_quickstart.ipynb`
-  (fetch data, write a config, run the pipeline), then one per component (`02_oifs.ipynb`,
-  `03_nemo.ipynb`, ...) showing what each step changes, with a plot before and after.
-- Tutorials use only the public API, run top to bottom in a few minutes on the local test data
-  or synthetic data, and are linked from `docs/quickstart.rst`.
-- A PR that changes an API used by a tutorial updates the tutorial in the same PR.
 - **Exploratory and analysis notebooks** live in `notebooks/analysis/`. They may be rough, but
   library code never imports from any notebook: code worth reusing moves into the package, with
   a test.
@@ -319,21 +312,20 @@ Documentation is written in reStructuredText (`.rst`) and built with Sphinx, so 
 published on Read the Docs.
 
 - **Location.** User and developer docs live in `docs/` as `.rst` files, with `docs/conf.py` and
-  `docs/index.rst` as the entry point. Planning notes (`docs/refactor-plan.md`, issue drafts)
-  are working files, not part of the built docs.
-- **Planned structure:** `installation.rst`, `quickstart.rst` (fetch data, write a config, run),
-  `configuration.rst` (every config key, its default and meaning), `workflow.rst` (pipelines and
-  steps, what each reads and writes), `external_tools.rst` (DOMAINcfg, backends, Atos),
-  `contributing.rst` (how to add a step or a component; points to this file), `api.rst` and
-  `changelog.rst` (includes `CHANGELOG.rst`).
+  `docs/index.rst` as the entry point. They are written for whoever generates new data, on
+  ECMWF Atos: examples use `configs/atos.yml`. Keep them lean.
+- **Structure:** `quickstart.rst` (set up on Atos, write a config, run, what each step makes,
+  check the result), `configuration.rst` (every config key, its default and meaning, the steps of
+  each component), `bathymetry.rst` (how a bathymetry is made, how to add one), `api.rst`,
+  `contributing.rst` (points to this file; checks on Atos) and `changelog.rst` (includes
+  `CHANGELOG.rst`). Anything else belongs in docstrings.
 - **API reference is generated from docstrings** (`sphinx.ext.autodoc` + `sphinx.ext.napoleon`
   for NumPy style). Do not duplicate docstring content by hand in `.rst` files.
 - **Docs change with the code.** A PR that adds a config key, a step, a CLI option or changes
   user-visible behaviour updates the matching `.rst` page in the same PR.
 - **Examples over prose.** Each user page shows a command or a config snippet that works as
   written.
-- The docs must build without warnings: `sphinx-build -W -b html docs docs/_build/html`
-  **(from phase 1b)**.
+- The docs must build without warnings: `sphinx-build -W -b html docs docs/_build/html`.
 
 ## Changelog
 
@@ -368,17 +360,16 @@ published on Read the Docs.
 ### During the refactor: the `refactor` branch
 
 - All refactor work goes into the long-lived `refactor` branch; `main` stays frozen until the
-  refactor is done. Each task of [docs/refactor-plan.md](docs/refactor-plan.md) (wave table) is
-  one branch, created from `origin/refactor`, with one PR **against `refactor`**.
+  refactor is done. Each task is one branch, created from `origin/refactor`, with one PR
+  **against `refactor`**.
 - PRs into `refactor` may be merged by their author once CI is green and
   `scripts/compare_outputs.py` reports 0 differences against `BASELINE/` (the PR says so).
-  Planned output changes (0.2, 5.3) are the exception: they say which files change, and the
+  Planned output changes are the exception: they say which files change, and the
   baseline is regenerated right after the merge.
 - The other author reviews the final `refactor` → `main` PR. It is merged with a merge commit
   (no squash, no rebase) so the `git mv` history is kept.
 - Bring `main` into `refactor` with `git merge`, never rebase `refactor`.
-- Parallel tasks must not touch the same files (see the wave table). While task 2.1 (the `src/`
-  move) is open, no other PR into `refactor` is open.
+- Parallel tasks must not touch the same files.
 
 ## Out of scope for now
 

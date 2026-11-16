@@ -28,6 +28,6 @@ napoleon_numpy_docstring = True
 # Heavy compiled dependencies are mocked, so the docs build without CDO or ESMF.
 autodoc_mock_imports = ["cdo", "xesmf", "cartopy", "eccodes"]
 
-exclude_patterns = ["_build", "refactor-plan.md", "issue-refactor.md"]
+exclude_patterns = ["_build"]
 
 html_theme = "sphinx_rtd_theme"

@@ -1,10 +1,17 @@
 API reference
 =============
 
-Generated from the docstrings.
+Generated from the docstrings. The package has one-way layers: ``core`` → ``tools`` →
+``components`` → ``periods`` → ``cli``.
 
 Core
 ----
+
+.. automodule:: ecefast.core.config
+   :members: Config, load_config, ConfigError, DATA_VERSIONS
+
+.. automodule:: ecefast.core.cdo
+   :members: check_cdo_version
 
 .. automodule:: ecefast.core.steps
    :members:
@@ -13,6 +20,9 @@ Core
    :members:
 
 .. automodule:: ecefast.core.workspace
+   :members:
+
+.. automodule:: ecefast.core.layout
    :members:
 
 .. automodule:: ecefast.core.io
@@ -25,14 +35,29 @@ Core
    :members:
    :undoc-members:
 
-NEMO domain pipeline
---------------------
+EC-Earth tools
+--------------
+
+.. automodule:: ecefast.tools.ecearth
+   :members: EcEarthTools, AtosBackend, LocalBackend, FakeBackend, get_backend, hpc_modules, vertical_grid
+
+NEMO
+----
 
 .. automodule:: ecefast.components.nemo.domain.pipeline
    :members: NEMOWorkflow
 
-OIFS base data
---------------
+.. automodule:: ecefast.components.nemo.bathymetry.base
+   :members: BathymetryProcessor, MASK_PRESETS
+
+.. automodule:: ecefast.components.nemo.config.loader
+   :members: get_corrections_for_grid
+
+.. automodule:: ecefast.components.nemo.sections
+   :members:
+
+OIFS
+----
 
 .. automodule:: ecefast.components.oifs.generator
    :members: OIFSData
@@ -56,8 +81,8 @@ Present-day period
 .. automodule:: ecefast.periods.present.bathymetry
    :members:
 
-Eocene pipeline
----------------
+Eocene period
+-------------
 
 .. automodule:: ecefast.periods.eocene.pipeline
    :members:
@@ -68,23 +93,21 @@ Eocene pipeline
 .. automodule:: ecefast.periods.eocene.nemo.domain
    :members:
 
-OIFS
-----
-
 .. automodule:: ecefast.periods.eocene.oifs.eoceneOIFS
    :members:
    :undoc-members:
-
-NEMO
-----
 
 .. automodule:: ecefast.periods.eocene.nemo.eoceneNEMO
    :members:
    :undoc-members:
 
-OASIS
------
-
 .. automodule:: ecefast.periods.eocene.oasis.eoceneOASIS
    :members:
    :undoc-members:
+
+.. automodule:: ecefast.periods.eocene.rnfm.eoceneRNFM
+   :members:
+   :undoc-members:
+
+.. automodule:: ecefast.periods.eocene.verify
+   :members:

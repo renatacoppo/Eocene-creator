@@ -22,8 +22,7 @@ jobs:
         shell: bash
         run: |
           if git grep -nE '/(home|lus|ec|hpcperm|perm|Users|scratch)/|HPC[P]ERM|\$[P]ERM' -- . \
-              ':!src/ecefast/components/oifs/generator.py' ':!docs/refactor-plan.md' \
-              ':!docs/issue-refactor.md' ':!CHANGELOG.rst' ':!AGENTS.md'; then
+              ':!src/ecefast/components/oifs/generator.py' ':!CHANGELOG.rst' ':!AGENTS.md'; then
             echo "::error::Hardcoded paths found (see above). Take them from config, CLI arguments or env vars."
             exit 1
           fi

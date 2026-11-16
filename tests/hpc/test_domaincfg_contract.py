@@ -4,7 +4,7 @@ The ``fake`` backend stands in for DOMAINcfg in CI, so its output must have the 
 variable it writes must exist in the real ``domain_cfg_<name>.nc`` / ``mesh_mask_<name>.nc`` with the same
 dimensions (names, order, sizes) and dtype, and the 1-D vertical grid must be the same. Values other than the
 vertical grid are not compared: the fake does no partial steps, closed seas or north fold (see
-``docs/external_tools.rst``).
+``ecefast.tools.ecearth.FakeBackend``).
 
 Run after ``ecefast nemo run -c configs/atos.yml`` with ``machine.name: atos``. Set ``ECEFAST_HPC_DOMAINCFG_DIR``
 to the folder holding the namelists and the raw outputs (``<machine.atos.ecearth4_sources>/nemo-4.2/tools/DOMAINcfg``),

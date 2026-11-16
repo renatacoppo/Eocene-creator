@@ -162,7 +162,7 @@ Workflow steps controlled via `<period>.nemo.steps` flags in YAML, or `--nemo a,
 **YAML Key**: `steps.domain_cfg`
 **Method**: `NEMOWorkflow.run_domain_cfg()` → `backend.domaincfg(namelist_dir, names)`
 
-The backend comes from `machine.name` (see `docs/external_tools.rst`). If the step is on and the backend is not
+The backend comes from `machine.name` (see `docs/configuration.rst`, `machine`). If the step is on and the backend is not
 available (`local`, or `atos` off Atos), the pipeline stops before its first step. `fake` writes small files with
 the structure of the DOMAINcfg output (tests). `atos` runs `ecefast/tools/run_domain_cfg.sh`, which does:
 

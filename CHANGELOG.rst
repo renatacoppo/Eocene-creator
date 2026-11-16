@@ -105,6 +105,12 @@ Added
 Changed
 ~~~~~~~
 
+- Documentation rewritten for whoever generates data on ECMWF Atos, with Atos examples: ``quickstart.rst`` (setup,
+  run, what each step makes, checking the result with ``scripts/compare_trees.py``), ``configuration.rst`` (every
+  key, the steps of each component, ``data_version``), the new ``bathymetry.rst`` (how a NEMO bathymetry is made,
+  the strait corrections, how to add a bathymetry), ``contributing.rst`` (checks on Atos) and the API reference,
+  which now covers the configuration, CDO check, EC-Earth tools, bathymetry and sections modules. README and
+  ``AGENTS.md`` follow (#TBD).
 - ``EoceneRNFM`` logs less: one INFO line when the basin tracking starts and one with the number of basins; the
   per-basin and per-round messages and the id checks moved to DEBUG (``-l DEBUG`` shows them), and the unassigned
   points are one WARNING with their count, the list at DEBUG (#TBD).
@@ -277,6 +283,10 @@ Fixed
 Removed
 ~~~~~~~
 
+- Documentation pages ``overview.rst``, ``installation.rst``, ``workflow.rst`` and ``external_tools.rst`` (their
+  content is in the quickstart, the configuration page and the docstrings), the refactor plan
+  ``docs/refactor-plan.md`` and the issue draft ``docs/issue-refactor.md``, and the tutorial notebooks
+  ``notebooks/tutorials/``: the tool is used from the command line (#TBD).
 - The standalone OIFS scripts ``convert_aka_bika.py``, ``descriptor_generator.py`` and ``create_corners.py``:
   they are now the functions ``grid_files.write_hybrid_coefficients`` (which rejects a table without the half
   level ``n=0``, such as ``grids/L19.csv``), ``grid_files.write_grid_descriptions`` and

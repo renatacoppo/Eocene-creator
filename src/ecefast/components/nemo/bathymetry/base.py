@@ -39,26 +39,37 @@ class BathymetryProcessor:
     """
     Base class for a bathymetry source.
 
-    Instance is created once per YAML entry.  The workflow calls
-    `processor.process()` and reads `processor.output_file` for the result.
+    The domain pipeline creates one instance, calls ``process()`` and reads ``output_file`` for the
+    result. Subclasses override the class attributes below.
 
-    Class-level attributes (override in subclasses)
-    -----------------------------------------------
-    name          : str   — suffix of the DOMAINcfg namelist and raw output files (``namelist_cfg_<name>``)
-    source_file   : str   — path template of the source file, expanded in the running period
-                            (e.g. ``{herold}/file.nc``, ``{input}/nemo/domain/{nemo.source_grid}/domain_cfg.nc``)
-    has_source_grid : bool — the source is on a NEMO grid of the input tree (``<period>.nemo.source_grid``),
-                            whose cell bounds the coordinates step makes
-    variable      : str   — variable name in the source NetCDF
-    rename_to     : str | None — rename variable to this before processing
-    setgrid       : str | None — CDO grid description file for source
-    mask_type     : str   — key in MASK_PRESETS
-    remap_method  : str   — CDO remap operator (e.g. remapnn, remapbil)
-    output_prefix : str | None — prefix for output filename; defaults to cfg['name']
-    regional_subbasins : bool — subbasins.nc gets the Atlantic, Pacific, Indian and Indo-Pacific masks
-                    (present-day polygons); False: the global mask only
-    transport_sections : bool — the transport sections of NEMO diadct (present-day straits and passages, step
-                    ``sections``) fit this bathymetry; False: the step is a configuration error
+    Attributes
+    ----------
+    name : str
+        Suffix of the DOMAINcfg namelist and raw output files (``namelist_cfg_<name>``).
+    source_file : str
+        Path template of the source file, expanded in the running period (e.g. ``{herold}/file.nc``,
+        ``{input}/nemo/domain/{nemo.source_grid}/domain_cfg.nc``).
+    has_source_grid : bool
+        The source is on a NEMO grid of the input tree (``<period>.nemo.source_grid``), whose cell bounds the
+        coordinates step makes.
+    variable : str
+        Variable name in the source NetCDF.
+    rename_to : str or None
+        Rename the variable to this before processing.
+    setgrid : str or None
+        CDO grid description file of the source.
+    mask_type : str
+        Key in ``MASK_PRESETS``.
+    remap_method : str
+        CDO remap operator (e.g. ``remapnn``, ``remapbil``).
+    output_prefix : str or None
+        Prefix of the output file name; defaults to ``cfg['name']``.
+    regional_subbasins : bool
+        ``subbasins.nc`` gets the Atlantic, Pacific, Indian and Indo-Pacific masks (present-day polygons);
+        ``False``: the global mask only.
+    transport_sections : bool
+        The transport sections of NEMO diadct (present-day straits and passages, step ``sections``) fit this
+        bathymetry; ``False``: the step is a configuration error.
     """
 
     name: str = ""
