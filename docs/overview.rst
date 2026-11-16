@@ -226,6 +226,7 @@ one run with ``--nemo a,b``:
                      domain_cfg          run DOMAINcfg (raw output)         |
                      generate_mask       domain_cfg.nc, maskutil.nc         |  Atos only
                      generate_subbasins  subbasins.nc                       |  (need DOMAINcfg)
+                     sections            section_ijglobal.diadct            |  (present day, off by default)
 
 .. list-table::
    :header-rows: 1
@@ -256,6 +257,10 @@ one run with ``--nemo a,b``:
      - Basin masks: Atlantic, Pacific, Indian, Indo-Pacific and global for present day; global
        only for the Eocene.
      - ``subbasins.nc`` (see below)
+   * - ``sections``
+     - Transport sections of NEMO ``diadct`` with SECTIONS_DIADCT (``atos``; ``fake`` in tests),
+       present day only; off by default.
+     - ``section_ijglobal.diadct``; ``<tmp>/sections/``
 
 The final files go to ``<present.output>/nemo/domain/PALEORCA2/`` for the present day, and to
 ``<machine.tmpdir>/eocene/nemo/domain/PALEORCA2/`` for the Eocene build, from where the ``domain``

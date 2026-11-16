@@ -1,9 +1,11 @@
 External tools
 ==============
 
-Only one EC-Earth program is needed outside Python: the NEMO **DOMAINcfg** tool, which turns a
-bathymetry and the PALEORCA2 coordinates into the NEMO domain (``domain_cfg.nc``, ``mesh_mask.nc``).
-It is part of the EC-Earth4 NEMO sources and runs only where EC-Earth is built: ECMWF Atos.
+Two EC-Earth programs are needed outside Python, both NEMO tools: **DOMAINcfg**, which turns a
+bathymetry and the PALEORCA2 coordinates into the NEMO domain (``domain_cfg.nc``, ``mesh_mask.nc``),
+and, only for the optional ``sections`` step, **SECTIONS_DIADCT**, which writes the transport
+sections of the NEMO diagnostic ``diadct`` (``section_ijglobal.diadct``). They are part of the
+EC-Earth4 NEMO sources and run only where EC-Earth is built: ECMWF Atos.
 
 The code reaches it through one small interface, :mod:`ecefast.tools.ecearth`, with three
 versions ("backends"). The domain pipeline writes one ``namelist_cfg_<name>`` per bathymetry and
@@ -39,7 +41,8 @@ Select the backend with ``machine.name`` (see :doc:`configuration`):
    * - ``atos``
      - ECMWF Atos
      - Loads the HPC modules, compiles DOMAINcfg if ``make_domain_cfg.exe`` is missing, and runs
-       it once per bathymetry (``run_domain_cfg.sh``).
+       it once per bathymetry (``run_domain_cfg.sh``). Same for SECTIONS_DIADCT
+       (``run_sections_diadct.sh``).
    * - ``local``
      - laptop, workstation (default)
      - Nothing: DOMAINcfg is not available. The ``domain`` step uses the Eocene domain built on
@@ -48,7 +51,8 @@ Select the backend with ``machine.name`` (see :doc:`configuration`):
    * - ``fake``
      - tests, CI
      - Writes small but valid raw outputs with the structure of DOMAINcfg's, without running
-       DOMAINcfg (see :ref:`fake-backend`).
+       DOMAINcfg (see :ref:`fake-backend`), and a ``section_ijglobal.diadct`` without sections
+       (an empty file).
 
 ``atos``: DOMAINcfg on ECMWF Atos
 ---------------------------------
@@ -76,6 +80,7 @@ runs
 which
 
 1. reads the module list of the profile with the Python running ``ecefast``
+   (``hpc_env.sh``, shared with ``run_sections_diadct.sh``)
    (``python -m ecefast.tools.ecearth atos`` prints it), runs ``module reset`` and loads the modules;
 2. adds the library directories of the modules and ``<ecearth4_sources>/oasis3-mct-5.2/arch_ecearth/lib``
    to ``LD_LIBRARY_PATH``;
@@ -85,6 +90,20 @@ which
    and renames the outputs to ``domain_cfg_<name>.nc`` and ``mesh_mask_<name>.nc``. A non-zero
    exit (DOMAINcfg sometimes crashes after writing its output) is accepted only if CDO can read
    ``domain_cfg.nc``.
+
+For the ``sections`` step the backend runs, in ``<machine.tmpdir>/present/nemo/sections/`` (which
+holds the ``coordinates.nc`` the pipeline wrote from ``domain_cfg.nc``)
+
+.. code-block:: bash
+
+   bash src/ecefast/tools/run_sections_diadct.sh <ecearth4_sources>/nemo-4.2/tools <workdir> \
+       <ecearth4_sources>/nemo-4.2/tools/SECTIONS_DIADCT/run/list_sections.ascii_global
+
+which loads the modules as above, compiles the tool with
+``./maketools -m ecearth -n SECTIONS_DIADCT`` unless ``SECTIONS_DIADCT/diadct_sections.exe``
+exists, links the section list as ``list_sections.ascii``, writes a ``namelist`` without debug
+output (``nsecdebug = 0``) and runs ``diadct_sections.exe``, which writes
+``section_ijglobal.diadct``.
 
 HPC profiles live in ``src/ecefast/tools/hpc_profiles.yaml``: a name, a description and the list
 of modules, loaded in order. Only ``atos`` is defined.

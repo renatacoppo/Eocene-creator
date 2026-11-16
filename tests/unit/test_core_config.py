@@ -58,7 +58,9 @@ def test_present_section_loads_with_defaults(tmp_path: Path) -> None:
     assert (section.oifs.climate_dir, section.oifs.precomputed_climate_dir) == (None, None)
     assert vars(section.oifs.steps) == {"spectral": True, "gridpoint": True, "boundary": False}
     assert (section.nemo.source_grid, section.nemo.source_staggering, section.nemo.minimum_depth) == ("eORCA1", "T", 30)
-    assert all(vars(section.nemo.steps).values())
+    steps = vars(section.nemo.steps)
+    assert steps.pop("sections") is True  # the diadct sections, as in the domain trees of ECE4-DATA
+    assert all(steps.values())
 
 
 def test_eocene_section_loads_with_defaults(tmp_path: Path) -> None:
@@ -67,6 +69,9 @@ def test_eocene_section_loads_with_defaults(tmp_path: Path) -> None:
     assert config.eocene.nemo.domain == "/data/domain/PALEORCA2/eocene"
     assert config.eocene.oifs.aerosols is False
     assert config.eocene.oasis.constant_sst == 290.0
+    steps = vars(config.eocene.nemo.steps)
+    assert steps.pop("sections") is False  # the diadct sections follow present-day straits
+    assert all(steps.values())
 
 
 @pytest.mark.parametrize(
@@ -409,5 +414,8 @@ def test_templates_load(tmp_path: Path, template: str) -> None:
     start = config.present.output if template == "atos.tmpl" else config.present.input
     assert config.eocene.input == start
     assert config.present.nemo.source_grid == "eORCA1"
-    assert (config.present.oifs is not None) == (template == "atos.tmpl")  # the generator's inputs are on Atos
+    # data_version v1: the shipped OIFS initial state, not the generator; the steps are listed, all off
+    assert vars(config.present.oifs.steps) == {"spectral": False, "gridpoint": False, "boundary": False}
+    assert config.present.nemo.steps.sections == (template == "atos.tmpl")  # SECTIONS_DIADCT runs on Atos only
+    assert config.eocene.nemo.steps.sections is False
     assert (config.eocene.nemo.domain == "build") == (template == "atos.tmpl")

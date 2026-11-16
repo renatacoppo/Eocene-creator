@@ -1,5 +1,7 @@
 """Unit tests for the cell corners of the OIFS reduced Gaussian grids (``ecefast.components.oifs.corners``)."""
 
+import shutil
+import subprocess
 from pathlib import Path
 
 import netCDF4 as nc
@@ -74,3 +76,32 @@ def test_create_corner_grid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mas
     if masked:
         with nc.Dataset(tmp_path / "TL3_grid_masked.nc") as ds:
             np.testing.assert_array_equal(ds["lsm"][:], mask)
+
+
+# a tiny reduced Gaussian grid (4 latitudes, TL3), in CDO's grid description format
+REDUCED_GRID = """gridtype = gaussian_reduced
+gridsize = 40
+xsize = 2
+ysize = 4
+numLPE = 2
+yvals = 59.44440829 19.87571915 -19.87571915 -59.44440829
+reducedPoints = 6 14 14 6
+"""
+
+
+@pytest.mark.skipif(shutil.which("cdo") is None, reason="needs cdo")
+def test_read_reduced_grid_of_mixed_grib1_grib2_file(tmp_path: Path) -> None:
+    """ICMGGECE4INIT after the gridpoint step: the mask in GRIB1, other fields in GRIB2."""
+    griddes = tmp_path / "grid.txt"
+    griddes.write_text(REDUCED_GRID)
+    grib1, grib2 = tmp_path / "lsm.grb", tmp_path / "t.grb"
+    subprocess.run(["cdo", "-s", "-f", "grb1", "-setparam,172.128", f"-const,1,{griddes}", str(grib1)], check=True)
+    subprocess.run(["cdo", "-s", "-f", "grb2", "-setparam,0.0.0", f"-const,280,{griddes}", str(grib2)], check=True)
+    icmgg = tmp_path / "ICMGGECE4INIT"
+    icmgg.write_bytes(grib1.read_bytes() + grib2.read_bytes())
+
+    lat, reduced_points, mask = corners.read_reduced_grid(str(icmgg), "L", 3, str(tmp_path))
+    np.testing.assert_allclose(lat, [59.44440829, 19.87571915, -19.87571915, -59.44440829])
+    np.testing.assert_array_equal(reduced_points, [6, 14, 14, 6])
+    assert np.all(mask == 1)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["ICMGGECE4INIT", "grid.txt", "lsm.grb", "t.grb"]

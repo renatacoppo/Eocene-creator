@@ -28,4 +28,7 @@ class EoceneBathymetry(BathymetryProcessor):
     # Pacific west of South America labelled Atlantic, cuts through open water in the Tethys and north of
     # Australia). Assessment and options: notebooks/analysis/eocene-subbasins.ipynb, PR #39, issue #16.
     regional_subbasins = False
+    # No diadct transport sections: the section list of SECTIONS_DIADCT (list_sections.ascii_global) gives the
+    # present-day straits and passages in lon/lat, which do not exist or lie elsewhere in the Eocene geography.
+    transport_sections = False
     # setgrid is None — source file already carries a proper grid description

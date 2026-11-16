@@ -1,19 +1,22 @@
-"""EC-Earth tools: the NEMO DOMAINcfg program, reached through one small interface.
+"""EC-Earth tools: the NEMO DOMAINcfg and SECTIONS_DIADCT programs, reached through one small interface.
 
 The domain pipeline writes one ``namelist_cfg_<name>`` per bathymetry and asks a backend to run DOMAINcfg on
 them. Every backend returns, per bathymetry name, the raw ``domain_cfg_<name>.nc`` and ``mesh_mask_<name>.nc``
-written next to the namelists; the pipeline then post-processes them. The backend is chosen with
+written next to the namelists; the pipeline then post-processes them. For the ``sections`` step, every backend
+writes ``section_ijglobal.diadct`` (the transport sections of the NEMO diagnostic ``diadct``) in a work directory
+holding the ``coordinates.nc`` of the domain. The backend is chosen with
 ``machine.name`` in the configuration (:func:`get_backend`):
 
 ``atos``
-    ECMWF Atos: loads the HPC modules of ``machine.atos.profile`` (``hpc_profiles.yaml``), compiles DOMAINcfg if
-    needed and runs it, through ``run_domain_cfg.sh``. DOMAINcfg and the OASIS libraries come from the EC-Earth4
-    source tree ``machine.atos.ecearth4_sources``.
+    ECMWF Atos: loads the HPC modules of ``machine.atos.profile`` (``hpc_profiles.yaml``, through ``hpc_env.sh``),
+    compiles the tool if needed and runs it, through ``run_domain_cfg.sh`` and ``run_sections_diadct.sh``.
+    DOMAINcfg, SECTIONS_DIADCT and the OASIS libraries come from the EC-Earth4 source tree
+    ``machine.atos.ecearth4_sources``.
 ``local``
-    A laptop: DOMAINcfg is not available. Use the domain built on Atos (``eocene.nemo.domain``).
+    A laptop: the tools are not available. Use the domain built on Atos (``eocene.nemo.domain``).
 ``fake``
-    Tests and CI: writes small but valid files with the structure of the DOMAINcfg output, without running
-    DOMAINcfg. See :class:`FakeBackend` for what it does not do.
+    Tests and CI: writes small but valid files with the structure of the DOMAINcfg output, and a sections file
+    without sections, without running the tools. See :class:`FakeBackend` for what it does not do.
 
 Run as ``python -m ecefast.tools.ecearth <profile>`` it prints the modules of an HPC profile, separated by
 spaces; ``run_domain_cfg.sh`` uses this to load them.
@@ -36,10 +39,17 @@ logger = logging.getLogger(__name__)
 
 PROFILES_FILE = Path(__file__).with_name("hpc_profiles.yaml")
 RUN_DOMAIN_CFG = Path(__file__).with_name("run_domain_cfg.sh")
+RUN_SECTIONS_DIADCT = Path(__file__).with_name("run_sections_diadct.sh")
 # Folders of the EC-Earth4 source tree (machine.atos.ecearth4_sources), as laid out by EC-Earth 4: the OASIS
 # libraries added to LD_LIBRARY_PATH, and the NEMO tools folder holding DOMAINcfg/.
 OASIS_LIB_SUBDIR = "oasis3-mct-5.2/arch_ecearth/lib"
 NEMO_TOOLS_SUBDIR = "nemo-4.2/tools"
+# Section list of SECTIONS_DIADCT (in NEMO_TOOLS_SUBDIR): the 132 global sections of the NEMO ORCA configurations,
+# the same as section_ijglobal.diadct of eORCA1 in ECE4-DATA
+SECTIONS_LIST = "SECTIONS_DIADCT/run/list_sections.ascii_global"
+# Input and output file names of SECTIONS_DIADCT, in its work directory; NEMO reads the output under this name
+SECTIONS_COORDINATES = "coordinates.nc"
+SECTIONS_FILE = "section_ijglobal.diadct"
 
 # Earth rotation rate (rad/s), 2*pi/rsiday with the sidereal day rsiday = 86164 s, as in NEMO (phycst.F90)
 OMEGA = 2.0 * np.pi / 86164.0
@@ -117,6 +127,26 @@ class EcEarthTools:
         """
         raise NotImplementedError
 
+    def sections_required_paths(self) -> list[str]:
+        """Files or directories the backend needs to run SECTIONS_DIADCT (checked before the pipeline starts)."""
+        return []
+
+    def sections_diadct(self, workdir: str | os.PathLike) -> Path:
+        """Write the transport sections of NEMO ``diadct`` for the grid of ``workdir/coordinates.nc``.
+
+        Parameters
+        ----------
+        workdir : str or os.PathLike
+            Directory holding ``coordinates.nc`` (``glamt``, ``gphit``, ``glamf``, ``gphif``, ``e1t``, with the
+            dimension ``x`` defined before ``y``). The output is written here too.
+
+        Returns
+        -------
+        Path
+            ``workdir/section_ijglobal.diadct``.
+        """
+        raise NotImplementedError
+
 
 class AtosBackend(EcEarthTools):
     """Compile and run DOMAINcfg on ECMWF Atos with ``run_domain_cfg.sh``.
@@ -191,6 +221,48 @@ class AtosBackend(EcEarthTools):
         _check_outputs(outputs, self.name)
         return outputs
 
+    def _tools_dir(self) -> str:
+        if self.ecearth4_sources is None:
+            raise ConfigError(
+                "machine.atos.ecearth4_sources is not set: the atos backend needs it to run SECTIONS_DIADCT"
+            )
+        return os.path.join(self.ecearth4_sources, NEMO_TOOLS_SUBDIR)
+
+    def sections_required_paths(self) -> list[str]:
+        """The NEMO tools folder and the section list of SECTIONS_DIADCT in ``ecearth4_sources``.
+
+        Raises
+        ------
+        ConfigError
+            If ``ecearth4_sources`` is not set.
+        """
+        tools_dir = self._tools_dir()
+        return [tools_dir, os.path.join(tools_dir, SECTIONS_LIST)]
+
+    def sections_command(self, workdir: str | os.PathLike) -> tuple[list[str], dict[str, str]]:
+        """Command line and environment of ``run_sections_diadct.sh``: NEMO tools directory, work directory and
+        section list; the environment as in :meth:`command`."""
+        tools_dir = self._tools_dir()
+        cmd = ["bash", str(RUN_SECTIONS_DIADCT), tools_dir, str(workdir), os.path.join(tools_dir, SECTIONS_LIST)]
+        env = {
+            **os.environ,
+            "ECEFAST_PYTHON": sys.executable,
+            "ECEFAST_HPC_PROFILE": self.profile,
+            "ECEFAST_OASIS_LIB_DIR": os.path.join(self.ecearth4_sources, OASIS_LIB_SUBDIR),
+        }
+        return cmd, env
+
+    def sections_diadct(self, workdir: str | os.PathLike) -> Path:
+        """Run ``run_sections_diadct.sh`` (see :meth:`EcEarthTools.sections_diadct`)."""
+        cmd, env = self.sections_command(workdir)
+        logger.info("Running SECTIONS_DIADCT on Atos in %s", workdir)
+        logger.debug("Executing: %s", " ".join(cmd))
+        subprocess.run(cmd, check=True, env=env)
+        output = Path(workdir) / SECTIONS_FILE
+        if not output.is_file():
+            raise FileNotFoundError(f"SECTIONS_DIADCT ({self.name} backend) did not write {output}")
+        return output
+
 
 class LocalBackend(EcEarthTools):
     """A laptop or workstation: DOMAINcfg is not available."""
@@ -207,6 +279,13 @@ class LocalBackend(EcEarthTools):
             "DOMAINcfg cannot run with 'machine.name: local'. Use the domain built on Atos: point "
             "eocene.nemo.domain at it, which the Eocene 'domain' step installs; or run the domain pipeline on Atos "
             "with machine.name: atos."
+        )
+
+    def sections_diadct(self, workdir: str | os.PathLike) -> Path:
+        """Raise: SECTIONS_DIADCT cannot run locally."""
+        raise RuntimeError(
+            "SECTIONS_DIADCT cannot run with 'machine.name: local'. Run the sections step on Atos with "
+            "machine.name: atos."
         )
 
 
@@ -297,6 +376,10 @@ class FakeBackend(EcEarthTools):
     ``rn_e3zps_*`` adjustment of the bathymetry, no closed seas, no ice-shelf cavities, no north-fold
     treatment of the masks, no ``gdept_0``/``gdepw_0`` and no ``DOMAIN_*`` global attributes. The numbers
     are not those of DOMAINcfg; only the structure is.
+
+    For SECTIONS_DIADCT it checks that ``coordinates.nc`` is there and writes an empty
+    ``section_ijglobal.diadct``: a valid file without sections (NEMO ``diadct`` stops reading at the end of the
+    file).
     """
 
     name = "fake"
@@ -317,6 +400,17 @@ class FakeBackend(EcEarthTools):
                 with atomic_write(path) as tmp:
                     ds.to_netcdf(tmp, encoding=encoding, unlimited_dims=["time_counter"])
         return outputs
+
+    def sections_diadct(self, workdir: str | os.PathLike) -> Path:
+        """Write an empty sections file (see :meth:`EcEarthTools.sections_diadct`)."""
+        coordinates = Path(workdir) / SECTIONS_COORDINATES
+        if not coordinates.is_file():
+            raise FileNotFoundError(f"SECTIONS_DIADCT ({self.name} backend): no {coordinates}")
+        output = Path(workdir) / SECTIONS_FILE
+        logger.info("Writing fake SECTIONS_DIADCT output (no sections) in %s", workdir)
+        with atomic_write(output) as tmp:
+            Path(tmp).write_bytes(b"")
+        return output
 
     @staticmethod
     def build(namelist: dict[str, str]) -> tuple[xr.Dataset, xr.Dataset]:

@@ -17,8 +17,11 @@ from ecefast.core.io import atomic_write
 
 logger = logging.getLogger(__name__)
 
-# land-sea mask, read only for the grid (any field of ICMGGECE4INIT would do); written to the masked grid
-MASK_VARIABLE = "var172"
+# land-sea mask (paramId 172), read only for the grid (any field of ICMGGECE4INIT would do); written to the masked
+# grid. After the gridpoint step ICMGGECE4INIT holds GRIB1 and GRIB2 messages, and CDO's own GRIB decoder (cgribex)
+# reads GRIB1 only: the file is read through ecCodes, which names the mask by its shortName.
+MASK_VARIABLE = "lsm"
+CDO_OPTIONS = "--eccodes -f nc4"
 
 
 def reduced_grid_corners(
@@ -139,7 +142,8 @@ def read_reduced_grid(
     Parameters
     ----------
     icmgg_file : str
-        GRIB file on the grid, holding the land-sea mask (e.g. ``ICMGGECE4INIT``).
+        GRIB file on the grid, holding the land-sea mask (e.g. ``ICMGGECE4INIT``); it may mix GRIB1 and GRIB2
+        messages.
     kind, spectral : str, int
         Grid kind (``L`` or ``CO``) and spectral truncation, as from :func:`ecefast.core.grib.extract_grid_info`.
     workdir : str
@@ -151,7 +155,7 @@ def read_reduced_grid(
     """
     netcdf_name = os.path.join(workdir, f"T{kind}{spectral}-tmp.nc")
     gaussian_name = os.path.join(workdir, f"T{kind}{spectral}-gaussian.nc")
-    get_cdo().selname(MASK_VARIABLE, input=icmgg_file, output=netcdf_name, options="-f nc4")
+    get_cdo().selname(MASK_VARIABLE, input=icmgg_file, output=netcdf_name, options=CDO_OPTIONS)
     # CDO does not recognise the latitudes of the reduced grid in the NetCDF file; those of the regular Gaussian
     # grid with the same number of latitudes are the same
     get_cdo().const(f"1,F{spectral2gaussian(spectral, kind)}", output=gaussian_name, options="-f nc4")

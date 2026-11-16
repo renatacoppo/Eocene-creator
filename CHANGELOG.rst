@@ -15,6 +15,13 @@ Unreleased
 Added
 ~~~~~
 
+- NEMO domain step ``sections`` (``present.nemo.steps.sections``, default ``true``): writes
+  ``nemo/domain/<grid>/section_ijglobal.diadct``, the transport sections of the NEMO diagnostic ``diadct``, with the
+  NEMO tool SECTIONS_DIADCT on the grid of the final ``domain_cfg.nc`` and its 132 global sections. The ``atos``
+  backend compiles and runs the tool (``run_sections_diadct.sh``; the module loading moved to ``hpc_env.sh``, shared
+  with ``run_domain_cfg.sh``); ``fake`` writes a file without sections. Present day only:
+  ``EoceneBathymetry.transport_sections`` is ``False`` and ``eocene.nemo.steps.sections`` defaults to ``false``
+  (``EoceneDomainSteps``) (#52).
 - ``data_version`` (top-level config key, default ``v1``): the version of the generated data, and the CDO series it
   needs. ``v1`` (the data of the existing experiments, PALEORCA2 domains of ECE4-DATA-V3 and ``PALEORCA2-definitive``)
   needs CDO 2.5.x: every run and dry run stops with an error naming the CDO found and how to load 2.5. ``v2`` is
@@ -101,6 +108,9 @@ Changed
 - ``EoceneRNFM`` logs less: one INFO line when the basin tracking starts and one with the number of basins; the
   per-basin and per-round messages and the id checks moved to DEBUG (``-l DEBUG`` shows them), and the unassigned
   points are one WARNING with their count, the list at DEBUG (#TBD).
+- Configuration templates: the ``steps`` of every component are listed in full, the ones that are off included, so a
+  step is switched on or off by changing its value. The ``present.oifs`` steps are all off, because the OIFS initial
+  state of ``data_version: v1`` is the TL63L31 one shipped in the input tree (``docs/configuration.rst``).
 - CDO 2.5.x is required for ``data_version: v1`` (``module load cdo/2.5.3`` on Atos, conda-forge ``cdo=2.5``
   elsewhere, ``cdo=2.5`` in CI): it reproduces the domains of the existing experiments, while 2.6.x moves land-sea
   mask cells whose ocean fraction is exactly 0.5 (25 Eocene, 4 present-day cells). ``AGENTS.md``,
@@ -236,6 +246,15 @@ Changed
 Fixed
 ~~~~~
 
+- The OIFS vertical interpolation (``ecefast oifs run`` and ``present run`` from TL255L91 of ECE4-DATA 4.1.11) no
+  longer stops at ``gp2spl`` ("Variable name t not found"): the source ``ICMGGECE4INIUA`` also holds ~130 composition
+  fields, some with the same shortName, and with them ``remapeta`` dropped the hybrid levels. Only the fields that are
+  written (``UPPER_AIR_FIELDS``: q, o3, crwc, cswc, clwc, ciwc, cc) go into ``remapeta`` now; the written files have
+  the fields and levels of the TL63L31 files of ECE4-DATA.
+- The OIFS generator (``ecefast oifs run``, ``present run``) no longer stops when it builds the grid with cell corners:
+  ``ICMGGECE4INIT`` holds GRIB1 and GRIB2 messages after the gridpoint step, and the land-sea mask was read with
+  CDO's own GRIB decoder (``var172``), which reads GRIB1 only. It is now read through ecCodes (``--eccodes``,
+  ``lsm``). The grid (latitudes, reduced points) is the same; no output changes.
 - The present-day ``stage`` (``PresentStage``) also copies ``nemo/domain/ORCA2``: ``EoceneNEMO`` reads it, and with
   ``eocene.input: "{present.output}"`` the Eocene could not start. A unit test checks that the present-day tree holds
   every input the Eocene reads.
@@ -285,6 +304,8 @@ Removed
 Output
 ~~~~~~
 
+- Present-day tree: ``nemo/domain/<grid>/section_ijglobal.diadct`` is written by default (step ``sections``), as in
+  the domain trees of ECE4-DATA-V3; it was missing from the trees made by ``ecefast`` so far (#52).
 - Present-day PALEORCA2 bathymetry and domain (``nemo/domain/PALEORCA2/`` of ``present.output``): the strait
   corrections of ``eORCA1_to_PALEORCA2_remapnn`` are the ones that made ``PALEORCA2-definitive`` and ECE4-DATA-V3
   (data_version v1), kept until now only in a git stash. Indonesia also opens (103-105, 11) and no longer averages

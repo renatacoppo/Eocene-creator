@@ -206,6 +206,12 @@ to ``present.output`` as in ECE4-DATA (``initial_state/oifs/<grid>/<startdate>/`
 ``oifs/<grid>/<climate_version>/``, ``nemo/domain/<grid>/``). A run stops if one of them exists
 already, unless ``--overwrite`` is given.
 
+For ``data_version: v1`` turn every step of ``present.oifs`` off (as the templates do), or leave
+the section out: the OIFS initial state of v1 is the TL63L31 one shipped in ``present.input``,
+copied by ``stage``. It was made by an IFS run (experiment
+``i8ak``, see its ``ecmwf/fort.4``), not by the OIFS generator, and rebuilding it from TL255L91
+gives a different state (the TL255L91 of ECE4-DATA was replaced since).
+
 .. list-table::
    :header-rows: 1
    :widths: 24 10 10 56
@@ -262,9 +268,15 @@ already, unless ``--overwrite`` is given.
      - bool
      - ``true``
      - Steps of the domain pipeline: ``coordinates``, ``bathymetry``, ``configure_domain``,
-       ``domain_cfg``, ``generate_mask``, ``generate_subbasins``. The last three need DOMAINcfg
-       output: ``domain_cfg`` runs it on ``machine.name`` and stops before the first step with
-       ``local``, so a laptop turns them off. ``--nemo a,b`` overrides them for one run.
+       ``domain_cfg``, ``generate_mask``, ``generate_subbasins``, ``sections``. ``domain_cfg``,
+       ``generate_mask`` and ``generate_subbasins`` need DOMAINcfg output: ``domain_cfg`` runs it
+       on ``machine.name`` and stops before the first step with ``local``, so a laptop turns them
+       off. ``sections`` writes the NEMO ``diadct`` transport sections
+       ``section_ijglobal.diadct`` with SECTIONS_DIADCT, as in the domain trees of ECE4-DATA; Atos
+       only, so a laptop turns it off too. In ``eocene.nemo.steps`` it defaults to ``false`` and
+       turning it on is a configuration error (the present-day sections do not fit the Eocene
+       geography).
+       ``--nemo a,b`` overrides them for one run.
 
 Example (laptop):
 
@@ -276,7 +288,17 @@ Example (laptop):
      nemo:
        source_grid: eORCA1
        minimum_depth: 30
-       steps: {domain_cfg: false, generate_mask: false, generate_subbasins: false}
+       steps: {domain_cfg: false, generate_mask: false, generate_subbasins: false, sections: false}
+
+Example (Atos, without the transport sections):
+
+.. code-block:: yaml
+
+   present:
+     nemo:
+       source_grid: eORCA1
+       minimum_depth: 30
+       steps: {sections: false}
 
 ``eocene``: the Eocene (DeepMIP) period
 ---------------------------------------
