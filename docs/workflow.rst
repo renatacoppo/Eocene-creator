@@ -263,8 +263,24 @@ Its steps, each switched on or off in ``<period>.nemo.steps`` (or ``--nemo a,b``
 ``coordinates`` (PALEORCA2 without halo, cell bounds), ``bathymetry`` (the processor of the
 period), ``configure_domain`` (the DOMAINcfg namelist), ``domain_cfg`` (DOMAINcfg, through the
 backend of ``machine.name``, see :doc:`external_tools`), ``generate_mask`` (``domain_cfg.nc`` and
-``maskutil.nc``) and ``generate_subbasins`` (``subbasins.nc``: Atlantic, Pacific, Indian,
-Indo-Pacific and global masks). On a laptop the last three are off.
+``maskutil.nc``), ``generate_subbasins`` (``subbasins.nc``: Atlantic, Pacific, Indian,
+Indo-Pacific and global masks) and ``sections``. On a laptop ``domain_cfg``, ``generate_mask`` and
+``generate_subbasins`` are off.
+
+``sections`` (off by default, present day only, Atos) writes ``section_ijglobal.diadct``, the
+transport sections of the NEMO diagnostic ``diadct``, with the NEMO tool SECTIONS_DIADCT (see
+:doc:`external_tools`). It reads the final ``domain_cfg.nc``, writes its horizontal grid to
+``<machine.tmpdir>/present/nemo/sections/coordinates.nc``, runs the tool there on the 132 global
+sections of ``SECTIONS_DIADCT/run/list_sections.ascii_global`` (the list of the eORCA1 file of
+ECE4-DATA) and copies the result next to ``domain_cfg.nc``. Sections that do not cross the grid
+are logged as a warning. The section indices are 1-based on the grid of ``domain_cfg.nc``
+(without halo), as in the eORCA1 file. The tool uses no land-sea mask. The Eocene bathymetry
+has no sections (``EoceneBathymetry.transport_sections`` is ``False``): the list gives
+present-day straits and passages. On a present-day domain that exists already:
+
+.. code-block:: bash
+
+   ecefast nemo run -c configs/atos.yml --nemo sections
 
 The intermediate files go to ``<machine.tmpdir>/<period>/nemo/``: ``coordinates/``,
 ``bathymetry/``, and ``domaincfg/`` with the namelist and raw DOMAINcfg output. On Atos the

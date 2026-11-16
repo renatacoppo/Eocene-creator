@@ -229,3 +229,53 @@ def test_fake_rejects_other_vertical_grids(namelist_dir: Path) -> None:
     path.write_text(path.read_text().replace("ldbletanh   =  .FALSE.", "ldbletanh   =  .TRUE."))
     with pytest.raises(NotImplementedError, match="analytic ORCA vertical grid"):
         FakeBackend().domaincfg(namelist_dir, ["test"])
+
+
+# --- SECTIONS_DIADCT --------------------------------------------------------------------------------------------
+
+
+def test_atos_sections_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_sections_diadct.sh gets the NEMO tools dir, the work dir and the global section list of the sources."""
+    calls = []
+
+    def fake_run(cmd, check, env):
+        calls.append((cmd, env))
+        (tmp_path / "section_ijglobal.diadct").touch()
+
+    monkeypatch.setattr(ecearth.subprocess, "run", fake_run)
+    backend = AtosBackend(profile="atos", ecearth4_sources="/src")
+    assert backend.sections_required_paths() == [
+        "/src/nemo-4.2/tools",
+        "/src/nemo-4.2/tools/SECTIONS_DIADCT/run/list_sections.ascii_global",
+    ]
+    assert backend.sections_diadct(tmp_path) == tmp_path / "section_ijglobal.diadct"
+    ((cmd, env),) = calls
+    assert cmd == [
+        "bash",
+        str(ecearth.RUN_SECTIONS_DIADCT),
+        "/src/nemo-4.2/tools",
+        str(tmp_path),
+        "/src/nemo-4.2/tools/SECTIONS_DIADCT/run/list_sections.ascii_global",
+    ]
+    assert ecearth.RUN_SECTIONS_DIADCT.is_file() and (ecearth.RUN_SECTIONS_DIADCT.parent / "hpc_env.sh").is_file()
+    assert env["ECEFAST_HPC_PROFILE"] == "atos" and env["ECEFAST_PYTHON"] == sys.executable
+
+
+def test_atos_sections_needs_sources_and_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(ConfigError, match="ecearth4_sources is not set.*SECTIONS_DIADCT"):
+        AtosBackend().sections_required_paths()
+    monkeypatch.setattr(ecearth.subprocess, "run", lambda cmd, check, env: None)
+    with pytest.raises(FileNotFoundError, match="section_ijglobal.diadct"):
+        AtosBackend(ecearth4_sources="/src").sections_diadct(tmp_path)
+
+
+def test_local_and_fake_sections(tmp_path: Path) -> None:
+    """Local cannot run SECTIONS_DIADCT; fake needs coordinates.nc and writes a file without sections."""
+    with pytest.raises(RuntimeError, match="SECTIONS_DIADCT cannot run"):
+        LocalBackend().sections_diadct(tmp_path)
+    with pytest.raises(FileNotFoundError, match="coordinates.nc"):
+        FakeBackend().sections_diadct(tmp_path)
+    (tmp_path / "coordinates.nc").touch()
+    output = FakeBackend().sections_diadct(tmp_path)
+    assert output == tmp_path / "section_ijglobal.diadct" and output.read_bytes() == b""
+    assert FakeBackend().sections_required_paths() == []

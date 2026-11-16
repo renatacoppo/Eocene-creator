@@ -1,6 +1,6 @@
 """
-NEMO domain pipeline: builds the NEMO domain (``domain_cfg.nc``, ``maskutil.nc``, ``subbasins.nc``) of one
-bathymetry on the grid of ``grids.nemo``.
+NEMO domain pipeline: builds the NEMO domain (``domain_cfg.nc``, ``maskutil.nc``, ``subbasins.nc``, and on request
+the ``diadct`` transport sections ``section_ijglobal.diadct``) of one bathymetry on the grid of ``grids.nemo``.
 
 The bathymetry is a :class:`~ecefast.components.nemo.bathymetry.base.BathymetryProcessor` subclass, which holds
 every algorithm choice (variable, mask, remapping, corrections) and declares its source file. Each time period
@@ -11,15 +11,18 @@ that runs DOMAINcfg (``ecefast.tools.ecearth``). It runs as the ``nemo`` step of
 
 import logging
 import os
+import shutil
 
 from ecefast.core.cdo import get_cdo
 from ecefast.core.config import ConfigError
+from ecefast.core.io import atomic_write
 from ecefast.core.steps import PipelineError, missing_inputs_message
 from ecefast.core.workspace import Context
-from ecefast.tools.ecearth import EcEarthTools, output_files
+from ecefast.tools.ecearth import SECTIONS_COORDINATES, SECTIONS_FILE, EcEarthTools, output_files
 from ecefast.components.nemo.common.executor import SubprocessExecutor
 from ecefast.components.nemo.common.util import process_domain_cfg, extract_maskutil
 from ecefast.components.nemo.bathymetry.base import BathymetryProcessor
+from ecefast.components.nemo.sections import read_sections, write_sections_coordinates
 
 logger = logging.getLogger(__name__)
 
@@ -34,17 +37,23 @@ STEP_DESCRIPTIONS = {
     "domain_cfg": "run DOMAINcfg on the machine of machine.name (Atos only)",
     "generate_mask": "post-process domain_cfg.nc and extract maskutil.nc",
     "generate_subbasins": "write the ocean subbasin masks subbasins.nc",
+    "sections": "write the diadct transport sections section_ijglobal.diadct (SECTIONS_DIADCT, Atos only)",
 }
 # final files of a domain, in the domain directory
-FINAL_FILES = {"generate_mask": ["domain_cfg.nc", "maskutil.nc"], "generate_subbasins": ["subbasins.nc"]}
+FINAL_FILES = {
+    "generate_mask": ["domain_cfg.nc", "maskutil.nc"],
+    "generate_subbasins": ["subbasins.nc"],
+    "sections": [SECTIONS_FILE],
+}
 
 
 class NEMOWorkflow:
     """The NEMO domain pipeline of one bathymetry: coordinates, bathymetry, DOMAINcfg namelist, DOMAINcfg, masks.
 
     The final files (``domain_cfg.nc``, ``maskutil.nc``, ``subbasins.nc``) go to ``domain_dir``; the intermediate
-    files to ``workdir`` (``coordinates/``, ``bathymetry/``, and ``domaincfg/`` with the DOMAINcfg namelist and raw
-    output, unless the backend runs DOMAINcfg in its own folder: then they go there).
+    files to ``workdir`` (``coordinates/``, ``bathymetry/``, ``domaincfg/`` with the DOMAINcfg namelist and raw
+    output, unless the backend runs DOMAINcfg in its own folder: then they go there, and ``sections/`` where
+    SECTIONS_DIADCT runs).
 
     Parameters
     ----------
@@ -69,14 +78,15 @@ class NEMOWorkflow:
     steps : dict of str to bool
         Which steps run (:data:`STEP_DESCRIPTIONS`).
     backend : EcEarthTools
-        Runs DOMAINcfg (step ``domain_cfg``).
+        Runs DOMAINcfg (step ``domain_cfg``) and SECTIONS_DIADCT (step ``sections``).
     log_level : str
         Log level of the helper scripts.
 
     Raises
     ------
     ConfigError
-        If the ``domain_cfg`` step is on and the backend is not available.
+        If the ``domain_cfg`` or ``sections`` step is on and the backend is not available, or the ``sections`` step
+        is on for a bathymetry without transport sections.
     """
 
     def __init__(
@@ -100,6 +110,7 @@ class NEMOWorkflow:
             "coordsdir": os.path.join(workdir, "coordinates"),
             "bathydir": os.path.join(workdir, "bathymetry"),
             "domaindir": domain_dir,
+            "sectionsdir": os.path.join(workdir, "sections"),
             # DOMAINcfg namelist, and the raw DOMAINcfg output next to it
             "namelist_dir": namelist_dir,
             # Explicit entry points: pre-existing files consumed by this workflow
@@ -123,6 +134,18 @@ class NEMOWorkflow:
                 "machine. Turn the step off (as on a laptop: --nemo coordinates,bathymetry,configure_domain), or run "
                 "on Atos with machine.name: atos."
             )
+        if self.steps.get("sections"):
+            if not processor.transport_sections:
+                raise ConfigError(
+                    f"The sections step is on, but the transport sections (present-day straits and passages) do not "
+                    f"fit the '{processor.name}' bathymetry ({processor.__name__}.transport_sections is False). "
+                    "Turn the step off."
+                )
+            if not backend.available():
+                raise ConfigError(
+                    f"The sections step is on, but SECTIONS_DIADCT cannot run with 'machine.name: {backend.name}' on "
+                    "this machine. Turn the step off, or run on Atos with machine.name: atos."
+                )
         self.backend = backend
         self.log_level = log_level
         self.cdo = get_cdo()
@@ -342,6 +365,34 @@ class NEMOWorkflow:
         self.executor.run_python_script("domain/subbasins.py", args)
 
     # ------------------------------------------------------------------
+    # Step 7: Transport sections of NEMO diadct
+    # ------------------------------------------------------------------
+
+    def generate_sections(self):
+        """Write ``section_ijglobal.diadct`` with SECTIONS_DIADCT, on the grid of the final ``domain_cfg.nc``.
+
+        The coordinates file of the tool and its raw output go to ``workdir/sections``; the output is then copied
+        to the domain directory. Sections that do not cross the grid have no points: they are logged.
+        """
+        sections_dir = self.paths["sectionsdir"]
+        os.makedirs(sections_dir, exist_ok=True)
+        write_sections_coordinates(
+            os.path.join(self.domain_dir, "domain_cfg.nc"), os.path.join(sections_dir, SECTIONS_COORDINATES)
+        )
+        raw = self.backend.sections_diadct(sections_dir)
+
+        sections = read_sections(raw)
+        empty = [section["name"] for section in sections if not section["points"]]
+        logger.info("%d transport sections, %d without grid points", len(sections), len(empty))
+        if empty:
+            logger.warning("Transport sections without grid points: %s", ", ".join(empty))
+
+        final = os.path.join(self.domain_dir, SECTIONS_FILE)
+        os.makedirs(self.domain_dir, exist_ok=True)
+        with atomic_write(final) as tmp:
+            shutil.copyfile(raw, tmp)
+
+    # ------------------------------------------------------------------
     # Plan and input checks
     # ------------------------------------------------------------------
 
@@ -376,6 +427,14 @@ class NEMOWorkflow:
             "generate_subbasins": (
                 [str(raw[1])],
                 [os.path.join(self.domain_dir, f) for f in FINAL_FILES["generate_subbasins"]],
+            ),
+            "sections": (
+                [os.path.join(self.domain_dir, "domain_cfg.nc"), *self.backend.sections_required_paths()],
+                [
+                    os.path.join(self.paths["sectionsdir"], SECTIONS_COORDINATES),
+                    os.path.join(self.paths["sectionsdir"], SECTIONS_FILE),
+                    os.path.join(self.domain_dir, SECTIONS_FILE),
+                ],
             ),
         }
         return [(step, reads, writes) for step, (reads, writes) in steps.items() if self.steps.get(step)]
@@ -445,5 +504,9 @@ class NEMOWorkflow:
         if self.steps.get("generate_subbasins"):
             logger.info("=== Step: Generate Subbasin Masks ===")
             self.generate_subbasins()
+
+        if self.steps.get("sections"):
+            logger.info("=== Step: Generate Transport Sections ===")
+            self.generate_sections()
 
         logger.info("Workflow complete.")

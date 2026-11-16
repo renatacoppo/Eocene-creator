@@ -58,7 +58,9 @@ def test_present_section_loads_with_defaults(tmp_path: Path) -> None:
     assert (section.oifs.climate_dir, section.oifs.precomputed_climate_dir) == (None, None)
     assert vars(section.oifs.steps) == {"spectral": True, "gridpoint": True, "boundary": False}
     assert (section.nemo.source_grid, section.nemo.source_staggering, section.nemo.minimum_depth) == ("eORCA1", "T", 30)
-    assert all(vars(section.nemo.steps).values())
+    steps = vars(section.nemo.steps)
+    assert steps.pop("sections") is False  # the diadct sections are off by default
+    assert all(steps.values())
 
 
 def test_eocene_section_loads_with_defaults(tmp_path: Path) -> None:

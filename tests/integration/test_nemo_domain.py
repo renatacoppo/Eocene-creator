@@ -431,3 +431,39 @@ def test_present_run_skips_components_without_section(tmp_path: Path) -> None:
     """``ecefast present run`` on a config without ``present.oifs`` (as on a laptop) skips the ``oifs`` step."""
     cli.main(["present", "run", "-c", str(write_config(tmp_path)), "-l", "WARNING"])
     assert yaml.safe_load((tmp_path / "present" / "provenance.yml").read_text())["steps"] == ["stage", "nemo"]
+
+
+# --- sections (diadct transport sections) ---------------------------------------------------------------------------
+
+
+def test_sections_present(tmp_path: Path) -> None:
+    """``sections``: coordinates.nc from the final domain_cfg.nc in the work dir, then the (fake) sections file
+    in the domain directory."""
+    wf = workflow(write_config(tmp_path, steps={**STEPS_WITHOUT_GRIDS, "sections": True}))
+    final = Path(wf.domain_dir) / "section_ijglobal.diadct"
+    assert str(final) in wf.final_files()
+    assert wf.plan()[-1][0] == "sections"
+    wf.run()
+    assert final.is_file() and final.read_bytes() == b""
+    with xr.open_dataset(tmp_path / "tmp" / "present" / "nemo" / "sections" / "coordinates.nc") as coords:
+        with xr.open_dataset(Path(wf.domain_dir) / "domain_cfg.nc") as domain:
+            np.testing.assert_array_equal(coords["glamt"].values, domain["glamt"].values[0])
+
+
+def test_sections_only_on_existing_domain(tmp_path: Path) -> None:
+    """``--nemo sections`` after a domain run: reads the final domain_cfg.nc; missing, it is a clear error."""
+    sections_only = {n: n == "sections" for n in NEMO_DOMAIN_STEPS}
+    with pytest.raises(PipelineError, match="sections .*domain_cfg.nc"):
+        workflow(write_config(tmp_path, steps=sections_only)).check()
+    workflow(write_config(tmp_path)).run()  # the domain
+    workflow(write_config(tmp_path, steps=sections_only)).run()
+    assert (tmp_path / "present" / "nemo" / "domain" / "PALEORCA2" / "section_ijglobal.diadct").is_file()
+
+
+def test_sections_not_for_eocene_nor_local(tmp_path: Path) -> None:
+    config = write_config(tmp_path, steps={**STEPS_WITHOUT_GRIDS, "sections": True})
+    with pytest.raises(ConfigError, match="sections step is on.*'eocene' bathymetry"):
+        workflow(config, period="eocene")
+    local = write_config(tmp_path, machine="local", steps={n: n == "sections" for n in NEMO_DOMAIN_STEPS})
+    with pytest.raises(ConfigError, match="SECTIONS_DIADCT cannot run with 'machine.name: local'"):
+        workflow(local, backend=LocalBackend())

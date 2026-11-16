@@ -15,6 +15,12 @@ Unreleased
 Added
 ~~~~~
 
+- NEMO domain step ``sections`` (``present.nemo.steps.sections``, default ``false``): writes
+  ``nemo/domain/<grid>/section_ijglobal.diadct``, the transport sections of the NEMO diagnostic ``diadct``, with the
+  NEMO tool SECTIONS_DIADCT on the grid of the final ``domain_cfg.nc`` and its 132 global sections. The ``atos``
+  backend compiles and runs the tool (``run_sections_diadct.sh``; the module loading moved to ``hpc_env.sh``, shared
+  with ``run_domain_cfg.sh``); ``fake`` writes a file without sections. Present day only:
+  ``EoceneBathymetry.transport_sections`` is ``False`` (#TBD).
 - ``data_version`` (top-level config key, default ``v1``): the version of the generated data, and the CDO series it
   needs. ``v1`` (the data of the existing experiments, PALEORCA2 domains of ECE4-DATA-V3 and ``PALEORCA2-definitive``)
   needs CDO 2.5.x: every run and dry run stops with an error naming the CDO found and how to load 2.5. ``v2`` is

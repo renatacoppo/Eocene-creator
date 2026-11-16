@@ -105,7 +105,11 @@ class OIFSDataSteps:
 
 @dataclass
 class DomainSteps:
-    """Steps of the NEMO domain pipeline, in run order. DOMAINcfg and the steps after it need ``atos`` or ``fake``."""
+    """Steps of the NEMO domain pipeline, in run order. DOMAINcfg and the steps after it need ``atos`` or ``fake``.
+
+    ``sections`` (the transport sections of NEMO ``diadct``, ``section_ijglobal.diadct``) is off by default: the
+    domain trees made so far do not have it.
+    """
 
     coordinates: bool = True
     bathymetry: bool = True
@@ -113,6 +117,7 @@ class DomainSteps:
     domain_cfg: bool = True
     generate_mask: bool = True
     generate_subbasins: bool = True
+    sections: bool = False
 
 
 # --- present --------------------------------------------------------------------------------------------------------

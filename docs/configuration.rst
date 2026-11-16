@@ -262,9 +262,13 @@ already, unless ``--overwrite`` is given.
      - bool
      - ``true``
      - Steps of the domain pipeline: ``coordinates``, ``bathymetry``, ``configure_domain``,
-       ``domain_cfg``, ``generate_mask``, ``generate_subbasins``. The last three need DOMAINcfg
-       output: ``domain_cfg`` runs it on ``machine.name`` and stops before the first step with
-       ``local``, so a laptop turns them off. ``--nemo a,b`` overrides them for one run.
+       ``domain_cfg``, ``generate_mask``, ``generate_subbasins``, ``sections``. ``domain_cfg``,
+       ``generate_mask`` and ``generate_subbasins`` need DOMAINcfg output: ``domain_cfg`` runs it
+       on ``machine.name`` and stops before the first step with ``local``, so a laptop turns them
+       off. ``sections`` (default ``false``) writes the NEMO ``diadct`` transport sections
+       ``section_ijglobal.diadct`` with SECTIONS_DIADCT, Atos only; it is a configuration error
+       in ``eocene.nemo.steps`` (the present-day sections do not fit the Eocene geography).
+       ``--nemo a,b`` overrides them for one run.
 
 Example (laptop):
 
@@ -277,6 +281,16 @@ Example (laptop):
        source_grid: eORCA1
        minimum_depth: 30
        steps: {domain_cfg: false, generate_mask: false, generate_subbasins: false}
+
+Example (Atos, with the transport sections):
+
+.. code-block:: yaml
+
+   present:
+     nemo:
+       source_grid: eORCA1
+       minimum_depth: 30
+       steps: {sections: true}
 
 ``eocene``: the Eocene (DeepMIP) period
 ---------------------------------------

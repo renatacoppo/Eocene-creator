@@ -76,7 +76,7 @@ Directory structure (`{workdir}` = `<machine.tmpdir>/<period>/nemo`; `{name}` = 
   with `machine.name: atos`, else `{workdir}/domaincfg/`
 
 Workflow steps controlled via `<period>.nemo.steps` flags in YAML, or `--nemo a,b` for one run:
-- `coordinates`, `bathymetry`, `configure_domain`, `domain_cfg`, `generate_mask`, `generate_subbasins`
+- `coordinates`, `bathymetry`, `configure_domain`, `domain_cfg`, `generate_mask`, `generate_subbasins`, `sections`
 
 ---
 
@@ -272,3 +272,18 @@ These two functions are the only writer of `domain_cfg.nc` and `maskutil.nc` (th
 - `{domain_dir}/subbasins.nc`
   - Ocean basin masks: Atlantic, Pacific, Indian, Indo-Pacific, Global (Global only for paleo bathymetries)
   - Purpose: Regional diagnostics and analysis
+
+---
+
+## Step 9: Transport Sections of NEMO diadct
+**YAML Key**: `steps.sections` (default `false`)
+**Method**: `NEMOWorkflow.generate_sections()`
+**Tool**: SECTIONS_DIADCT, through `backend.sections_diadct()` (`tools/run_sections_diadct.sh` on Atos)
+
+- Only for a processor with `transport_sections = True` (`PresentDayBathymetry`); on for
+  `EoceneBathymetry` it is a configuration error: the section list gives present-day straits
+- Read `{domain_dir}/domain_cfg.nc`; write its `glamt`, `gphit`, `glamf`, `gphif`, `e1t` to
+  `{workdir}/sections/coordinates.nc`, dimension `x` defined before `y` (`components/nemo/sections.py`)
+- Run the tool in `{workdir}/sections` on `SECTIONS_DIADCT/run/list_sections.ascii_global` of the sources
+- Log the number of sections, warn on sections without grid points (`read_sections`)
+- Write to: `{domain_dir}/section_ijglobal.diadct`
