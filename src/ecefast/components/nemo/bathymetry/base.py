@@ -322,8 +322,9 @@ class BathymetryProcessor:
             sills=self.sills,
         )
         logger.info(
-            "Geography rules: opened %d corner contacts, removed %d closed seas (%d cells), %d inlet cells, "
-            "%d isolated islands; sills: %s",
+            "Geography rules: fold row made symmetric (%d cells), opened %d corner contacts, removed %d closed seas "
+            "(%d cells), %d inlet cells, %d isolated islands; sills: %s",
+            report.fold_cells,
             len(report.opened_corners),
             len(report.closed_seas),
             sum(report.closed_seas),

@@ -16,6 +16,11 @@ Corner contacts are opened before closed seas are removed: in a remapped mask, s
 the Baltic often touch the ocean only at a corner, and would otherwise be removed.
 
 Straits with a fixed sill depth (:func:`open_sills`, :func:`check_sills`) are opened before the rules.
+
+With a T-point pivot the top row holds every cell twice: ``(i, top)`` and ``(-i, top)`` are the same cell, and NEMO
+(DOMAINcfg included) overwrites the right half of the row with the mirrored left half. :func:`apply_rules` makes the
+row symmetric first (:func:`symmetrize_fold`, left half wins) and every rule changes both copies of a cell, so
+DOMAINcfg finds nothing to change.
 """
 
 import logging
@@ -41,6 +46,7 @@ class RulesReport:
     closed_seas: list[int] = field(default_factory=list)  # size in cells of each water body removed
     removed_inlets: int = 0
     removed_islands: list[tuple[int, int]] = field(default_factory=list)
+    fold_cells: int = 0  # cells of the right half of the fold row changed to match the left half
 
 
 def side_edges(shape: tuple[int, int], jperio: int) -> Edges:
@@ -117,6 +123,51 @@ def one_cell_wide(ocean: np.ndarray, jperio: int) -> np.ndarray:
     return ocean & ((~west & ~east & (north | south)) | (~north & ~south & (west | east)))
 
 
+def fold_twin(cell: tuple[int, int], shape: tuple[int, int], jperio: int) -> tuple[int, int] | None:
+    """The other copy of a top-row cell with a T-point pivot, ``(top, -i)``; None if the cell has no other copy."""
+    ny, nx = shape
+    j, i = cell
+    if jperio != T_PIVOT or j != ny - 1 or (-i) % nx == i:
+        return None
+    return j, (-i) % nx
+
+
+def symmetrize_fold(ocean: np.ndarray, depth: np.ndarray, jperio: int) -> int:
+    """Make the top row symmetric with a T-point pivot: the left half wins, as in NEMO. Changes the arrays in place.
+
+    Returns
+    -------
+    int
+        The number of cells of the right half that changed.
+    """
+    if jperio != T_PIVOT:
+        return 0
+    nx = ocean.shape[1]
+    left = np.arange(1, nx // 2 + (nx % 2))  # cells 0 and nx / 2 are their own copy
+    right = (-left) % nx
+    changed = int((ocean[-1, right] != ocean[-1, left]).sum())
+    ocean[-1, right] = ocean[-1, left]
+    depth[-1, right] = depth[-1, left]
+    return changed
+
+
+def check_fold(ocean: np.ndarray, jperio: int) -> None:
+    """Raise ValueError if the two copies of a top-row cell differ (T-point pivot)."""
+    if jperio == T_PIVOT:
+        nx = ocean.shape[1]
+        i = np.arange(nx)
+        if (ocean[-1, i] != ocean[-1, (-i) % nx]).any():
+            raise ValueError("The two copies of a cell of the north-fold row differ")
+
+
+def set_cell(ocean: np.ndarray, depth: np.ndarray, cell: tuple[int, int], value: float, jperio: int) -> None:
+    """Make ``cell`` ocean with depth ``value`` (land if ``value`` is 0), and its fold twin too."""
+    for target in (cell, fold_twin(cell, ocean.shape, jperio)):
+        if target is not None:
+            ocean[target] = value > 0
+            depth[target] = value
+
+
 def is_only_link(ocean: np.ndarray, cells: np.ndarray, edges: Edges) -> bool:
     """Whether removing ``cells`` splits the water around them in two or more bodies."""
     bodies = label_bodies(ocean & ~cells, edges)
@@ -125,14 +176,15 @@ def is_only_link(ocean: np.ndarray, cells: np.ndarray, edges: Edges) -> bool:
 
 
 def open_corner_contacts(
-    ocean: np.ndarray, depth: np.ndarray, fraction: np.ndarray, minimum_depth: float, edges: Edges
+    ocean: np.ndarray, depth: np.ndarray, fraction: np.ndarray, minimum_depth: float, jperio: int, edges: Edges
 ) -> list[tuple[int, int]]:
     """Rule 1: join two water bodies that touch only at a corner. Changes ``ocean`` and ``depth`` in place.
 
     Where two ocean cells touch only at a corner (both cells between them are land) and belong to different water
     bodies, the land cell between them with the larger ocean fraction becomes ocean at ``minimum_depth``. A corner
     between cells of the same water body is left alone: opening it would only cut a land bridge, such as a
-    peninsula. Corners across the north fold are not searched.
+    peninsula. The water bodies are recomputed after each opening, so a corner joined meanwhile through another
+    one stays closed. Corners across the north fold are not searched.
 
     Returns
     -------
@@ -149,14 +201,11 @@ def open_corner_contacts(
                 a, b = (j, i2), (j + 1, i)  # the two cells that share a side with both (j, i) and (j + 1, i2)
                 if not (ocean[j, i] and ocean[j + 1, i2]) or ocean[a] or ocean[b]:
                     continue
-                first, second = labels[j, i], labels[j + 1, i2]
-                if first == second:
+                if labels[j, i] == labels[j + 1, i2]:
                     continue
                 cell = a if fraction[a] >= fraction[b] else b
-                ocean[cell] = True
-                depth[cell] = minimum_depth
-                labels[labels == second] = first
-                labels[cell] = first
+                set_cell(ocean, depth, cell, minimum_depth, jperio)
+                labels = label_bodies(ocean, edges)
                 opened.append(cell)
     return opened
 
@@ -183,7 +232,8 @@ def remove_inlets(ocean: np.ndarray, jperio: int, edges: Edges, keep: np.ndarray
 
     A dead end is a group of one-cell-wide cells (:func:`one_cell_wide`) that touches the rest of the ocean through
     a single cell. Only the dead ends of the mask as it is are removed: the cells that become dead ends afterwards
-    stay, so a narrow sea behind a one-cell strait is not eaten away cell by cell.
+    stay, so a narrow sea behind a one-cell strait is not eaten away cell by cell. The two copies of a cell of a
+    symmetric fold row are one-cell-wide together and share a side, so they are removed together.
 
     Parameters
     ----------
@@ -245,7 +295,12 @@ def nearest_cell(lon: np.ndarray, lat: np.ndarray, point: tuple[float, float]) -
 
 
 def open_sills(
-    ocean: np.ndarray, depth: np.ndarray, lon: np.ndarray, lat: np.ndarray, sills: dict[str, tuple[float, float, float]]
+    ocean: np.ndarray,
+    depth: np.ndarray,
+    lon: np.ndarray,
+    lat: np.ndarray,
+    sills: dict[str, tuple[float, float, float]],
+    jperio: int,
 ) -> dict[str, tuple[int, int]]:
     """Give the cell nearest to each strait its sill depth, opening it if it is land. Changes the arrays in place.
 
@@ -272,8 +327,7 @@ def open_sills(
             depth[cell],
             sill,
         )
-        ocean[cell] = True
-        depth[cell] = sill
+        set_cell(ocean, depth, cell, sill, jperio)
         cells[name] = cell
     return cells
 
@@ -294,7 +348,8 @@ def check_sills(ocean: np.ndarray, cells: dict[str, tuple[int, int]], edges: Edg
         if not is_only_link(ocean, here, edges):
             raise ValueError(
                 f"Sill {name}: cell {cell} is not the only link between two basins, so its sill depth does not "
-                "control the flow; move the sill position onto the strait"
+                "control the flow: water flows around it (the strait is wider than one cell there, or a geography "
+                "rule opened another path). Check the sill position against the bathymetry"
             )
 
 
@@ -334,15 +389,21 @@ def apply_rules(
     """
     edges = side_edges(ocean.shape, jperio)
     report = RulesReport()
-    sill_cells = open_sills(ocean, depth, lon, lat, sills) if sills else {}
+    fraction = np.nan_to_num(fraction, nan=0.0)  # cells outside the source (e.g. south of ORCA2) have no fraction
+    report.fold_cells = symmetrize_fold(ocean, depth, jperio)
+    sill_cells = open_sills(ocean, depth, lon, lat, sills, jperio) if sills else {}
     keep = np.zeros_like(ocean)
     for cell in sill_cells.values():
         keep[cell] = True
+        twin = fold_twin(cell, ocean.shape, jperio)
+        if twin is not None:
+            keep[twin] = True
 
-    report.opened_corners = open_corner_contacts(ocean, depth, fraction, minimum_depth, edges)
+    report.opened_corners = open_corner_contacts(ocean, depth, fraction, minimum_depth, jperio, edges)
     report.closed_seas = remove_closed_seas(ocean, edges)
     report.removed_inlets = remove_inlets(ocean, jperio, edges, keep=keep)
     report.removed_islands = remove_isolated_islands(ocean, depth)
     depth[~ocean] = 0.0
+    check_fold(ocean, jperio)
     check_sills(ocean, sill_cells, edges)
     return report

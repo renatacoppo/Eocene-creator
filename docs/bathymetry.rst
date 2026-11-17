@@ -107,10 +107,13 @@ With ``data_version: v2`` (issue #58) the bathymetry has no manual corrections. 
    - **no one-cell inlets**: one-cell-wide dead ends become land, in a single pass;
    - **no isolated islands**: a land cell with no land among its eight neighbours becomes ocean.
 
-After DOMAINcfg, the domain must keep the land-sea mask of the bathymetry (the north-fold row
-excepted, which DOMAINcfg makes symmetric): a difference stops the ``generate_mask`` step.
+After DOMAINcfg, the domain must keep the land-sea mask of the bathymetry, every row included: a
+difference stops the ``generate_mask`` step.
 
-On the laptop inputs (fake DOMAINcfg, CDO 2.6.4):
+Before the rules, the north-fold row is made symmetric (its right half copies the mirrored left
+half, as NEMO does), and every rule changes both copies of a fold-row cell.
+
+On the laptop inputs (fake DOMAINcfg, CDO 2.6.4; a fold-row cell counts twice):
 
 .. list-table::
    :header-rows: 1
@@ -133,9 +136,9 @@ On the laptop inputs (fake DOMAINcfg, CDO 2.6.4):
      - 59 (7)
      - 501
    * - Eocene, v2
-     - 17020
-     - 11 (1)
-     - 484
+     - 17017
+     - 12 (1)
+     - 485
 
 Most Eocene cells at 30 m are real: Herold et al. (2014) have 2.7% of the ocean area at 30 m or
 shallower (the epicontinental seas of Europe and the Tethys).

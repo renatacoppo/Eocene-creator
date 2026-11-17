@@ -86,7 +86,7 @@ def test_corner_contact_between_two_bodies_is_opened() -> None:
     fraction[3, 3] = 0.4  # the land cell north of (2, 3): larger ocean fraction than (2, 2)
     fraction[2, 2] = 0.1
     depth = depth_of(ocean)
-    opened = g.open_corner_contacts(ocean, depth, fraction, 30.0, g.side_edges(ocean.shape, g.T_PIVOT))
+    opened = g.open_corner_contacts(ocean, depth, fraction, 30.0, g.T_PIVOT, g.side_edges(ocean.shape, g.T_PIVOT))
     assert opened == [(3, 3)]
     assert ocean[3, 3] and depth[3, 3] == 30.0
     assert len(np.unique(g.label_bodies(ocean, g.side_edges(ocean.shape, g.T_PIVOT)))) == 2  # one body + land
@@ -103,9 +103,64 @@ def test_corner_contact_inside_one_body_is_left_closed() -> None:
         "#######",
     )
     before = ocean.copy()
-    opened = g.open_corner_contacts(ocean, depth_of(ocean), np.ones(ocean.shape), 30.0, g.side_edges(ocean.shape, 4))
+    edges = g.side_edges(ocean.shape, g.T_PIVOT)
+    opened = g.open_corner_contacts(ocean, depth_of(ocean), np.ones(ocean.shape), 30.0, g.T_PIVOT, edges)
     assert opened == []
     assert (ocean == before).all()
+
+
+def test_corner_already_joined_through_another_is_left_closed() -> None:
+    """After the first opening joins (2, 3) to the main body, the second corner of (2, 3) is not opened too."""
+    ocean = grid(
+        "########",
+        "##~~~###",
+        "##~#~###",
+        "#~#~####",
+        "########",
+    )
+    fraction = np.zeros(ocean.shape)
+    fraction[1, 2] = 0.4
+    edges = g.side_edges(ocean.shape, g.T_PIVOT)
+    assert g.open_corner_contacts(ocean, depth_of(ocean), fraction, 30.0, g.T_PIVOT, edges) == [(1, 2)]
+
+
+# --- north fold ----------------------------------------------------------------------------------------------------
+
+
+def test_fold_row_made_symmetric_left_half_wins() -> None:
+    ocean = grid(
+        "#~~#~~##",  # top row (j = 2): the copies (1, 7), (2, 6) and (3, 5) differ; 0 and 4 are their own copy
+        "~~~~~~~~",
+        "########",
+    )
+    depth = depth_of(ocean)
+    assert g.symmetrize_fold(ocean, depth, g.T_PIVOT) == 3
+    assert draw(ocean)[0] == "#~~#~#~~"
+    i = np.arange(8)
+    assert (ocean[-1, i] == ocean[-1, (-i) % 8]).all() and (depth[-1, i] == depth[-1, (-i) % 8]).all()
+    assert g.symmetrize_fold(ocean, depth, g.F_PIVOT) == 0  # F pivot: no cell is held twice
+
+
+def test_changes_on_the_fold_row_change_both_copies() -> None:
+    ocean, depth = grid("########", "~~~~~~~~", "########"), np.zeros((3, 8))
+    g.set_cell(ocean, depth, (2, 1), 284.0, g.T_PIVOT)
+    assert ocean[2, 1] and ocean[2, 7] and depth[2, 7] == 284.0
+    g.set_cell(ocean, depth, (2, 4), 30.0, g.T_PIVOT)  # its own copy
+    assert ocean[2].sum() == 3
+    assert g.fold_twin((1, 1), ocean.shape, g.T_PIVOT) is None
+    assert g.fold_twin((2, 1), ocean.shape, g.F_PIVOT) is None
+
+
+def test_apply_rules_leaves_a_symmetric_fold_row() -> None:
+    ocean = grid(
+        "#~~##~~#",  # not symmetric: (7, 1) ocean, (7, 7) land; (7, 6) ocean, (7, 2) ocean
+        "~~~~~~~~",
+        "~~~~~~~~",
+        "########",
+    )
+    report = g.apply_rules(ocean, depth_of(ocean), np.ones(ocean.shape), 30.0, g.T_PIVOT)
+    assert report.fold_cells > 0
+    g.check_fold(ocean, g.T_PIVOT)
 
 
 # --- rule 2: closed seas -------------------------------------------------------------------------------------------
@@ -168,7 +223,7 @@ def test_inlet_is_removed_and_strait_kept() -> None:
     ocean = grid(
         "###########",
         "#~~~~~#~~~#",
-        "#~~~~~~~~~#",  # (3, 6): one-cell strait between the two basins
+        "#~~~~~~~~~#",  # (4, 6): one-cell strait between the two basins
         "#~~~~~#~~~#",
         "#~~~~~#####",
         "##~########",  # (1, 2): inlet, a dead end
@@ -252,7 +307,7 @@ def test_sill_opens_the_strait_and_sets_its_depth() -> None:
     )
     depth = depth_of(ocean)
     lon, lat = lon_lat(ocean.shape)
-    cells = g.open_sills(ocean, depth, lon, lat, {"Strait": (4.2, 2.1, 284.0)})
+    cells = g.open_sills(ocean, depth, lon, lat, {"Strait": (4.2, 2.1, 284.0)}, g.T_PIVOT)
     assert cells == {"Strait": (2, 4)}
     assert ocean[2, 4] and depth[2, 4] == 284.0
     g.check_sills(ocean, cells, g.side_edges(ocean.shape, g.T_PIVOT))

@@ -33,10 +33,11 @@ pytestmark = [
     needs_cdo_2_6,
 ]
 
-# ocean cells, one-cell-wide cells, of which the only link between two basins, cells at the minimum depth (30 m)
+# ocean cells, one-cell-wide cells, of which the only link between two basins, cells at the minimum depth (30 m);
+# a cell of the north-fold row is held twice in the arrays and counts twice (one Eocene one-cell-wide cell)
 EXPECTED = {
     "present": (16733, 11, 8, 54),
-    "eocene": (17020, 11, 1, 484),
+    "eocene": (17017, 12, 1, 485),
 }
 
 

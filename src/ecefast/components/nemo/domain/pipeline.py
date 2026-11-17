@@ -354,7 +354,7 @@ class NEMOWorkflow:
     def check_domain_mask(self):
         """Data version v2: the domain keeps the land-sea mask of the bathymetry, so the geography rules hold.
 
-        The top row is left out: DOMAINcfg makes the north-fold row symmetric.
+        The geography rules make the north-fold row symmetric, as DOMAINcfg does, so every row is compared.
 
         Raises
         ------
@@ -367,12 +367,12 @@ class NEMOWorkflow:
             bathymetry_ocean = ds[processor.variable_name()].squeeze().values > 0
         with xr.open_dataset(os.path.join(self.domain_dir, "domain_cfg.nc")) as ds:
             domain_ocean = ds["top_level"].squeeze().values > 0
-        differ = bathymetry_ocean[:-1] != domain_ocean[:-1]
+        differ = bathymetry_ocean != domain_ocean
         if differ.any():
             cells = ", ".join(f"({j}, {i})" for j, i in list(zip(*differ.nonzero()))[:10])
             raise PipelineError(
                 f"DOMAINcfg changed the land-sea mask of the '{self.name}' bathymetry in {int(differ.sum())} cells "
-                f"(j, i: {cells}), outside the north-fold row. The geography rules no longer hold; check the "
+                f"(j, i: {cells}). The geography rules no longer hold; check the "
                 f"DOMAINcfg namelist (rn_hmin, closed seas) against {bathymetry_file}."
             )
 

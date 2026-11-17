@@ -501,22 +501,17 @@ def test_v2_domain_keeps_the_mask(tmp_path: Path, period: str) -> None:
 
 @pytest.mark.data_v2
 def test_v2_mask_check_reports_cells_changed_by_domaincfg(tmp_path: Path) -> None:
-    """A cell that DOMAINcfg turned into land is an error; the north-fold row is left out."""
+    """A cell that DOMAINcfg turned into land is an error, the north-fold row included."""
     wf = workflow(write_config(tmp_path, data_version="v2"), "eocene")
     wf.run()
+    wf.check_domain_mask()
     domain_file = Path(wf.domain_dir) / "domain_cfg.nc"
     with xr.open_dataset(domain_file) as ds:
         domain = ds.load()
-    top_level = domain["top_level"].values
-    top_level[..., -1, 3] = 1 - top_level[..., -1, 3]  # the fold row: ignored
-    wf.check_domain_mask()
+    domain["top_level"].values[..., 2, 4] = 0  # the 50 m point becomes land
+    domain["top_level"].values[..., -1, 3] = 1 - domain["top_level"].values[..., -1, 3]  # a cell of the fold row
     domain.to_netcdf(domain_file)
-    wf.check_domain_mask()
-    top_level[..., 2, 4] = 0  # the 50 m point becomes land
-    domain.to_netcdf(domain_file)
-    with pytest.raises(
-        PipelineError, match=r"changed the land-sea mask of the 'eocene' bathymetry in 1 cells \(j, i: \(2, 4\)\)"
-    ):
+    with pytest.raises(PipelineError, match=r"in 2 cells \(j, i: \(2, 4\), \(5, 3\)\)"):
         wf.check_domain_mask()
 
 
