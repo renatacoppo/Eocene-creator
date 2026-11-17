@@ -1,5 +1,5 @@
 """Tests of the NEMO domain pipeline with the ``fake`` backend: ``ecefast nemo run`` (present-day domain) and the
-Eocene ``domain`` step building its domain (``eocene.nemo.domain: build``).
+Eocene ``domain`` step building its domain (``eocene.nemo.domain_dir`` unset).
 
 The ``coordinates`` and ``bathymetry`` steps need real grids (``tests/local/test_nemo_domain_fake.py``); here they
 are off, and their outputs (``coords_halo.nc``, the remapped bathymetry) are small synthetic files put where the
@@ -67,8 +67,8 @@ def write_config(tmp_path: Path, machine: str = "fake", steps: dict | None = Non
             "herold": str(tmp_path / "herold"),
             "output": str(tmp_path / "out"),
             "nemo": {
-                "domain": "build" if machine != "local" else str(tmp_path / "d"),
                 "minimum_depth": 30,
+                **({"domain_dir": str(tmp_path / "d")} if machine == "local" else {}),
                 "steps": steps,
             },
         },
@@ -392,12 +392,12 @@ def test_eocene_domain_step_needs_mask_step(tmp_path: Path) -> None:
 
 
 def test_eocene_domain_from_a_directory(tmp_path: Path) -> None:
-    """A directory in ``eocene.nemo.domain``: the step installs its files; it does not run the pipeline."""
+    """A directory in ``eocene.nemo.domain_dir``: the step installs its files; it does not run the pipeline."""
     present_day_domain(tmp_path)
     config = load_config(write_config(tmp_path))
     built = workflow(write_config(tmp_path), period="eocene")
     built.run()
-    config.eocene.nemo.domain = built.domain_dir
+    config.eocene.nemo.domain_dir = built.domain_dir
     ctx = Context(config, "eocene")
     step = EoceneDomain.from_context(ctx)
     assert step.workflow is None

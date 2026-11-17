@@ -52,10 +52,10 @@ def test_eocene_workflow_matches_baseline(tmp_path: Path) -> None:
         "input": str(data / "ECE4-DATA-V3"),
         "herold": str(data / "herold-et-al-2014" / "Supp"),
         "output": str(output),
-        "nemo": {"domain": str(data / "data" / "domain" / "PALEORCA2" / "eocene"), "minimum_depth": 30},
+        "nemo": {"domain_dir": str(data / "data" / "domain" / "PALEORCA2" / "eocene"), "minimum_depth": 30},
     }
     config = {"schema": 2, "machine": {"tmpdir": str(tmp_path / "tmp")}, "eocene": eocene}
-    for path in (eocene["input"], eocene["herold"], eocene["nemo"]["domain"]):
+    for path in (eocene["input"], eocene["herold"], eocene["nemo"]["domain_dir"]):
         assert Path(path).is_dir(), f"missing test data: {path}"
     assert baseline.is_dir(), f"missing test data: {baseline}"
     expected_cdo = baseline_cdo_version(data / "BASELINE" / "BASELINE.txt")

@@ -87,7 +87,7 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
                     "input": str(data),
                     "herold": str(tmp_path / "herold"),
                     "output": str(output),
-                    "nemo": {"domain": str(tmp_path / "domain"), "minimum_depth": 30},
+                    "nemo": {"domain_dir": str(tmp_path / "domain"), "minimum_depth": 30},
                 },
             }
         )

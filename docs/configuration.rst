@@ -251,7 +251,7 @@ Steps of the NEMO domain pipeline
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The same pipeline builds the present-day domain (``present.nemo.steps``) and the Eocene one
-(``eocene.nemo.steps``, with ``eocene.nemo.domain: build``). Each step needs the files of the ones
+(``eocene.nemo.steps``, unless ``eocene.nemo.domain_dir`` is set). Each step needs the files of the ones
 before it, from this run or an earlier one.
 
 .. list-table::
@@ -347,12 +347,13 @@ Read by ``ecefast eocene run`` and ``ecefast <component> run --period eocene``.
      - str
      - required
      - The Eocene tree. If it holds files, the run needs ``--overwrite``.
-   * - ``eocene.nemo.domain``
+   * - ``eocene.nemo.domain_dir``
      - str
-     - required
-     - ``build``: the ``domain`` step builds the Eocene domain with the NEMO domain pipeline and the
-       Eocene bathymetry (needs ``machine.name: atos``). Or a directory holding ``domain_cfg.nc``
-       and ``maskutil.nc`` of a domain built before, installed as it is.
+     - ``null``
+     - ``null``: the ``domain`` step builds the Eocene domain with the NEMO domain pipeline and the
+       Eocene bathymetry (needs ``machine.name: atos``). A directory holding ``domain_cfg.nc`` and
+       ``maskutil.nc`` of a domain built before (e.g. on Atos, for a laptop): installed as it is.
+       Example: ``domain_dir: /path/to/data/domain/PALEORCA2/eocene``.
    * - ``eocene.nemo.minimum_depth``
      - float
      - required
@@ -360,7 +361,7 @@ Read by ``ecefast eocene run`` and ``ecefast <component> run --period eocene``.
    * - ``eocene.nemo.steps.<step>``
      - bool
      - ``true``; ``sections``: ``false``
-     - The steps of the NEMO domain pipeline, used with ``build``.
+     - The steps of the NEMO domain pipeline, used when ``domain_dir`` is not set.
    * - ``eocene.oifs.aerosols``
      - bool
      - ``false``
@@ -403,7 +404,6 @@ The ``present`` and ``eocene`` sections of ``configs/atos.tmpl``, without the co
      herold: /path/to/herold-et-al-2014/Supp
      output: /path/to/OUTPUT/eocene
      nemo:
-       domain: build
        minimum_depth: 30
        steps:
          coordinates: true

@@ -149,7 +149,7 @@ def make_domain_tree(ctx: Context, eocene_levels: int) -> None:
     present_dir = Path(ctx.expand("{input}/nemo/domain/{grids.nemo.name}"))
     present_dir.mkdir(parents=True)
     vertical_grid(31).to_netcdf(present_dir / "domain_cfg.nc")
-    precomputed = Path(ctx.config.eocene.nemo.domain)
+    precomputed = Path(ctx.config.eocene.nemo.domain_dir)
     precomputed.mkdir()
     vertical_grid(eocene_levels).to_netcdf(precomputed / "domain_cfg.nc")
     xr.Dataset({"tmask": ("z", np.ones(eocene_levels))}).to_netcdf(precomputed / "maskutil.nc")
@@ -160,7 +160,7 @@ def test_domain_step_installs_and_checks(ctx: Context) -> None:
     EoceneDomain.from_context(ctx).run()
     for template in EoceneDomain.writes:
         installed = Path(ctx.expand(template))
-        assert installed.read_bytes() == (Path(ctx.config.eocene.nemo.domain) / installed.name).read_bytes()
+        assert installed.read_bytes() == (Path(ctx.config.eocene.nemo.domain_dir) / installed.name).read_bytes()
 
 
 def test_domain_step_fails_on_mismatch(ctx: Context) -> None:
@@ -170,7 +170,14 @@ def test_domain_step_fails_on_mismatch(ctx: Context) -> None:
 
 
 def test_domain_step_needs_the_domain_files(ctx: Context) -> None:
-    with pytest.raises(PipelineError, match=r"missing in eocene.nemo.domain .*domain_cfg.nc, maskutil.nc"):
+    with pytest.raises(PipelineError, match=r"missing in eocene.nemo.domain_dir .*domain_cfg.nc, maskutil.nc"):
+        EoceneDomain.from_context(ctx)
+
+
+def test_domain_step_build_needs_domaincfg(ctx: Context) -> None:
+    """Without domain_dir the step builds the domain: on a machine without DOMAINcfg it says what to do instead."""
+    ctx.config.eocene.nemo.domain_dir = None
+    with pytest.raises(PipelineError, match=r"Set eocene.nemo.domain_dir .* skip the step"):
         EoceneDomain.from_context(ctx)
 
 

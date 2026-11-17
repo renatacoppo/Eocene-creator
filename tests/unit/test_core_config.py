@@ -29,7 +29,7 @@ def eocene(tmp_path: Path) -> dict:
         "input": str(tmp_path / "input"),
         "herold": str(tmp_path / "herold"),
         "output": str(tmp_path / "out" / "eocene"),
-        "nemo": {"domain": "/data/domain/PALEORCA2/eocene", "minimum_depth": 30},
+        "nemo": {"domain_dir": "/data/domain/PALEORCA2/eocene", "minimum_depth": 30},
     }
 
 
@@ -66,7 +66,7 @@ def test_present_section_loads_with_defaults(tmp_path: Path) -> None:
 def test_eocene_section_loads_with_defaults(tmp_path: Path) -> None:
     config = load_config(write(tmp_path, minimal(tmp_path) | {"eocene": eocene(tmp_path)}))
     assert config.eocene.output == str(tmp_path / "out" / "eocene")
-    assert config.eocene.nemo.domain == "/data/domain/PALEORCA2/eocene"
+    assert config.eocene.nemo.domain_dir == "/data/domain/PALEORCA2/eocene"
     assert config.eocene.oifs.aerosols is False
     assert config.eocene.oasis.constant_sst == 290.0
     steps = vars(config.eocene.nemo.steps)
@@ -220,13 +220,18 @@ def test_read_only_roots(tmp_path: Path) -> None:
     assert set(roots) == {"present.input", "eocene.input", "eocene.herold"}
 
 
-def test_build_needs_a_machine_that_runs_domaincfg(tmp_path: Path) -> None:
+def test_domain_dir_default_builds(tmp_path: Path) -> None:
+    """Without domain_dir the domain step builds the domain; a local machine is refused by the step, not the file."""
+    raw = minimal(tmp_path) | {"eocene": eocene(tmp_path)}
+    del raw["eocene"]["nemo"]["domain_dir"]
+    assert load_config(write(tmp_path, raw)).eocene.nemo.domain_dir is None
+
+
+def test_old_domain_key_is_refused(tmp_path: Path) -> None:
     raw = minimal(tmp_path) | {"eocene": eocene(tmp_path)}
     raw["eocene"]["nemo"]["domain"] = "build"
-    with pytest.raises(ConfigError, match="'eocene.nemo.domain: build' runs DOMAINcfg"):
+    with pytest.raises(ConfigError, match="'eocene.nemo.domain' is replaced by 'eocene.nemo.domain_dir'"):
         load_config(write(tmp_path, raw))
-    raw["machine"]["name"] = "fake"
-    assert load_config(write(tmp_path, raw)).eocene.nemo.domain == "build"
 
 
 # --- step overrides (--oifs, --nemo) -----------------------------------------------------------------------------------
@@ -270,9 +275,7 @@ def test_missing_present_key(tmp_path: Path, key: str) -> None:
     assert "config.yml" in str(err.value)
 
 
-@pytest.mark.parametrize(
-    "drop", [("input",), ("herold",), ("output",), ("nemo",), ("nemo", "domain"), ("nemo", "minimum_depth")]
-)
+@pytest.mark.parametrize("drop", [("input",), ("herold",), ("output",), ("nemo",), ("nemo", "minimum_depth")])
 def test_missing_eocene_key(tmp_path: Path, drop: tuple) -> None:
     raw = minimal(tmp_path) | {"eocene": eocene(tmp_path)}
     section = raw["eocene"]
@@ -318,7 +321,7 @@ def test_schema_1_lists_the_new_keys(tmp_path: Path) -> None:
         ("paths.output", "eocene.output"),
         ("paths.herold", "eocene.herold"),
         ("tools.backend", "machine.name"),
-        ("tools.precomputed.domain", "eocene.nemo.domain"),
+        ("tools.precomputed.domain", "eocene.nemo.domain_dir"),
         ("nemo_domain", "present.nemo"),
     ]:
         assert any(old in line and new in line for line in message.splitlines()), (old, new)
@@ -345,7 +348,7 @@ def test_component_layout_lists_the_new_keys(tmp_path: Path) -> None:
         ("nemo.domain.tools_dir", "machine.atos.ecearth4_sources"),
         ("nemo.grid", "grids.nemo.name"),
         ("eocene.output_dir", "eocene.output"),
-        ("eocene.domain", "eocene.nemo.domain"),
+        ("eocene.domain", "eocene.nemo.domain_dir"),
     ]:
         assert any(old in line and new in line for line in message.splitlines()), (old, new)
 
@@ -418,4 +421,4 @@ def test_templates_load(tmp_path: Path, template: str) -> None:
     assert vars(config.present.oifs.steps) == {"spectral": False, "gridpoint": False, "boundary": False}
     assert config.present.nemo.steps.sections == (template == "atos.tmpl")  # SECTIONS_DIADCT runs on Atos only
     assert config.eocene.nemo.steps.sections is False
-    assert (config.eocene.nemo.domain == "build") == (template == "atos.tmpl")
+    assert (config.eocene.nemo.domain_dir is None) == (template == "atos.tmpl")

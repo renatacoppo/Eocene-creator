@@ -6,7 +6,7 @@ This workflow processes bathymetry and coordinate data to generate NEMO domain c
 `NEMOWorkflow` builds the NEMO domain of **one** bathymetry. Each time period runs it with its own bathymetry:
 
 - present day: the `nemo` step, `ecefast present run` or `ecefast nemo run -c configs/laptop.yml [--nemo a,b]`
-- Eocene: inside the `domain` step with `eocene.nemo.domain: build`,
+- Eocene: inside the `domain` step, unless `eocene.nemo.domain_dir` is set,
   `ecefast eocene run -c configs/atos.yml` or `ecefast nemo run -c configs/atos.yml --period eocene`
 
 **Bathymetry processors**: not configured. Each period passes its own `BathymetryProcessor` subclass to
@@ -119,7 +119,7 @@ Workflow steps controlled via `<period>.nemo.steps` flags in YAML, or `--nemo a,
 ---
 
 ## Step 4: Eocene Paleobathymetry Processing
-**YAML Key**: `eocene.nemo.steps.bathymetry` (with `eocene.nemo.domain: build`)
+**YAML Key**: `eocene.nemo.steps.bathymetry` (unless `eocene.nemo.domain_dir` is set)
 **Processor**: `EoceneBathymetry` (ecefast/periods/eocene/bathymetry.py)
 **Method**: `NEMOWorkflow.process_bathymetry(cfg)`
 

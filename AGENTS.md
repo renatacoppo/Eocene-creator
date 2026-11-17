@@ -73,7 +73,7 @@ All of these live at the repo root and are gitignored; never commit them.
 | Directory | What | How to get it |
 |---|---|---|
 | `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree, including the eORCA1 domain (grid and bathymetry of the present-day bathymetry) | `scripts/get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
-| `data/` | input of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `eocene.nemo.domain`) | copy from the HPC |
+| `data/` | input of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `eocene.nemo.domain_dir`) | copy from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplementary data | copy from the HPC or the paper supplement |
 | `OUTPUT/<period>/` | output of your runs, one folder per period (`present`, `eocene`): each period's `output` | `ecefast eocene run -c configs/laptop.yml --overwrite`, `ecefast nemo run -c configs/laptop.yml`, `ecefast oifs run` (Atos) |
 | `BASELINE/<period>/` | frozen reference output: `eocene/` (Eocene workflow) and `present/` (intermediate files of the laptop part of the present-day domain pipeline, `<machine.tmpdir>/present/nemo`; its namelist holds absolute paths), with `BASELINE.txt` (how each was run, commit, CDO, Python, ecCodes versions) | frozen with the refactor; do not modify |

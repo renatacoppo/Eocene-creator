@@ -5,7 +5,7 @@ Opt-in, like ``test_regression.py``: set ``ECEFAST_TEST_DATA`` to a directory ho
 ``pytest -m local_data``. Takes about 15 s.
 
 All steps run for both periods: ``ecefast nemo run`` for the present-day domain and ``ecefast nemo run --period
-eocene`` (``eocene.nemo.domain: build``, after ``stage``) for the Eocene one: coordinates, bathymetry (CDO),
+eocene`` (``eocene.nemo.domain_dir`` unset, after ``stage``) for the Eocene one: coordinates, bathymetry (CDO),
 namelist, fake DOMAINcfg, post-processing, subbasins. The vertical grid of the result is compared with the present-day PALEORCA2 domain of
 the input tree with ``check_vertical_grid``: ``nav_lev`` is equal, ``e3t_1d`` equal to rounding (the fake evaluates
 the DOMAINcfg formula with NumPy, which differs from the Fortran build by about 1e-12 m).
@@ -47,7 +47,7 @@ def test_fake_domain_pipeline_on_real_inputs(tmp_path: Path) -> None:
             "input": "{present.input}",
             "herold": str(data / "herold-et-al-2014" / "Supp"),
             "output": str(tmp_path / "eocene"),
-            "nemo": {"domain": "build", "minimum_depth": 30},
+            "nemo": {"minimum_depth": 30},
         },
     }
     config_file = tmp_path / "config.yml"
