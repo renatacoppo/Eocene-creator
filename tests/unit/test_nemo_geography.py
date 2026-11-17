@@ -70,6 +70,15 @@ def test_one_cell_wide_uses_the_fold() -> None:
     assert not g.one_cell_wide(ocean, g.F_PIVOT)[2, 1]  # F pivot: its neighbour is (2, 4), land
 
 
+def test_fold_nodes() -> None:
+    """T pivot: the right half of the top row takes the index of its copy in the left half; cells 0 and nx / 2
+    are their own copy. F pivot: every cell is its own node."""
+    nodes = g.fold_nodes((2, 6), g.T_PIVOT)
+    np.testing.assert_array_equal(nodes[0], np.arange(6))
+    np.testing.assert_array_equal(nodes[1], [6, 7, 8, 9, 8, 7])
+    np.testing.assert_array_equal(g.fold_nodes((2, 6), g.F_PIVOT).ravel(), np.arange(12))
+
+
 # --- rule 1: corner contacts ---------------------------------------------------------------------------------------
 
 

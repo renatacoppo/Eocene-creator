@@ -132,6 +132,25 @@ def fold_twin(cell: tuple[int, int], shape: tuple[int, int], jperio: int) -> tup
     return j, (-i) % nx
 
 
+def _fold_halves(nx: int) -> tuple[np.ndarray, np.ndarray]:
+    """Columns of the left half of a T-point fold row and of their copies in the right half (cells 0 and nx / 2
+    are their own copy)."""
+    left = np.arange(1, nx // 2 + (nx % 2))
+    return left, (-left) % nx
+
+
+def fold_nodes(shape: tuple[int, int], jperio: int) -> np.ndarray:
+    """Flat index of each cell, the two copies of a top-row cell (T-point pivot) sharing the index of the left one.
+
+    Cells with the same number are the same cell of the model, so a count of cells or of neighbours counts them once.
+    """
+    nodes = np.arange(shape[0] * shape[1]).reshape(shape)
+    if jperio == T_PIVOT:
+        left, right = _fold_halves(shape[1])
+        nodes[-1, right] = nodes[-1, left]
+    return nodes
+
+
 def symmetrize_fold(ocean: np.ndarray, depth: np.ndarray, jperio: int) -> int:
     """Make the top row symmetric with a T-point pivot: the left half wins, as in NEMO. Changes the arrays in place.
 
@@ -142,9 +161,7 @@ def symmetrize_fold(ocean: np.ndarray, depth: np.ndarray, jperio: int) -> int:
     """
     if jperio != T_PIVOT:
         return 0
-    nx = ocean.shape[1]
-    left = np.arange(1, nx // 2 + (nx % 2))  # cells 0 and nx / 2 are their own copy
-    right = (-left) % nx
+    left, right = _fold_halves(ocean.shape[1])
     changed = int((ocean[-1, right] != ocean[-1, left]).sum())
     ocean[-1, right] = ocean[-1, left]
     depth[-1, right] = depth[-1, left]

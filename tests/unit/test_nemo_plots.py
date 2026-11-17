@@ -8,6 +8,7 @@ import pytest
 import xarray as xr
 
 from ecefast.components.nemo.bathymetry import BathymetryProcessor
+from ecefast.components.nemo.bathymetry.geography import F_PIVOT, T_PIVOT
 from ecefast.core.steps import PipelineError
 from ecefast.components.nemo.plots import (
     OCEAN_FIELD,
@@ -32,7 +33,6 @@ from ecefast.components.nemo.plots import (
     ocean_on,
     ocean_basins,
     ocean_inlets,
-    one_cell_passages,
     plot_agreement,
     plot_domain,
     plot_same_grid,
@@ -59,52 +59,46 @@ def mask(rows: list[str]) -> np.ndarray:
 def domain(ocean: np.ndarray, depth: float = 1000.0, label: str = "test") -> Domain:
     lon, lat = grid(*ocean.shape)
     values = xr.DataArray(np.where(ocean, depth, np.nan), dims=("y", "x"))
-    return Domain(label, "domain_cfg.nc", lon, lat, ocean, values)
+    return Domain(label, "domain_cfg.nc", lon, lat, ocean, values, T_PIVOT)
 
 
 def test_ocean_basins_numbered_by_size():
-    ocean = mask(["oo.o.", "oo...", "....o"])
-    lon, lat = grid(*ocean.shape)
-    basins = ocean_basins(ocean, lon, lat)
+    ocean = mask(["oo.o.", "oo...", "....o", "....."])
+    basins = ocean_basins(ocean, T_PIVOT)
     # largest first; basins of the same size in grid order
-    np.testing.assert_array_equal(basins, [[0, 0, -1, 1, -1], [0, 0, -1, -1, -1], [-1, -1, -1, -1, 2]])
+    np.testing.assert_array_equal(
+        basins, [[0, 0, -1, 1, -1], [0, 0, -1, -1, -1], [-1, -1, -1, -1, 2], [-1, -1, -1, -1, -1]]
+    )
 
 
 def test_ocean_basins_across_the_east_west_period():
     ocean = mask(["o..o", "...."])
-    lon, lat = grid(*ocean.shape)
-    assert set(ocean_basins(ocean, lon, lat)[ocean]) == {0}
+    assert set(ocean_basins(ocean, T_PIVOT)[ocean]) == {0}
 
 
-def test_ocean_basins_join_cells_with_the_same_coordinates():
-    """A T-point north fold duplicates rows: equal coordinates are the same cell."""
-    ocean = mask(["o...", "....", "...o"])
-    lon, lat = grid(*ocean.shape)
-    lon[2, 3], lat[2, 3] = lon[0, 0], lat[0, 0]
-    assert set(ocean_basins(ocean, lon, lat)[ocean]) == {0}
+@pytest.mark.parametrize(("jperio", "basins"), [(T_PIVOT, [0, 1]), (F_PIVOT, [0])])
+def test_ocean_basins_across_the_north_fold(jperio: int, basins: list[int]):
+    """Two cells of the top row: neighbours across an F-point fold ((i, top) and (nx - 1 - i, top)), not across a
+    T-point fold, where (i, top) is the same cell as (-i, top)."""
+    ocean = mask(["......", "......", ".o..o."])
+    assert sorted(set(ocean_basins(ocean, jperio)[ocean])) == basins
+
+
+def test_ocean_basins_across_the_t_point_fold_row():
+    """T-point fold: the northern neighbour of (i, top) is (-i, top - 1)."""
+    ocean = mask(["....", ".o..", "...o"])
+    assert set(ocean_basins(ocean, T_PIVOT)[ocean]) == {0}
 
 
 def test_ocean_basins_diagonal_cells_are_not_connected():
     ocean = mask(["o...", ".o.."])
-    lon, lat = grid(*ocean.shape)
-    assert sorted(ocean_basins(ocean, lon, lat)[ocean]) == [0, 1]
-
-
-def test_one_cell_passages():
-    """The rows beyond the first and the last are land, as the closed boundaries of a NEMO domain."""
-    ocean = mask(["ooooo", "ooooo", "..o..", "ooooo", "ooooo"])
-    passages = one_cell_passages(ocean)
-    assert passages.sum() == 1 and passages[2, 2]
-    # a north-south strait one cell high: land above and below
-    ocean = mask(["....", "oooo", "...."])
-    assert one_cell_passages(ocean).sum() == 4
+    assert sorted(ocean_basins(ocean, T_PIVOT)[ocean]) == [0, 1]
 
 
 def test_ocean_inlets_follow_a_dead_end_to_its_mouth():
     """An open sea in the south with a channel to the north, three cells long, and a notch of one cell."""
     ocean = mask(["oooooo", "oooooo", ".o..o.", ".o....", ".o...."])
-    lon, lat = grid(*ocean.shape)
-    inlets = ocean_inlets(ocean, lon, lat)
+    inlets = ocean_inlets(ocean, T_PIVOT)
     # the longest first; the cells of the open sea at the mouths are not part of them
     np.testing.assert_array_equal(inlets[:, 1], [-1, -1, 0, 0, 0])
     assert inlets[2, 4] == 1
@@ -114,24 +108,23 @@ def test_ocean_inlets_follow_a_dead_end_to_its_mouth():
 def test_ocean_inlets_leave_passages_and_wide_dead_ends():
     # a strait between two seas has ocean at both ends
     strait = mask(["oooo", "oooo", ".o..", "oooo", "oooo"])
-    assert (ocean_inlets(strait, *grid(*strait.shape)) == -1).all()
+    assert (ocean_inlets(strait, T_PIVOT) == -1).all()
     # a dead end two cells wide
     wide = mask(["oooooo", "oooooo", ".oo...", ".oo..."])
-    assert (ocean_inlets(wide, *grid(*wide.shape)) == -1).all()
+    assert (ocean_inlets(wide, T_PIVOT) == -1).all()
 
 
 def test_ocean_inlets_across_the_east_west_period():
     """A cell of the first column with ocean in the last column is not a dead end."""
     ocean = mask(["o..o", "o..o", "o..o"])
-    assert (ocean_inlets(ocean, *grid(*ocean.shape)) == -1).all()
+    assert (ocean_inlets(ocean, T_PIVOT) == -1).all()
 
 
-def test_ocean_inlets_count_cells_with_the_same_coordinates_once():
-    """A channel whose tip is duplicated across the north fold: one inlet, on both copies."""
+def test_ocean_inlets_count_the_copies_of_a_fold_cell_once():
+    """A channel whose tip is on a T-point fold row, (1, top) and (3, top) the same cell: one inlet, on both
+    copies."""
     ocean = mask(["oooo", "oooo", ".o..", ".o.o"])
-    lon, lat = grid(*ocean.shape)
-    lon[3, 3], lat[3, 3] = lon[3, 1], lat[3, 1]
-    inlets = ocean_inlets(ocean, lon, lat)
+    inlets = ocean_inlets(ocean, T_PIVOT)
     assert inlets[3, 1] == inlets[3, 3] == inlets[2, 1] == 0
     assert (inlets >= 0).sum() == 3
 
@@ -268,7 +261,8 @@ def test_ocean_on_remaps_conservatively(tmp_path: Path):
     coords = {"lat": ("lat", np.arange(-89.5, 90.0), {"units": "degrees_north"})}
     coords["lon"] = ("lon", np.arange(0.5, 360.0), {"units": "degrees_east"})
     xr.Dataset({OCEAN_FIELD: (("lat", "lon"), ocean)}, coords=coords).to_netcdf(source)
-    test = Domain("test", str(path), lon, lat, np.ones(lon.shape, dtype=bool), xr.DataArray(lon, dims=("y", "x")))
+    ocean = np.ones(lon.shape, dtype=bool)
+    test = Domain("test", str(path), lon, lat, ocean, xr.DataArray(lon, dims=("y", "x")), T_PIVOT)
     remapped = ocean_on(test, str(source), str(cells))
     np.testing.assert_array_equal(remapped[1], [True, True, False, True])
     _, counts = plot_agreement(test, remapped, "other", "title")
@@ -285,12 +279,26 @@ def test_read_domain(tmp_path: Path):
             "gphit": (("t", "y", "x"), lat[None]),
             "bottom_level": (("t", "y", "x"), bottom[None]),
             "bathy_metry": (("t", "y", "x"), np.where(bottom > 0, 100.0, 0.0)[None]),
+            "jperio": ((), np.int32(F_PIVOT)),
         }
     ).to_netcdf(path)
     test = read_domain(str(path), "test")
     np.testing.assert_array_equal(test.ocean, bottom > 0)
     assert np.isnan(test.depth.values[0, 0]) and test.depth.values[0, 1] == 100.0
     assert test.depth.attrs["units"] == "m"
+    assert test.jperio == F_PIVOT
+
+
+@pytest.mark.parametrize("jperio", [None, 1])
+def test_read_domain_needs_a_north_fold(tmp_path: Path, jperio: int | None):
+    lon, lat = grid(2, 3)
+    path = tmp_path / "domain_cfg.nc"
+    fields = {"glamt": (("y", "x"), lon), "gphit": (("y", "x"), lat), "bathy_metry": (("y", "x"), lon)}
+    if jperio is not None:
+        fields["jperio"] = ((), np.int32(jperio))
+    xr.Dataset(fields).to_netcdf(path)
+    with pytest.raises(PipelineError, match=f"north fold jperio={jperio}, the plots handle 4"):
+        read_domain(str(path), "test")
 
 
 @pytest.mark.parametrize("name", ["Bathymetry", "bathymetry"])
@@ -304,6 +312,7 @@ def test_read_domain_other_bathymetry_names(tmp_path: Path, name: str):
             "nav_lon": (("y", "x"), lon),
             "nav_lat": (("y", "x"), lat),
             name: (("t", "y", "x"), np.array([[[0.0, 50.0, np.nan], [10.0, 0.0, 4000.0]]])),
+            "jperio": ((), np.int32(T_PIVOT)),
         }
     ).to_netcdf(path)
     test = read_domain(str(path), "test")

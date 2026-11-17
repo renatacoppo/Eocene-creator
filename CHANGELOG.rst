@@ -129,6 +129,12 @@ Changed
 
 - ``present.nemo.source_grid`` defaults to the source of the data version: ``eORCA1`` in v1 (as before), ``ORCA2``
   in v2. The templates leave it commented out (#59).
+- ``ecefast <period> plot``: the basins, inlets and one-cell passages of a NEMO domain use the connections of the
+  geography rules (``components/nemo/bathymetry/geography.py``) and the north fold of the domain (its ``jperio``)
+  instead of their own code, which matched fold cells by their coordinates. Only cells of the fold row change
+  class: they are no longer one-cell passages or inlets when their neighbour is across the fold (eORCA1: 18
+  inlet cells along its F-point fold; ORCA2, PALEORCA2 present day and Eocene: 2 to 4 cells). A domain file
+  without ``jperio`` 4 or 6 is refused (#59).
 
 - Documentation published on GitHub Pages (https://renatacoppo.github.io/Eocene-creator/) by the ``docs`` workflow
   on every push to ``main``, instead of Read the Docs: ``.readthedocs.yaml`` removed (#53).
