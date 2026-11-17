@@ -29,7 +29,9 @@ A period has ``input`` (the EC-Earth tree it starts from, read-only), ``output``
 makes, laid out as in ECE4-DATA) and one subsection per component (``oifs``, ``nemo``,
 ``oasis``). A run writes only to its period's ``output`` and to
 ``<machine.tmpdir>/<period>/<component>/``; on Atos DOMAINcfg also writes in its own directory of
-the EC-Earth4 sources. Only ``schema`` and ``machine.tmpdir`` are always required; a command stops
+the EC-Earth4 sources. Keep ``machine.tmpdir`` short: DOMAINcfg reads at most 132 characters of
+the path of the coordinates and 200 of the bathymetry, both in ``tmpdir``; a longer path stops the
+domain steps before they start. Only ``schema`` and ``machine.tmpdir`` are always required; a command stops
 if the section of its period, or of its component in that period, is missing.
 
 Placeholders

@@ -243,6 +243,43 @@ def test_missing_inputs_listed_at_once(tmp_path: Path) -> None:
     assert "bathymetry   needs  " + source in message  # its bathymetry
 
 
+class ShortPathsBackend(FakeBackend):
+    """A DOMAINcfg that reads only short paths from its namelist, as the real one (``AtosBackend.path_limits``)."""
+
+    path_limits = {"cn_fcoord": 20, "cn_topo": 5000}
+
+
+def test_namelist_paths_too_long_for_domaincfg(tmp_path: Path) -> None:
+    """A path that DOMAINcfg would cut stops the pipeline before anything runs, dry runs included."""
+    config = write_config(tmp_path, steps={"configure_domain": True, "domain_cfg": True})
+    wf = workflow(config, backend=ShortPathsBackend())
+    with pytest.raises(PipelineError, match="path too long for the DOMAINcfg namelist") as error:
+        wf.check_namelist_paths()
+    message = str(error.value)
+    assert f"cn_fcoord = {wf._target_halo()}" in message and "at most 20" in message
+    assert "cn_topo" not in message and "shorter machine.tmpdir" in message
+    workflow(config).check_namelist_paths()  # the fake backend has no limit
+    # nothing to check when DOMAINcfg and its namelist are not part of the run
+    off = write_config(tmp_path, steps={"configure_domain": False, "domain_cfg": False})
+    workflow(off, backend=ShortPathsBackend()).check_namelist_paths()
+
+
+def raw_domain(path: Path, bottom_level: np.ndarray, glamt: np.ndarray) -> str:
+    fields = {"bottom_level": (("y", "x"), bottom_level), "glamt": (("y", "x"), glamt), "gphit": (("y", "x"), glamt)}
+    xr.Dataset(fields).to_netcdf(path)
+    return str(path)
+
+
+def test_check_raw_domain_stops_on_an_empty_domain(tmp_path: Path) -> None:
+    """A crashed DOMAINcfg can leave a readable file of zeros: no ocean cell, no coordinates."""
+    lon = np.array([[0.0, 2.0], [0.0, 2.0]])
+    domain_pipeline.check_raw_domain(raw_domain(tmp_path / "good.nc", np.array([[0, 3], [5, 0]]), lon), "eocene")
+    with pytest.raises(PipelineError, match="empty domain.*0 ocean cells, coordinates all zero"):
+        domain_pipeline.check_raw_domain(raw_domain(tmp_path / "zeros.nc", np.zeros((2, 2), int), lon * 0), "eocene")
+    with pytest.raises(PipelineError, match=r"domain_cfg \(eocene\).*0 ocean cells\. DOMAINcfg crashed"):
+        domain_pipeline.check_raw_domain(raw_domain(tmp_path / "land.nc", np.zeros((2, 2), int), lon), "eocene")
+
+
 def test_cli_missing_input_exits(tmp_path: Path) -> None:
     config = write_config(tmp_path, steps={**STEPS_WITHOUT_GRIDS, "coordinates": True})
     before = tree(tmp_path)

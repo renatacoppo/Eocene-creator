@@ -15,6 +15,11 @@ Unreleased
 Added
 ~~~~~
 
+- NEMO domain: two checks against an empty domain from DOMAINcfg. Before any step runs (dry runs included), the
+  paths written to its namelist must fit the tool on Atos (132 characters for the coordinates, 200 for the
+  bathymetry: a longer path, from a long ``machine.tmpdir``, was cut and DOMAINcfg wrote a domain of zeros while
+  the run ended without error). After DOMAINcfg, a raw domain with no ocean cell or with coordinates all zero is
+  an error.
 - ``data_version: v2`` (issue #58), with CDO 2.6.x: NEMO bathymetries without manual corrections. The land-sea mask
   and the depth come from one conservative remap (ocean fraction rounded to 1e-6, ocean if at least 0.5; depth =
   mean depth of the ocean part, at least ``minimum_depth``), then four geography rules
