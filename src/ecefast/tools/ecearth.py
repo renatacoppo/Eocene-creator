@@ -13,7 +13,7 @@ holding the ``coordinates.nc`` of the domain. The backend is chosen with
     DOMAINcfg, SECTIONS_DIADCT and the OASIS libraries come from the EC-Earth4 source tree
     ``machine.atos.ecearth4_sources``.
 ``local``
-    A laptop: the tools are not available. Use the domain built on Atos (``eocene.nemo.domain``).
+    A laptop: the tools are not available. Use the domain built on Atos (``eocene.nemo.domain_dir``).
 ``fake``
     Tests and CI: writes small but valid files with the structure of the DOMAINcfg output, and a sections file
     without sections, without running the tools. See :class:`FakeBackend` for what it does not do.
@@ -277,7 +277,7 @@ class LocalBackend(EcEarthTools):
         """Raise: DOMAINcfg cannot run locally."""
         raise RuntimeError(
             "DOMAINcfg cannot run with 'machine.name: local'. Use the domain built on Atos: point "
-            "eocene.nemo.domain at it, which the Eocene 'domain' step installs; or run the domain pipeline on Atos "
+            "eocene.nemo.domain_dir at it, which the Eocene 'domain' step installs; or run the domain pipeline on Atos "
             "with machine.name: atos."
         )
 

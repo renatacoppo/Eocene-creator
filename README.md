@@ -15,7 +15,7 @@ Each period writes a tree laid out as an EC-Earth4 input tree.
 git clone https://github.com/renatacoppo/Eocene-creator.git && cd Eocene-creator
 module load conda
 mamba env create -f environment.yaml           # once
-conda activate eocene
+conda activate ecefast
 module load cdo/2.5.3                          # data_version v1 needs CDO 2.5.x
 
 cp configs/atos.tmpl configs/atos.yml          # set the /path/to/... values
@@ -29,7 +29,8 @@ configuration, git commit, data version, CDO and ecCodes versions).
 
 ## Documentation
 
-The documentation is in `docs/` (Sphinx: `pip install -e ".[docs]" && sphinx-build -b html docs docs/_build/html`):
+The documentation is online at <https://renatacoppo.github.io/Eocene-creator/> (built from `main`).
+Its source is in `docs/` (Sphinx: `pip install -e ".[docs]" && sphinx-build -b html docs docs/_build/html`):
 
 - `docs/quickstart.rst`: setup, running, what each step makes, checking the result;
 - `docs/configuration.rst`: every configuration key;

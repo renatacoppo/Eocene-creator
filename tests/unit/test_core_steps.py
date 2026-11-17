@@ -265,7 +265,7 @@ def test_expand_placeholders(ctx: Context) -> None:
     assert ctx.expand("{input}/oifs/{grids.oifs.name}/x") == f"{eocene.input}/oifs/TL63L31/x"
     assert ctx.expand("{output}/oasis/{grids.nemo.name}/rstos.nc") == f"{eocene.output}/oasis/PALEORCA2/rstos.nc"
     assert ctx.expand("{herold}/h.nc") == f"{eocene.herold}/h.nc"
-    assert ctx.expand("{nemo.domain}/x") == f"{eocene.nemo.domain}/x"
+    assert ctx.expand("{nemo.domain_dir}/x") == f"{eocene.nemo.domain_dir}/x"
     assert ctx.expand("{present.output}/x") == f"{ctx.config.present.output}/x"
     assert ctx.expand("{machine.tmpdir}/t.nc") == f"{ctx.config.machine.tmpdir}/t.nc"
     assert ctx.expand("/plain/path") == "/plain/path"

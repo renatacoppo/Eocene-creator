@@ -39,9 +39,9 @@ src/ecefast/
 ## Commands
 
 ```bash
-# environment (conda env name: eocene)
+# environment (conda env name: ecefast)
 mamba env create -f environment.yaml
-conda activate eocene
+conda activate ecefast
 pip install -e ".[dev,docs]"
 
 # local test data, see "Local test data" below
@@ -75,7 +75,7 @@ All of these live at the repo root and are gitignored; never commit them.
 | Directory | What | How to get it |
 |---|---|---|
 | `ECE4-DATA-V3/` | subset of the EC-Earth4 input tree, including the eORCA1 domain (grid and bathymetry of the present-day bathymetry) | `scripts/get_ece4_data.sh` (source from argument or `ECE4_DATA_SRC`) |
-| `data/` | input of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `eocene.nemo.domain`) | copy from the HPC |
+| `data/` | input of the NEMO domain pipeline (`PALEORCA2/coords_ori.nc`) and the Eocene domain built on Atos (`domain/PALEORCA2/eocene/`, the config's `eocene.nemo.domain_dir`) | copy from the HPC |
 | `herold-et-al-2014/` | Herold et al. (2014) supplementary data | copy from the HPC or the paper supplement |
 | `OUTPUT/<period>/` | output of your runs, one folder per period (`present`, `eocene`): each period's `output` | `ecefast eocene run -c configs/laptop.yml --overwrite`, `ecefast nemo run -c configs/laptop.yml`, `ecefast oifs run` (Atos) |
 | `BASELINE/<period>/` | frozen reference output: `eocene/` (Eocene workflow) and `present/` (intermediate files of the laptop part of the present-day domain pipeline, `<machine.tmpdir>/present/nemo`; its namelist holds absolute paths), with `BASELINE.txt` (how each was run, commit, CDO, Python, ecCodes versions) | frozen with the refactor; do not modify |
@@ -310,8 +310,9 @@ The tool is used from the command line; there are no tutorial notebooks.
 
 ## Documentation
 
-Documentation is written in reStructuredText (`.rst`) and built with Sphinx, so it can be
-published on Read the Docs.
+Documentation is written in reStructuredText (`.rst`) and built with Sphinx and published on
+GitHub Pages (<https://renatacoppo.github.io/Eocene-creator/>) by the `docs` workflow on every push
+to `main`.
 
 - **Location.** User and developer docs live in `docs/` as `.rst` files, with `docs/conf.py` and
   `docs/index.rst` as the entry point. They are written for whoever generates new data, on
