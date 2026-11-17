@@ -54,6 +54,7 @@ ecefast = "ecefast.cli.main:main"
 
 [project.urls]
 "Homepage" = "https://github.com/renatacoppo/Eocene-creator"
+"Documentation" = "https://renatacoppo.github.io/Eocene-creator/"
 "Bug Tracker" = "https://github.com/renatacoppo/Eocene-creator/issues"
 "Repository" = "https://github.com/renatacoppo/Eocene-creator"
 
