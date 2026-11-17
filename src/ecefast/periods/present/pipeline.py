@@ -7,14 +7,17 @@ write their final files into it, laid out as in ECE4-DATA; intermediate files go
 ``<machine.tmpdir>/present/<component>``.
 """
 
+import glob
 import logging
 import os
 
 from ecefast.components.nemo.domain.pipeline import NEMOWorkflow
 from ecefast.components.oifs.generator import OIFSData
+from ecefast.core.config import load_config
 from ecefast.core.runner import run_period
 from ecefast.core.steps import ComponentStep
 from ecefast.core.workspace import Context, Stage, pause_before_overwrite
+from ecefast.periods.plots import plot_period
 from ecefast.periods.present.bathymetry import PresentDayBathymetry
 from ecefast.tools.ecearth import get_backend
 
@@ -137,3 +140,39 @@ def run(
     """
     names, _ = run_period(PIPELINE, config_file, PERIOD, select, component, substeps, dry_run, overwrite)
     return names
+
+
+def plot(config_file: str, out_dir: str, reference: str | None = None, groups: list[str] | None = None) -> dict:
+    """Draw the plots of the present-day output (``ecefast present plot``), see :mod:`ecefast.periods.plots`.
+
+    The present-day NEMO domain of ``grids.nemo`` (built on Atos) is compared with every NEMO domain of the
+    reference tree (by default ``present.input``): the one of the same grid cell by cell, the others (ORCA2, eORCA1,
+    ...) sampled at its cells.
+
+    Parameters
+    ----------
+    config_file : str
+        Configuration file (schema 2) with a ``present`` section.
+    out_dir : str
+        Plot directory, outside the EC-Earth trees.
+    reference : str, optional
+        Root of the reference tree; default ``present.input``.
+    groups : list of str, optional
+        Groups to draw (``nemo``, ``oifs``, ``coupling``); default all.
+
+    Returns
+    -------
+    dict
+        The content of ``summary.yml``.
+
+    Raises
+    ------
+    ConfigError
+        If the configuration is invalid or has no ``present`` section.
+    PipelineError
+        If the plot directory is inside an EC-Earth tree or an input file is missing.
+    """
+    ctx = Context(load_config(config_file), PERIOD)
+    reference = os.path.abspath(reference or ctx.section.input)
+    domains = sorted(glob.glob(os.path.join(reference, "nemo", "domain", "*", "domain_cfg.nc")))
+    return plot_period(ctx, os.path.abspath(out_dir), reference, domains, groups=groups)

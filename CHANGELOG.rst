@@ -15,6 +15,14 @@ Unreleased
 Added
 ~~~~~
 
+- ``ecefast <period> plot -c CONFIG -o DIR [--reference TREE] [--only nemo,oifs,coupling]``: maps of the output
+  of a period against a reference tree (default the period's ``input``, or another run), and ``summary.yml`` with
+  the numbers. ``nemo``: depth, ocean basins and one-cell passages of the domain; its land-sea mask against the
+  domains of the reference (same grid: changed cells and depth difference; ORCA2, eORCA1: nearest point) and,
+  Eocene, the Herold bathymetry. ``oifs``: the variables of the OIFS surface files that differ (monthly fields as
+  annual mean and seasonal range, vegetation and soil types as classes). ``coupling``: OIFS land-sea mask against
+  the NEMO mask. Shared helpers in ``ecefast.core.plotting`` replace ``periods/eocene/plots/helper_functions.py``;
+  the IFS vegetation-type table moved to ``ecefast.components.oifs.land_cover`` (#PR).
 - NEMO domain step ``sections`` (``present.nemo.steps.sections``, default ``true``): writes
   ``nemo/domain/<grid>/section_ijglobal.diadct``, the transport sections of the NEMO diagnostic ``diadct``, with the
   NEMO tool SECTIONS_DIADCT on the grid of the final ``domain_cfg.nc`` and its 132 global sections. The ``atos``

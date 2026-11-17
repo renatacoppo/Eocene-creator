@@ -191,6 +191,42 @@ With ``data_version: v1`` the domains match those of the existing experiments
 (``PALEORCA2-definitive``): the same 16870 present-day and 16832 Eocene ocean columns, the same
 levels and depths.
 
+``ecefast <period> plot`` draws maps of the output of a period next to a reference tree, by
+default the period's ``input`` (the present-day tree); ``--reference`` takes any other tree, for
+instance another run. The figures go to the directory given with ``-o``, outside the EC-Earth
+trees, with ``summary.yml`` holding the numbers, so two runs can be compared at a glance.
+
+.. code-block:: bash
+
+   ecefast eocene plot -c configs/atos.yml -o plots/eocene
+   ecefast eocene plot -c configs/atos.yml -o plots/eocene-vs-old --reference /path/to/old/eocene
+   ecefast present plot -c configs/atos.yml -o plots/present --only nemo
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 85
+
+   * - Group
+     - What it draws (``--only`` selects groups)
+   * - ``nemo``
+     - ``nemo/domain.png``: depth, ocean basins and one-cell passages of the NEMO domain (basins
+       other than the main one are closed seas or closed straits; ``summary.yml`` gives a cell of
+       each). ``nemo/vs_reference_<grid>.png``: the land-sea mask against each domain of the
+       reference tree: on the same grid the cells that change and the depth difference, on another
+       grid (present day: ORCA2, eORCA1) the reference mask at the nearest point.
+       ``nemo/vs_source.png`` (Eocene): the mask against the Herold et al. (2014) bathymetry.
+   * - ``oifs``
+     - ``oifs/<file>/<variable>.png``: every variable of ``ICMGGECE4INIT``, ``ICMSHECE4INIT``
+       (orography), ``ICMCLECE4`` (annual mean and seasonal range) and ``bare_soil_albedos.grb``
+       that differs from the reference: reference, test and difference where both have the same
+       surface type; vegetation and soil types as classes.
+   * - ``coupling``
+     - ``coupling/oifs_lsm_vs_nemo.png``: the OIFS land-sea mask (land where ``lsm > 0.5``)
+       against the NEMO ocean mask.
+
+The present-day plot needs a built domain (``present.output/nemo/domain/<grid>/domain_cfg.nc``,
+made on Atos).
+
 Without Atos
 ------------
 
