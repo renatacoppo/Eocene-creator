@@ -108,9 +108,9 @@ Changed
 - ``eocene.nemo.domain`` (``build`` or a directory, required) is replaced by the optional ``eocene.nemo.domain_dir``:
   unset, the ``domain`` step builds the Eocene domain; set, it installs the domain of that directory. Migrate with
   ``domain: build`` -> remove the key, ``domain: <dir>`` -> ``domain_dir: <dir>``; an old file gets an error saying
-  so. On a machine without DOMAINcfg the step (not the config file) stops and says to set ``domain_dir`` or skip it.
+  so. On a machine without DOMAINcfg the step (not the config file) stops and says to set ``domain_dir`` or skip it (#54).
 - The conda environment of ``environment.yaml`` is named ``ecefast`` (was ``eocene``), like the package and the
-  command: create it again with ``mamba env create -f environment.yaml`` and ``pip install -e ".[dev,docs]"``.
+  command: create it again with ``mamba env create -f environment.yaml`` and ``pip install -e ".[dev,docs]"`` (#54).
 - Documentation rewritten for whoever generates data on ECMWF Atos, with Atos examples: ``quickstart.rst`` (setup,
   run, what each step makes, checking the result with ``scripts/compare_trees.py``), ``configuration.rst`` (every
   key, the steps of each component, ``data_version``), the new ``bathymetry.rst`` (how a NEMO bathymetry is made,
