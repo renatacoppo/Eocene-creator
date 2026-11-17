@@ -37,7 +37,7 @@ from ecefast.core.steps import PipelineError
 from .bathymetry.base import BathymetryProcessor
 
 # names of the depth (m) in NEMO domain and bathymetry files, in order of preference: domain_cfg.nc, bathy_meter.nc
-BATHYMETRY_NAMES = ("bathy_metry", "Bathymetry", "bathymetry")
+BATHYMETRY_NAMES = ("bathy_metry", "Bathymetry", "bathymetry", "bathy_meter")
 # names of the T-point longitude and latitude, in order of preference: domain_cfg.nc, bathymetry files
 COORDINATE_NAMES = (("glamt", "gphit"), ("nav_lon", "nav_lat"))
 # NEMO forcing files compared by the plots, relative to a tree: the geothermal heat flux at the sea floor and the
