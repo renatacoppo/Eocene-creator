@@ -16,6 +16,10 @@ from ecefast.core.workspace import Context
 
 logger = logging.getLogger(__name__)
 
+# the river tracking works on the 1-degree grid of the Herold flow directions (RTM_FLOW_DIRECTION in
+# herold_etal_eocene_runoff_1x1.nc): (lat, lon) indices, latitude from south to north
+NLAT, NLON = 180, 360
+
 # ### Functions
 
 
@@ -49,14 +53,14 @@ def follow_point(i, j, flowdir, verbose=False):
     newpo = np.array([i, j]) + next
 
     newpo_ok = newpo.copy()
-    if newpo[0] == 180:
-        newpo_ok[0] = 178  # if passing north pole
+    if newpo[0] == NLAT:
+        newpo_ok[0] = NLAT - 2  # if passing north pole
     if newpo[0] == -1:
         newpo_ok[0] = 1  # if passing south pole
-    if newpo[1] == 360:
+    if newpo[1] == NLON:
         newpo_ok[1] = 0  # if passing east boundary
     if newpo[1] == -1:
-        newpo_ok[1] = 359  # if passing west boundary
+        newpo_ok[1] = NLON - 1  # if passing west boundary
 
     return newpo_ok
 
@@ -99,10 +103,10 @@ def track_rivers(flowdir):
     """
     rivers = []
     rivers_dir = []
-    rnf_map = np.zeros((180, 360)) - 1
+    rnf_map = np.zeros((NLAT, NLON)) - 1
 
-    for j in range(360):
-        for i in range(180):
+    for j in range(NLON):
+        for i in range(NLAT):
             res, po, pocoast, podir = find_sea(i, j, flowdir=flowdir)
 
             if res == 0:
@@ -128,38 +132,6 @@ def track_rivers(flowdir):
     return rnf_map, rivers, rivers_dir
 
 
-def track_rivers_vct(flowdir):
-    """
-    With arrays, but slower. Don't use!!
-    """
-    rivers = []
-    rivers_dir = []
-    rnf_map = np.zeros((180, 360)) - 1
-
-    for j in range(360):
-        for i in range(180):
-            res, po, pocoast, podir = find_sea(i, j)
-
-            if res == 0:
-                if len(rivers) == 0:
-                    rivers.append(po)
-                    continue
-
-                if not np.any(np.all(np.array(rivers) == po, axis=1)):
-                    rivers.append(po)
-                    rivers_dir.append(podir)
-
-                # rnf_map[i,j] = rivers.index(tuple(po))
-                rnf_map[i, j] = np.where(np.all(np.array(rivers) == po, axis=1))[0][0]
-
-            elif res == 1:
-                rnf_map[i, j] = -1
-            elif res == 2:
-                rnf_map[i, j] = -2
-
-    return rnf_map, rivers, rivers_dir
-
-
 def plot_basins(rnf_map, rivers=None, not_assigned=None, shuffle=True):
     fig = plt.figure(figsize=(16, 12))
     cmap = plt.get_cmap("nipy_spectral").copy()
@@ -178,18 +150,18 @@ def plot_basins(rnf_map, rivers=None, not_assigned=None, shuffle=True):
     if rivers is not None:
         for randv, riv in zip(random_vals, rivers):
             col = cmap(randv / np.max(random_vals))
-            plt.scatter(riv[1], 180 - riv[0], color=col, s=20, marker="D", edgecolor="black")
+            plt.scatter(riv[1], NLAT - riv[0], color=col, s=20, marker="D", edgecolor="black")
 
     if not_assigned is not None:
         for po in not_assigned:
-            plt.scatter(po[1], 180 - po[0], color="white", s=10, marker="o", edgecolor="black")
+            plt.scatter(po[1], NLAT - po[0], color="white", s=10, marker="o", edgecolor="black")
 
     return fig
 
 
 def calc_basins_dim(rnf_map, lat):
     coslat = np.abs(np.cos(np.deg2rad(lat)))
-    coslat2d = np.tile(coslat, (360, 1)).T  # Shape
+    coslat2d = np.tile(coslat, (NLON, 1)).T  # Shape
 
     basins = []
     for ri in range(int(np.max(rnf_map) + 1)):
@@ -226,7 +198,7 @@ def track_rivers_and_merge(
 
     """
     coslat = np.abs(np.cos(np.deg2rad(lat)))
-    coslat2d = np.tile(coslat, (360, 1)).T  # Shape
+    coslat2d = np.tile(coslat, (NLON, 1)).T  # Shape
 
     rivers_v2 = [] + big_rivers
     rivers_v2_dir = [] + big_rivers_dir
@@ -235,9 +207,9 @@ def track_rivers_and_merge(
         rivers_merged[ii] = [np.array(cos)]
     # coastlines = []
 
-    rnf_map_merged = np.zeros((180, 360)) - 1
-    for j in range(360):
-        for i in range(180):
+    rnf_map_merged = np.zeros((NLAT, NLON)) - 1
+    for j in range(NLON):
+        for i in range(NLAT):
             res, po, pocoast, podir = find_sea(i, j, flowdir=flowdir)
 
             if res == 0:
@@ -499,6 +471,11 @@ class EoceneRNFM(ComponentStep):
         oroslope = oroslope.rename({"xc": "longitude", "yc": "latitude"})
         oroslope = oroslope.assign_coords(longitude=oroslope.longitude[0], latitude=oroslope.latitude[:, 0])
         flowdir = oroslope["RTM_FLOW_DIRECTION"].values
+        if flowdir.shape != (NLAT, NLON) or not np.all(np.diff(oroslope.latitude.values) > 0):
+            raise ValueError(
+                f"Step 'rnfm': {oroslopefile} must hold RTM_FLOW_DIRECTION on the 1-degree grid ({NLAT}, {NLON}) "
+                f"with latitude from south to north, found shape {flowdir.shape}"
+            )
 
         logger.info("Tracking the Eocene river basins")
         rnf_map_merged_final, rivers_merged_final, rivers_end_point, not_assigned = iter_track(
@@ -533,44 +510,3 @@ class EoceneRNFM(ComponentStep):
         create_basin_data(
             final_file, rnf_pd, rnf_map_merged_final, arrival_id, calving_id, oroslope.longitude, oroslope.latitude
         )
-
-
-# run with: python epochal_ece4_runoff.py -s /abs-path-to-dir/herold_etal_eocene_runoff_1x1.nc -r /abs-path-to-dir/runoff_maps.nc
-# output written in runoff_maps_new.nc in the script's folder
-
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser(description="Duplicate job configuration for experiments.")
-#     parser.add_argument("-s", "--oroslope_file", type=str, required=True, help="Orographic slope file, like herold_etal_eocene_runoff_1x1.nc")
-#     parser.add_argument("-r", "--runoff_file", type=str, required=True, help="EC-Earth runoff_maps.nc file to update")
-
-#     args = parser.parse_args()
-
-#     print('Reading oroslope file...')
-#     oroslope = xr.load_dataset(args.oroslope_file)
-#     oroslope = oroslope.rename({'xc': 'longitude', 'yc': 'latitude'})
-#     oroslope = oroslope.assign_coords(longitude = oroslope.longitude[0], latitude = oroslope.latitude[:, 0])
-#     flowdir = oroslope['RTM_FLOW_DIRECTION'].values
-
-#     print('Launching calc!')
-#     rnf_map_merged_final, rivers_merged_final, rivers_end_point, not_assigned = iter_track(flowdir, lat = oroslope.latitude)
-
-#     if len(not_assigned) > 0:
-#         print('WARNING!! some points have not been assigned:')
-#         print(not_assigned)
-
-#     # Building arrival point id
-#     arrival_id = np.zeros(rnf_map_merged_final.shape) - 2
-#     for num in rivers_merged_final:
-#         for po in rivers_merged_final[num]:
-#             arrival_id[po[0], po[1]] = num
-
-#     print('Check!')
-#     print(rnf_map_merged_final.min(), rnf_map_merged_final.max())
-#     print(arrival_id.min(), arrival_id.max())
-
-#     ## Setting calving equal to runoff
-#     print("WARNING!! Setting calving_id equal to arrival_id! To be changed if ice sheets are present")
-#     calving_id = arrival_id.copy()
-
-#     rnf_pd = xr.load_dataset(args.runoff_file)
-#     create_basin_data('runoff_map_new.nc', rnf_pd, rnf_map_merged_final, arrival_id, calving_id, oroslope.longitude, oroslope.latitude)

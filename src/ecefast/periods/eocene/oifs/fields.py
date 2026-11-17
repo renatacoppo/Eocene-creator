@@ -16,6 +16,9 @@ from ecefast.core.grib import count_grib_messages, detect_grib_version, repack_g
 
 logger = logging.getLogger(__name__)
 
+# tolerance (degrees) when comparing the coordinates of two grids that should be the same
+GRID_ATOL = 1e-6
+
 
 def nullify_grib(
     inputfile: str,
@@ -63,53 +66,6 @@ def nullify_grib(
         logger.debug(f"Debug copy of zeroed field written to {debug_path}")
 
     replace_field(inputfile, zeroed_file, outputfile, variables, filter_method=filter_method, debug=debug)
-
-
-def modify_grib(inputfile, outputfile, myfunction, spectral=False, **kwargs):
-    """
-    Modify a GRIB file using a function.
-    Unpack grib1 and grib2, convert them to gaussian regular,
-    apply the function and the convert them back to grib1 and grib2.
-    This is deprecated in OIFS cy48 since all data should be GRIB2
-    """
-
-    logger.debug(f"Modifying GRIB file {inputfile} using {myfunction.__name__}")
-
-    # Unpack the GRIB file
-    grib1, grib2 = unpack_grib_file(inputfile, "tmp")
-
-    for file in [grib1, grib2]:
-        if os.path.exists(file):
-            logger.debug(f"Converting to netcdf file {file}")
-
-            # Convert to netcdf: if spectral use sp2gpl, else use setgridtype
-            if spectral:
-                logger.debug("Using spectral conversion (sp2gpl)")
-                netcdf = get_cdo().sp2gpl(input=file, options=NC4)
-            else:
-                logger.debug("Using gridtype conversion (regular)")
-                netcdf = get_cdo().setgridtype("regular", input=file, options=NC4)
-            logger.debug(f"Modifying GRIB file {file} using function {myfunction.__name__}")
-
-            # open the netcdf and modify it
-            logger.debug(f"Opening dataset {netcdf}")
-            field = xr.open_dataset(netcdf, engine="netcdf4")
-            field = myfunction(field, **kwargs)
-
-            # Save to a temporary file and remove
-            with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
-                temp_path = tmpfile.name
-            field.to_netcdf(temp_path)
-            shutil.move(temp_path, netcdf)
-
-            logger.debug(f"Converting back to GRIB file {file}")
-            grib = GRIB1 if file == grib1 else GRIB2
-            if spectral:
-                get_cdo().gp2spl(input=netcdf, output=file, options=grib)
-            else:
-                get_cdo().remapnn(inputfile, input=netcdf, output=file, options=grib)
-
-    repack_grib_file(grib1, grib2, outputfile, clean=True)
 
 
 def modify_single_grib(
@@ -197,9 +153,16 @@ def modify_single_grib(
     replace_field(inputfile, singlefile, outputfile, variables, filter_method=filter_method, debug=debug)
 
 
-def truncate_grib_file(inputfile, outputfile, variables, orig=63, trunc=1):
+def truncate_grib_file(inputfile, outputfile, variables, orig, trunc=1):
     """
-    Truncate the GRIB file to a specific size.
+    Truncate spectral fields of a GRIB file to wavenumber ``trunc`` and pad them back to ``orig``.
+
+    Args:
+        inputfile: Path to the source GRIB file.
+        outputfile: Path to write the result to. May be the same path as ``inputfile``.
+        variables: Short names of the spectral fields to truncate.
+        orig: Spectral truncation of the file (63 for TL63): the fields are written back at this truncation.
+        trunc: Wavenumber to keep. Defaults to 1.
     """
     varlist = ",".join(variables)
     logger.debug(f"Truncating variables {varlist} from {inputfile}")
@@ -211,9 +174,12 @@ def truncate_grib_file(inputfile, outputfile, variables, orig=63, trunc=1):
 
     with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
         temp_path = tmpfile.name
-    subprocess.run(["grib_copy", "-w", where_expr, inputfile, temp_path], check=True)
-    with atomic_write(outputfile) as tmp:
-        subprocess.run(["grib_copy", compact, temp_path, tmp], check=True)
+    try:
+        subprocess.run(["grib_copy", "-w", where_expr, inputfile, temp_path], check=True)
+        with atomic_write(outputfile) as tmp:
+            subprocess.run(["grib_copy", compact, temp_path, tmp], check=True)
+    finally:
+        os.remove(temp_path)
 
 
 def replace_field(
@@ -301,10 +267,32 @@ def modify_value(field, var, newvalue):
     return field
 
 
+def check_same_grid(field: xr.Dataset, newfield: xr.DataArray) -> None:
+    """
+    Check that ``newfield`` has the latitudes and longitudes of ``field``, in the same order.
+
+    Fields are copied by position, so a grid mismatch (for instance north-to-south against south-to-north) would
+    otherwise flip or shift the field silently.
+
+    Raises:
+        ValueError: If a coordinate is missing or differs in size, order or value (beyond ``GRID_ATOL`` degrees).
+    """
+    for coord in ("lat", "lon"):
+        if coord not in field.coords or coord not in newfield.coords:
+            raise ValueError(f"Cannot check the grid: coordinate '{coord}' missing from the field or the new field")
+        old, new = field[coord].values, newfield[coord].values
+        if old.shape != new.shape or not np.allclose(old, new, atol=GRID_ATOL):
+            raise ValueError(
+                f"The new field is not on the grid of the field it replaces: '{coord}' has {new.size} values "
+                f"from {new[0]} to {new[-1]}, the field {old.size} values from {old[0]} to {old[-1]}"
+            )
+
+
 def replace_value(field, var, newfield):
     """
-    Replace the field in a dataset with a dataarray
+    Replace the variables ``var`` of a dataset with a dataarray on the same grid (see ``check_same_grid``).
     """
+    check_same_grid(field, newfield)
     if "time" not in newfield.dims:
         logger.debug("Expanding time dimension for new field")
         newfield = newfield.expand_dims("time", axis=0)

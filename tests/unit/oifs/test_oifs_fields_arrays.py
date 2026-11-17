@@ -72,25 +72,35 @@ def test_replace_value_adds_time_and_transposes() -> None:
 
 def test_replace_value_keeps_existing_time_dimension() -> None:
     field = grib_like_dataset("sdor")
-    new = xr.DataArray(np.full((1, LAT.size, LON.size), 7.0), dims=("time", "lat", "lon"))
+    new = xr.DataArray(
+        np.full((1, LAT.size, LON.size), 7.0), dims=("time", "lat", "lon"), coords={"lat": LAT, "lon": LON}
+    )
     assert np.all(replace_value(field, var=["sdor"], newfield=new)["sdor"].values == 7.0)
 
 
-def test_replace_value_assigns_by_position_not_by_coordinate() -> None:
-    """The new field is copied by position: its coordinates are not aligned with the field.
-
-    A new field with ascending latitude lands upside down on a field with descending latitude. In the workflow both
-    come out of CDO with the same Gaussian latitude order, so this does not happen; the test pins the behaviour.
-    """
+def test_replace_value_rejects_reversed_latitude() -> None:
+    """The new field is copied by position: a field with ascending latitude would land upside down, so it is refused."""
     field = grib_like_dataset("lsm")
-    ascending = xr.DataArray(
-        np.repeat(np.arange(LAT.size, dtype=float)[:, None], LON.size, axis=1),
-        dims=("lat", "lon"),
-        coords={"lat": LAT[::-1], "lon": LON},
+    ascending = xr.DataArray(np.zeros((LAT.size, LON.size)), dims=("lat", "lon"), coords={"lat": LAT[::-1], "lon": LON})
+    with pytest.raises(ValueError, match="'lat'"):
+        replace_value(field, var=["lsm"], newfield=ascending)
+
+
+def test_replace_value_rejects_other_grid_or_missing_coordinates() -> None:
+    field = grib_like_dataset("lsm")
+    shifted = xr.DataArray(np.zeros((LAT.size, LON.size)), dims=("lat", "lon"), coords={"lat": LAT, "lon": LON + 1.0})
+    with pytest.raises(ValueError, match="'lon'"):
+        replace_value(field, var=["lsm"], newfield=shifted)
+    with pytest.raises(ValueError, match="missing"):
+        replace_value(field, var=["lsm"], newfield=xr.DataArray(np.zeros((LAT.size, LON.size)), dims=("lat", "lon")))
+
+
+def test_replace_value_accepts_rounding_differences() -> None:
+    field = grib_like_dataset("lsm")
+    new = xr.DataArray(
+        np.ones((LAT.size, LON.size)), dims=("lat", "lon"), coords={"lat": LAT + 1e-9, "lon": LON - 1e-9}
     )
-    result = replace_value(field, var=["lsm"], newfield=ascending)
-    # first row of the result (lat=45) holds the first row of the new field (its lat=-45)
-    np.testing.assert_array_equal(result["lsm"].values[0, :, 0], [0.0, 1.0, 2.0, 3.0])
+    assert np.all(replace_value(field, var=["lsm"], newfield=new)["lsm"].values == 1.0)
 
 
 # --- regrid_dataset ------------------------------------------------------------------------------------------------

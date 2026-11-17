@@ -139,6 +139,8 @@ def test_rnfm_run_builds_arrival_and_calving(ctx: Context, monkeypatch: pytest.M
 
     monkeypatch.setattr(eoceneRNFM, "iter_track", fake_iter_track)
     monkeypatch.setattr(eoceneRNFM, "create_basin_data", fake_create_basin_data)
+    monkeypatch.setattr(eoceneRNFM, "NLAT", 2)  # the toy flow directions are on a 2 x 3 grid
+    monkeypatch.setattr(eoceneRNFM, "NLON", 3)
     EoceneRNFM.from_context(ctx).run()
 
     np.testing.assert_array_equal(calls["flowdir"], [[0, 3, 5], [1, 0, 7]])
@@ -153,6 +155,13 @@ def test_rnfm_run_builds_arrival_and_calving(ctx: Context, monkeypatch: pytest.M
     assert calls["final_file"] == ctx.expand(EoceneRNFM.writes[0])
     assert Path(calls["final_file"]).parent.is_dir()
     assert list(calls["target"].coords) == ["lat", "lon"]
+
+
+def test_rnfm_run_rejects_flow_directions_on_another_grid(ctx: Context) -> None:
+    """The river tracking assumes the 1-degree Herold grid: a 2 x 3 file is refused before tracking."""
+    write_rnfm_inputs(ctx)
+    with pytest.raises(ValueError, match=r"Step 'rnfm'.*\(180, 360\).*\(2, 3\)"):
+        EoceneRNFM.from_context(ctx).run()
 
 
 def basin_inputs():

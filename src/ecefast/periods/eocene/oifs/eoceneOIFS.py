@@ -111,6 +111,7 @@ class EoceneOIFS(ComponentStep):
 
         # interpolate toward oifs
         kind, spectral, _ = extract_grid_info(self.resolution)
+        self.spectral = spectral
         self.gaussian = spectral2gaussian(spectral, kind)
 
         # defining directories
@@ -120,11 +121,8 @@ class EoceneOIFS(ComponentStep):
         self.idir_climate = os.path.join(self.idir, "oifs", resolution, climate_version)
         self.odir_climate = os.path.join(self.odir, "oifs", resolution, climate_version)
 
-        # self.idir_amip = os.path.join(self.idir, 'amip-forcing')
-        # self.odir_amip = os.path.join(self.odir, 'amip-forcing')
-
         # create directories
-        for d in [self.odir_init, self.odir_climate]:  # self.odir_amip]:
+        for d in [self.odir_init, self.odir_climate]:
             if not os.path.exists(d):
                 os.makedirs(d)
 
@@ -284,72 +282,6 @@ class EoceneOIFS(ComponentStep):
 
         return lsm
 
-    def create_sic(self, value=0.0):
-        """
-        Create sea ice data for the Eocene OIFS.
-
-        Args:
-            value (float): Value to set for sea ice data.
-        """
-        # Create sea ice data
-        icefield = xr.open_dataset(
-            os.path.join(self.idir_amip, "siconcbcs_input4MIPs_SSTsAndSeaIce_CMIP_PCMDI-AMIP-1-1-3_gn_187001-201706.nc")
-        )
-        icefield["siconcbcs"] = icefield["siconcbcs"] * value
-        outfile = os.path.join(
-            self.odir_amip, "siconcbcs_input4MIPs_SSTsAndSeaIce_CMIP_PCMDI-AMIP-1-1-3_gn_187001-201706.nc"
-        )
-        if os.path.exists(outfile):
-            os.remove(outfile)
-        icefield.to_netcdf(outfile)
-
-    def create_sst(self, A=25, OFFSET=20, T0=5):
-        """
-        Generate a seasonal SST latitudinal pattern and save it to a netCDF file.
-        Broadcasts the pattern to match the original SST data shape.
-        The pattern is a cosine function of latitude with a phase offset for seasonal cycle
-        Parameters:
-        - A: Amplitude of the latitudinal SST pattern.
-        - OFFSET: Phase offset in degree for the seasonal pattern.
-        - T0: Mean temperature in Celcius.
-        """
-        inputfile = os.path.join(
-            self.idir_amip, "tosbcs_input4MIPs_SSTsAndSeaIce_CMIP_PCMDI-AMIP-1-1-3_gn_187001-201706.nc"
-        )
-        outputfile = os.path.join(
-            self.odir_amip, "tosbcs_input4MIPs_SSTsAndSeaIce_CMIP_PCMDI-AMIP-1-1-3_gn_187001-201706.nc"
-        )
-        sstfield = xr.open_dataset(inputfile)
-        sstfield["tosbcs"].shape
-        lons = sstfield["lon"].values
-        lats = sstfield["lat"].values
-        lon2d, lat2d = np.meshgrid(lons, lats)
-
-        # Sinusoidal parameters
-        A = 25  # Amplitude in degrees Celsius
-        # B = 5      # Amplitude in degrees Celsius
-        # beta = 45    # Phase shift in degrees
-        k_lat = np.pi / 180  # frequency in lat direction
-        # k_lon = np.pi / 180 * 4    # frequency in lon direction
-        T0 = 5  # Mean temperature
-        OFFSET = 20
-
-        seasonal = np.cos(np.linspace(0, 2 * np.pi, num=13))[:-1] * OFFSET
-
-        # Create sinusoidal SST pattern
-        sst_pattern = []
-        for phasing in seasonal:
-            sst_pattern.append(
-                A * np.pow(np.cos(k_lat * lat2d + np.pi / 180 * phasing), 2) + T0
-            )  # + B * np.sin(k_lon * lon2d + np.pi/180*beta) + T0
-        sst_stack = np.stack(sst_pattern, axis=0)
-        stacksize = sstfield["tosbcs"].shape[0]
-        sst_broadcast = np.tile(sst_stack, ((stacksize + 11) // 12, 1, 1))[:stacksize]
-        sstfield["tosbcs"].data = sst_broadcast
-        if os.path.exists(outputfile):
-            os.remove(outputfile)
-        sstfield.to_netcdf(outputfile)
-
     def create_climate(self, lsm_present, landsea):
         """
         Create the ICMCL data for the Eocene OIFS.
@@ -427,13 +359,14 @@ class EoceneOIFS(ComponentStep):
             inputfile=output_spectral,
             variables=["t", "d", "vo", "lnsp"],
             outputfile=output_spectral,
+            orig=self.spectral,
         )
 
     def create_init(self, lsm_present, landsea, sd_orog):
         """
         Create the ICMGGECE4INIT data for the Eocene OIFS.
         Replace landsea mask, modify subgrid orography and vegetation fields,
-        set soil type to 1.
+        set soil type to 2.
 
         Args:
             lsm_present: land-sea mask used for albedo computation.
@@ -546,7 +479,9 @@ class EoceneOIFS(ComponentStep):
         aer_ifs_pd = xr.open_dataset(aerfile_ifs_pd)
         aer_ifs_paleo = aer_ifs_pd.copy()
 
-        # Re-bin the Herold aerosol bins
+        # Re-bin the Herold aerosol bins (CAM4 BAM) to the IFS bins. Open question (issue #11): the split of bin 1
+        # (0.57 + 0.39) has no documented source and drops 4% of its mass, and sea salt reuses the dust split although
+        # its IFS bin edges differ (0.5 and 5 micron instead of 0.55 and 0.9). Sulfates keep the present-day values.
         aer_paleo_newbin = aer_paleo.copy()
         aer_paleo_newbin["DST01"] = aer_paleo["DST01"] * 0.57
         aer_paleo_newbin["DST02"] = aer_paleo["DST01"] * 0.39
