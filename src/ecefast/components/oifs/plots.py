@@ -1,23 +1,18 @@
 """Maps of the OIFS surface files of two EC-Earth trees, for ``ecefast <period> plot``.
 
-Each file is read from both trees on a regular grid (:func:`ecefast.core.plotting.load_grib`). A variable that
-differs gets one figure (reference, test, difference); monthly fields (``ICMCLECE4``) get two, the annual mean and
-the seasonal range (largest minus smallest month). Vegetation and soil types are drawn as classes, without a
-difference. Variables that do not differ are only listed in the summary.
+Each file is read from both trees on a regular grid (:func:`ecefast.core.plotting.load_grib`) and every variable
+that differs is drawn (:func:`ecefast.core.plotting.compare_datasets`); the spectral initial state only as
+orography. Vegetation and soil types are drawn as classes, without a difference.
 """
 
-import logging
 import os
 
-import numpy as np
 import xarray as xr
 
 from ecefast.core.layout import oifs_initial_dir
-from ecefast.core.plotting import load_grib, plot_comparison, save_figure
+from ecefast.core.plotting import compare_datasets, load_grib
 
 from .land_cover import land_cover_types, soil_types
-
-logger = logging.getLogger(__name__)
 
 # standard gravity (m s-2), WMO; the IFS constant RG: surface geopotential z / g = orography
 STANDARD_GRAVITY = 9.80665
@@ -69,42 +64,11 @@ def read_land(path: str) -> xr.DataArray:
     return load_grib(path, ["lsm"])["lsm"].squeeze(drop=True)
 
 
-def _with_attrs(field: xr.DataArray, like: xr.DataArray) -> xr.DataArray:
-    field.attrs = dict(like.attrs)
-    return field
-
-
 def _orography(ds: xr.Dataset) -> xr.Dataset:
     """Surface geopotential ``z`` (m2 s-2) as orography (m)."""
-    orography = _with_attrs(ds["z"] / STANDARD_GRAVITY, ds["z"])
-    orography.attrs.update(units="m", long_name="orography (z / g)")
+    orography = ds["z"] / STANDARD_GRAVITY
+    orography.attrs = dict(ds["z"].attrs) | {"units": "m", "long_name": "orography (z / g)"}
     return xr.Dataset({"orography": orography})
-
-
-def _time_dim(field: xr.DataArray) -> str | None:
-    """The dimension of a monthly field (more than one time step), or None."""
-    return next((dim for dim in field.dims if "time" in dim and field.sizes[dim] > 1), None)
-
-
-def _panels(field: xr.DataArray) -> dict[str, xr.DataArray]:
-    """The 2D maps of a field: itself, or the annual mean and seasonal range of a monthly field. A field with
-    layers (e.g. the snow layers of ``sd``) is drawn at its first layer."""
-    time = _time_dim(field)
-    layers = [dim for dim in field.dims if dim != time and dim not in ("lat", "lon") and field.sizes[dim] > 1]
-    field = _with_attrs(field.isel({dim: 0 for dim in layers}), field)
-    if time is None:
-        return {"": field}
-    mean = _with_attrs(field.mean(time), field)
-    spread = _with_attrs(field.max(time) - field.min(time), field)
-    return {"mean": mean, "range": spread}
-
-
-def _title(name: str, field: xr.DataArray, file: str, panel: str) -> str:
-    long_name = field.attrs.get("long_name", "")
-    what = {"mean": ", annual mean", "range": ", seasonal range (largest - smallest month)"}.get(panel, "")
-    layers = [dim for dim in field.dims if "time" not in dim and dim not in ("lat", "lon") and field.sizes[dim] > 1]
-    first = f", first {layers[0]} layer" if layers else ""
-    return f"{name}{f' ({long_name})' if long_name else ''}{what}{first}: {file}"
 
 
 def compare_file(
@@ -115,7 +79,7 @@ def compare_file(
     labels: tuple[str, str],
     land: tuple[xr.DataArray, xr.DataArray] | None = None,
 ) -> dict:
-    """Draw every variable of an OIFS file that differs between two trees.
+    """Draw every variable of an OIFS file that differs between two trees (:func:`ecefast.core.plotting.compare_datasets`).
 
     Parameters
     ----------
@@ -134,50 +98,15 @@ def compare_file(
     Returns
     -------
     dict
-        For ``summary.yml``: ``changed`` (variable: largest absolute difference), ``unchanged``, and the variables
-        found in one tree only (``only_in_reference``, ``only_in_test``).
+        The summary of :func:`ecefast.core.plotting.compare_datasets`.
     """
     names = SPECTRAL_FIELDS if name == "ICMSHECE4INIT" else None
     reference, test = load_grib(reference_path, names), load_grib(test_path, names)
     if names:
         reference, test = _orography(reference), _orography(test)
-    summary: dict = {
-        "changed": {},
-        "unchanged": [],
-        "only_in_reference": sorted(set(reference.data_vars) - set(test.data_vars)),
-        "only_in_test": sorted(set(test.data_vars) - set(reference.data_vars)),
-    }
-    same_surface = None
-    if land is not None:
-        same_surface = (land[0] > LAND_THRESHOLD) == (land[1] > LAND_THRESHOLD)
-    for variable in [v for v in test.data_vars if v in reference.data_vars]:
-        before, after = reference[variable], test[variable]
-        if before.shape != after.shape:
-            logger.warning("Plots: %s of %s has different shapes in the two trees, not drawn", variable, name)
-            continue
-        if np.allclose(before.values, after.values, equal_nan=True):
-            summary["unchanged"].append(variable)
-            continue
-        summary["changed"][variable] = round(float(np.nanmax(np.abs(after.values - before.values))), 6)
-        before_maps, after_maps = _panels(before), _panels(after)
-        for panel in before_maps:
-            ref_map, test_map = before_maps[panel], after_maps[panel]
-            if ref_map.squeeze(drop=True).ndim != 2:
-                logger.warning("Plots: %s of %s is not a 2D field (%s), not drawn", variable, name, ref_map.dims)
-                break
-            on_plot_grid = land is not None and ref_map.squeeze(drop=True).shape == land[0].shape
-            fig = plot_comparison(
-                ref_map,
-                test_map,
-                labels,
-                _title(variable, after, name, panel),
-                same_surface=same_surface if on_plot_grid and variable not in CLASS_FIELDS else None,
-                outlines=land if land is not None else (None, None),
-                categories=CLASS_FIELDS.get(variable),
-            )
-            save_figure(fig, os.path.join(out_dir, name, f"{variable}{f'_{panel}' if panel else ''}.png"))
-    logger.info("Plots: %s, %d variables differ, %d do not", name, len(summary["changed"]), len(summary["unchanged"]))
-    return summary
+    same_surface = None if land is None else (land[0] > LAND_THRESHOLD) == (land[1] > LAND_THRESHOLD)
+    outlines = land if land is not None else (None, None)
+    return compare_datasets(reference, test, name, out_dir, labels, same_surface, outlines, CLASS_FIELDS)
 
 
 def compare_oifs(reference_files: dict[str, str], test_files: dict[str, str], out_dir: str, labels: tuple[str, str]):

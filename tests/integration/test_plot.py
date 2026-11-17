@@ -22,6 +22,11 @@ from ecefast.periods.plots import SUMMARY_FILE
 pytestmark = pytest.mark.integration
 
 DOMAIN = READ_WRITERS["{input}/nemo/domain/{grids.nemo.name}/domain_cfg.nc"]
+ZDFIWM = ["power_bot", "power_cri", "power_nsq", "power_sho", "scale_cri", "scale_bot", "bathymetry"]
+FORCING = {
+    "nemo/initial/Goutorbe_ghflux.nc": READ_WRITERS["{input}/nemo/initial/Goutorbe_ghflux.nc"],
+    "nemo/initial/zdfiwm_forcing_r720x360.nc": READ_WRITERS["{input}/nemo/initial/zdfiwm_forcing_r720x360.nc"],
+}
 
 
 def write_config(root: Path) -> Path:
@@ -46,6 +51,18 @@ def write_domain(tree: Path, grid: str = "PALEORCA2") -> None:
     path = tree / "nemo" / "domain" / grid / "domain_cfg.nc"
     path.parent.mkdir(parents=True, exist_ok=True)
     DOMAIN(path)
+
+
+def write_forcing(tree: Path, factor: float = 1.0) -> None:
+    """The NEMO forcing files (geothermal heat flux, tidal mixing) of ``tree``, their values times ``factor``."""
+    for relative, writer in FORCING.items():
+        path = tree / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        writer(path)
+        if factor != 1.0:
+            with xr.open_dataset(path) as ds:
+                scaled = (ds * factor).load()
+            scaled.to_netcdf(path)
 
 
 def write_herold(root: Path) -> None:
@@ -92,9 +109,11 @@ def log(caplog: pytest.LogCaptureFixture) -> pytest.LogCaptureFixture:
 
 @pytest.fixture
 def trees(tmp_path: Path, monkeypatch) -> Path:
-    """Input and Eocene output trees with a domain and OIFS files, and the Herold bathymetry."""
+    """Input and Eocene output trees with a domain, NEMO forcing and OIFS files, and the Herold bathymetry."""
     write_domain(tmp_path / "input")
     write_domain(tmp_path / "out")
+    write_forcing(tmp_path / "input")
+    write_forcing(tmp_path / "out", factor=2.0)
     write_herold(tmp_path)
     datasets = write_oifs(tmp_path / "input", 0.1) | write_oifs(tmp_path / "out", 0.3)
     monkeypatch.setattr(
@@ -117,10 +136,15 @@ def test_eocene_plot_all_groups(trees: Path):
     assert set(summary["coupling"]) == {"land_in_both", "ocean_in_both", "ocean_only_in_test", "ocean_only_in_other"}
     assert summary["oifs"]["ICMGGECE4INIT"]["changed"] == {"al": 0.2}
     assert summary["oifs"]["ICMSHECE4INIT"]["unchanged"] == ["orography"]
+    forcing = nemo["forcing"]
+    assert forcing["Goutorbe_ghflux"]["changed"] == {"gh_flux": 80.0}
+    assert list(forcing["zdfiwm_forcing_r720x360"]["changed"]) == ZDFIWM
     figures = sorted(str(p.relative_to(out)) for p in out.rglob("*.png"))
     assert figures == [
         "coupling/oifs_lsm_vs_nemo.png",
         "nemo/domain.png",
+        "nemo/forcing/Goutorbe_ghflux/gh_flux.png",
+        *(f"nemo/forcing/zdfiwm_forcing_r720x360/{name}.png" for name in sorted(ZDFIWM)),
         "nemo/vs_reference_PALEORCA2.png",
         "nemo/vs_source.png",
         "oifs/ICMCLECE4/al_mean.png",
@@ -132,6 +156,7 @@ def test_eocene_plot_all_groups(trees: Path):
 def test_eocene_plot_with_another_reference(trees: Path):
     other = trees / "other"
     write_domain(other)
+    write_forcing(other)
     main(["eocene", "plot", "-c", str(trees / "config.yml"), "-o", str(trees / "plots"), "--reference", str(other),
           "--only", "nemo"])  # fmt: skip
     summary = yaml.safe_load((trees / "plots" / SUMMARY_FILE).read_text())
@@ -142,6 +167,7 @@ def test_eocene_plot_with_another_reference(trees: Path):
 
 def test_present_plot_compares_every_domain_of_the_reference(trees: Path):
     write_domain(trees / "present")
+    write_forcing(trees / "present")
     write_domain(trees / "input", "ORCA2")
     main(["present", "plot", "-c", str(trees / "config.yml"), "-o", str(trees / "plots"), "--only", "nemo"])
     summary = yaml.safe_load((trees / "plots" / SUMMARY_FILE).read_text())

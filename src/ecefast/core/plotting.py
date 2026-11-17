@@ -28,6 +28,8 @@ REGULAR_GRID = "r360x181"
 DPI = 150
 # latitudes drawn as thin contours on maps in index space, for orientation
 LATITUDE_CONTOURS = [-60, -30, 0, 30, 60]
+# percentiles of the colour scales of a robust comparison (fields with a few very large values)
+ROBUST_PERCENTILES = (2, 98)
 
 
 def save_figure(fig: Figure, path: str | os.PathLike) -> None:
@@ -258,11 +260,13 @@ def draw_categories(
     return mappable
 
 
-def symmetric_limit(values: np.ndarray | xr.DataArray) -> float:
-    """Largest absolute finite value, for a colour scale centred on 0 (1 if there is none, or all are 0)."""
+def symmetric_limit(values: np.ndarray | xr.DataArray, percentile: float = 100) -> float:
+    """Largest absolute finite value (or its ``percentile``), for a colour scale centred on 0; 1 if there is none,
+    or it is 0."""
     values = np.asarray(values, dtype=float)
-    finite = values[np.isfinite(values)]
-    return float(np.abs(finite).max()) if finite.size and np.abs(finite).max() > 0 else 1.0
+    finite = np.abs(values[np.isfinite(values)])
+    limit = float(np.percentile(finite, percentile)) if finite.size else 0.0
+    return limit or 1.0
 
 
 def plot_comparison(
@@ -273,6 +277,7 @@ def plot_comparison(
     same_surface: xr.DataArray | None = None,
     outlines: tuple[xr.DataArray | None, xr.DataArray | None] = (None, None),
     categories: dict[int, tuple[str, str]] | None = None,
+    robust: bool = False,
     **kwargs,
 ) -> Figure:
     """Plot a field of two trees side by side with the same colour scale, and their difference.
@@ -293,6 +298,9 @@ def plot_comparison(
     categories : dict, optional
         ``{value: (label, colour)}`` of a class field (vegetation type): two panels with a labelled colour bar,
         no difference.
+    robust : bool
+        Colour scales from the 2nd and 98th percentiles (``ROBUST_PERCENTILES``) instead of the extremes, for
+        fields with a few very large values (tidal power).
     **kwargs
         Passed to the drawing of the two fields (``cmap``, ``vmin``, ``vmax``). By default ``vmin`` and ``vmax``
         span both fields.
@@ -320,8 +328,10 @@ def plot_comparison(
         fig.suptitle(title)
         return fig
 
-    kwargs.setdefault("vmin", float(min(reference.min(), test.min())))
-    kwargs.setdefault("vmax", float(max(reference.max(), test.max())))
+    both = np.concatenate([np.ravel(reference.values), np.ravel(test.values)])
+    low, high = ROBUST_PERCENTILES if robust else (0, 100)
+    kwargs.setdefault("vmin", float(np.nanpercentile(both, low)))
+    kwargs.setdefault("vmax", float(np.nanpercentile(both, high)))
     fig, axes = new_figure(3)
     for ax, field, label, outline in zip(axes, (reference, test), labels, outlines):
         draw_field(fig, ax, field, label, **kwargs)
@@ -330,9 +340,126 @@ def plot_comparison(
     difference.attrs["units"] = test.attrs.get("units", "")
     if same_surface is not None:
         difference = difference.where(same_surface.squeeze(drop=True))
-    limit = symmetric_limit(difference)
+    limit = symmetric_limit(difference, high if robust else 100)
     suffix = " (same surface type)" if same_surface is not None else ""
     draw_field(fig, axes[2], difference, f"{labels[1]} - {labels[0]}{suffix}", cmap="RdBu_r", vmin=-limit, vmax=limit)
     draw_outline(axes[2], outlines[1])
     fig.suptitle(title)
     return fig
+
+
+def _with_attrs(field: xr.DataArray, like: xr.DataArray) -> xr.DataArray:
+    field.attrs = dict(like.attrs)
+    return field
+
+
+def _time_dim(field: xr.DataArray) -> str | None:
+    """The dimension of a monthly field (more than one time step), or None."""
+    return next((dim for dim in field.dims if "time" in dim and field.sizes[dim] > 1), None)
+
+
+def _layer_dims(field: xr.DataArray) -> list[str]:
+    """Dimensions other than time and the two horizontal ones (the last two) with more than one value."""
+    time = _time_dim(field)
+    return [dim for dim in field.dims[:-2] if dim != time and field.sizes[dim] > 1]
+
+
+def _maps(field: xr.DataArray) -> dict[str, xr.DataArray]:
+    """The 2D maps of a field: itself, or the annual mean and seasonal range of a monthly field. A field with
+    layers (e.g. the snow layers of ``sd``) is drawn at its first layer."""
+    time = _time_dim(field)
+    field = _with_attrs(field.isel({dim: 0 for dim in _layer_dims(field)}), field)
+    if time is None:
+        return {"": field}
+    return {
+        "mean": _with_attrs(field.mean(time), field),
+        "range": _with_attrs(field.max(time) - field.min(time), field),
+    }
+
+
+def _map_title(name: str, field: xr.DataArray, file: str, panel: str) -> str:
+    long_name = field.attrs.get("long_name", "")
+    what = {"mean": ", annual mean", "range": ", seasonal range (largest - smallest month)"}.get(panel, "")
+    layers = _layer_dims(field)
+    first = f", first {layers[0]} layer" if layers else ""
+    return f"{name}{f' ({long_name})' if long_name else ''}{what}{first}: {file}"
+
+
+def compare_datasets(
+    reference: xr.Dataset,
+    test: xr.Dataset,
+    name: str,
+    out_dir: str,
+    labels: tuple[str, str],
+    same_surface: xr.DataArray | None = None,
+    outlines: tuple[xr.DataArray | None, xr.DataArray | None] = (None, None),
+    categories: dict[str, dict[int, tuple[str, str]]] | None = None,
+    robust: bool = False,
+) -> dict:
+    """Draw every variable of a file that differs between two trees (:func:`plot_comparison`).
+
+    Monthly fields (more than one time step) get two figures, the annual mean and the seasonal range (largest minus
+    smallest month); fields with layers are drawn at their first layer. Variables that do not differ are only
+    listed in the summary.
+
+    Parameters
+    ----------
+    reference, test : xarray.Dataset
+        The file in the two trees, read on the same grid.
+    name : str
+        Name of the file: the figures go to ``<out_dir>/<name>/<variable>[_mean|_range].png``.
+    out_dir : str
+        Folder of the figures.
+    labels : tuple of str
+        Names of the reference and test trees.
+    same_surface : xarray.DataArray, optional
+        Where both trees have the same surface type: the difference is shown only there, for the fields on its
+        grid that are not classes.
+    outlines : tuple of xarray.DataArray or None
+        Land fraction of each tree, drawn as coastlines.
+    categories : dict, optional
+        ``{variable: {value: (label, colour)}}`` of the class fields.
+    robust : bool
+        Colour scales from percentiles (see :func:`plot_comparison`).
+
+    Returns
+    -------
+    dict
+        For ``summary.yml``: ``changed`` (variable: largest absolute difference), ``unchanged``, and the variables
+        found in one tree only (``only_in_reference``, ``only_in_test``).
+    """
+    categories = categories or {}
+    summary: dict = {
+        "changed": {},
+        "unchanged": [],
+        "only_in_reference": sorted(set(reference.data_vars) - set(test.data_vars)),
+        "only_in_test": sorted(set(test.data_vars) - set(reference.data_vars)),
+    }
+    for variable in [v for v in test.data_vars if v in reference.data_vars]:
+        before, after = reference[variable], test[variable]
+        if before.shape != after.shape:
+            logger.warning("Plots: %s of %s has different shapes in the two trees, not drawn", variable, name)
+            continue
+        if np.allclose(before.values, after.values, equal_nan=True):
+            summary["unchanged"].append(variable)
+            continue
+        summary["changed"][variable] = round(float(np.nanmax(np.abs(after.values - before.values))), 6)
+        before_maps, after_maps = _maps(before), _maps(after)
+        for panel, ref_map in before_maps.items():
+            if ref_map.squeeze(drop=True).ndim != 2:
+                logger.warning("Plots: %s of %s is not a 2D field (%s), not drawn", variable, name, ref_map.dims)
+                break
+            on_grid = same_surface is not None and ref_map.squeeze(drop=True).shape == same_surface.shape
+            fig = plot_comparison(
+                ref_map,
+                after_maps[panel],
+                labels,
+                _map_title(variable, after, name, panel),
+                same_surface=same_surface if on_grid and variable not in categories else None,
+                outlines=outlines,
+                categories=categories.get(variable),
+                robust=robust,
+            )
+            save_figure(fig, os.path.join(out_dir, name, f"{variable}{f'_{panel}' if panel else ''}.png"))
+    logger.info("Plots: %s, %d variables differ, %d do not", name, len(summary["changed"]), len(summary["unchanged"]))
+    return summary

@@ -7,6 +7,7 @@ import pytest
 import xarray as xr
 
 from ecefast.components.nemo.bathymetry import BathymetryProcessor
+from ecefast.core.steps import PipelineError
 from ecefast.components.nemo.plots import (
     BOTH_LAND,
     BOTH_OCEAN,
@@ -17,8 +18,10 @@ from ecefast.components.nemo.plots import (
     PASSAGE,
     Domain,
     agreement_counts,
+    compare_forcing,
     domain_classes,
     domain_summary,
+    forcing_files,
     mask_agreement,
     ocean_at,
     ocean_basins,
@@ -151,6 +154,61 @@ def test_read_domain(tmp_path: Path):
     np.testing.assert_array_equal(test.ocean, bottom > 0)
     assert np.isnan(test.depth.values[0, 0]) and test.depth.values[0, 1] == 100.0
     assert test.depth.attrs["units"] == "m"
+
+
+@pytest.mark.parametrize("name", ["Bathymetry", "bathymetry"])
+def test_read_domain_other_bathymetry_names(tmp_path: Path, name: str):
+    """A bathymetry file (``bathy_meter.nc`` style): other depth name, ``nav_lon``/``nav_lat``, no
+    ``bottom_level``: ocean where the depth is above 0."""
+    lon, lat = grid(2, 3)
+    path = tmp_path / "bathy_meter.nc"
+    xr.Dataset(
+        {
+            "nav_lon": (("y", "x"), lon),
+            "nav_lat": (("y", "x"), lat),
+            name: (("t", "y", "x"), np.array([[[0.0, 50.0, np.nan], [10.0, 0.0, 4000.0]]])),
+        }
+    ).to_netcdf(path)
+    test = read_domain(str(path), "test")
+    np.testing.assert_array_equal(test.ocean, [[False, True, False], [True, False, True]])
+    np.testing.assert_array_equal(test.lon, lon)
+    assert test.depth.values[1, 2] == 4000.0
+
+
+def test_read_domain_without_bathymetry(tmp_path: Path):
+    lon, lat = grid(2, 3)
+    path = tmp_path / "domain_cfg.nc"
+    xr.Dataset({"glamt": (("y", "x"), lon), "gphit": (("y", "x"), lat)}).to_netcdf(path)
+    with pytest.raises(PipelineError, match="no bathymetry variable .looked for bathy_metry, Bathymetry"):
+        read_domain(str(path), "test")
+
+
+def test_forcing_files():
+    assert forcing_files("/tree") == {
+        "Goutorbe_ghflux": "/tree/nemo/initial/Goutorbe_ghflux.nc",
+        "zdfiwm_forcing_r720x360": "/tree/nemo/initial/zdfiwm_forcing_r720x360.nc",
+    }
+
+
+def test_compare_forcing(tmp_path: Path):
+    coords = {"lat": [-45.0, 45.0], "lon": [0.0, 120.0, 240.0]}
+    trees = {}
+    for tree, power in (("ref", 1e-3), ("test", 0.0)):
+        trees[tree] = {}
+        for name in ("Goutorbe_ghflux", "zdfiwm_forcing_r720x360"):
+            path = tmp_path / tree / f"{name}.nc"
+            path.parent.mkdir(exist_ok=True)
+            values = (
+                {"gh_flux": np.full((2, 3), 80.0)}
+                if name == "Goutorbe_ghflux"
+                else {"power_bot": np.full((2, 3), power)}
+            )
+            xr.Dataset({k: (("lat", "lon"), v) for k, v in values.items()}, coords=coords).to_netcdf(path)
+            trees[tree][name] = str(path)
+    summary = compare_forcing(trees["ref"], trees["test"], str(tmp_path / "plots"), ("reference", "eocene"))
+    assert summary["Goutorbe_ghflux"]["unchanged"] == ["gh_flux"]
+    assert summary["zdfiwm_forcing_r720x360"]["changed"] == {"power_bot": 0.001}
+    assert [p.name for p in (tmp_path / "plots").rglob("*.png")] == ["power_bot.png"]
 
 
 class Elevation(BathymetryProcessor):

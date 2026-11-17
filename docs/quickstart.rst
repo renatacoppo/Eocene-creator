@@ -215,6 +215,10 @@ trees, with ``summary.yml`` holding the numbers, so two runs can be compared at 
        reference tree: on the same grid the cells that change and the depth difference, on another
        grid (present day: ORCA2, eORCA1) the reference mask at the nearest point.
        ``nemo/vs_source.png`` (Eocene): the mask against the Herold et al. (2014) bathymetry.
+       ``nemo/forcing/<file>/<variable>.png``: the geothermal heat flux (``Goutorbe_ghflux.nc``)
+       and the tidal mixing forcing (``zdfiwm_forcing_r720x360.nc``) of ``nemo/initial`` that
+       differ from the reference, with colour scales from the 2nd and 98th percentiles. The depth
+       is read as ``bathy_metry``, ``Bathymetry`` or ``bathymetry``, whichever the file has.
    * - ``oifs``
      - ``oifs/<file>/<variable>.png``: every variable of ``ICMGGECE4INIT``, ``ICMSHECE4INIT``
        (orography), ``ICMCLECE4`` (annual mean and seasonal range) and ``bare_soil_albedos.grb``

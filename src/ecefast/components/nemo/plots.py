@@ -8,11 +8,14 @@
 - **Land-sea mask comparisons** of a domain with another domain on the same grid (cells that change, depth
   differences), or with any field on another grid (another NEMO domain, the source of a bathymetry, the OIFS
   land-sea mask), sampled at the domain's T points from the nearest point.
+- **Forcing files** (``FORCING_FILES``): the geothermal heat flux and the tidal mixing forcing of two trees,
+  every variable that differs.
 
 Maps are in index space (``x``, ``y``), so a cell can be found in the domain, with latitude contours for
 orientation.
 """
 
+import os
 from dataclasses import dataclass
 
 import numpy as np
@@ -21,9 +24,25 @@ from matplotlib.figure import Figure
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 
-from ecefast.core.plotting import draw_categories, draw_field, new_figure, sample_nearest, symmetric_limit
+from ecefast.core.plotting import (
+    compare_datasets,
+    draw_categories,
+    draw_field,
+    new_figure,
+    sample_nearest,
+    symmetric_limit,
+)
+from ecefast.core.steps import PipelineError
 
 from .bathymetry.base import BathymetryProcessor
+
+# names of the depth (m) in NEMO domain and bathymetry files, in order of preference: domain_cfg.nc, bathy_meter.nc
+BATHYMETRY_NAMES = ("bathy_metry", "Bathymetry", "bathymetry")
+# names of the T-point longitude and latitude, in order of preference: domain_cfg.nc, bathymetry files
+COORDINATE_NAMES = (("glamt", "gphit"), ("nav_lon", "nav_lat"))
+# NEMO forcing files compared by the plots, relative to a tree: the geothermal heat flux at the sea floor and the
+# forcing of the internal-wave-driven (tidal) mixing, zdfiwm
+FORCING_FILES = ("nemo/initial/Goutorbe_ghflux.nc", "nemo/initial/zdfiwm_forcing_r720x360.nc")
 
 # Sign of an ocean value of each MASK_PRESETS convention (bathymetry/base.py): depth > 0, elevation < 0
 OCEAN_SIGN = {"positive_depth": 1, "negative_elevation": -1}
@@ -72,13 +91,25 @@ class Domain:
     depth: xr.DataArray
 
 
+def _first(ds: xr.Dataset, names: tuple[str, ...], path: str, what: str) -> str:
+    """The first of ``names`` that ``ds`` holds."""
+    found = next((name for name in names if name in ds), None)
+    if found is None:
+        raise PipelineError(f"{path}: no {what} variable (looked for {', '.join(names)})")
+    return found
+
+
 def read_domain(path: str, label: str) -> Domain:
-    """Read the T-point coordinates, ocean mask and depth of a NEMO ``domain_cfg.nc``.
+    """Read the T-point coordinates, ocean mask and depth of a NEMO domain file.
+
+    The depth is the first of ``BATHYMETRY_NAMES`` in the file, the coordinates the first pair of
+    ``COORDINATE_NAMES``. Ocean columns are those with ``bottom_level > 0``, or with a depth above 0 in a file
+    without ``bottom_level`` (a bathymetry file).
 
     Parameters
     ----------
     path : str
-        The ``domain_cfg.nc``.
+        The ``domain_cfg.nc`` (or a bathymetry file on the domain's grid).
     label : str
         Name of the domain in titles and in the summary.
 
@@ -86,13 +117,23 @@ def read_domain(path: str, label: str) -> Domain:
     -------
     Domain
         The domain.
+
+    Raises
+    ------
+    PipelineError
+        If the file has no depth or coordinate variable of a known name.
     """
     with xr.open_dataset(path) as ds:
-        ds = ds[["glamt", "gphit", "bottom_level", "bathy_metry"]].squeeze(drop=True).load()
-    ocean = ds.bottom_level.values > 0
-    depth = ds.bathy_metry.where(ocean)
-    depth.attrs["units"] = "m"
-    return Domain(label, path, ds.glamt.values, ds.gphit.values, ocean, depth)
+        depth_name = _first(ds, BATHYMETRY_NAMES, path, "bathymetry")
+        lon_name = _first(ds, tuple(lon for lon, _ in COORDINATE_NAMES), path, "longitude")
+        lat_name = dict(COORDINATE_NAMES)[lon_name]
+        names = [lon_name, lat_name, depth_name] + (["bottom_level"] if "bottom_level" in ds else [])
+        ds = ds[names].squeeze(drop=True).load()
+    depth = ds[depth_name].fillna(0.0)
+    ocean = ds.bottom_level.values > 0 if "bottom_level" in ds else depth.values > 0
+    depth = depth.where(ocean).rename("bathy_metry")
+    depth.attrs = {"units": "m"}
+    return Domain(label, path, ds[lon_name].values, ds[lat_name].values, ocean, depth)
 
 
 def source_ocean(processor: type[BathymetryProcessor], path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -344,3 +385,39 @@ def plot_same_grid(domain: Domain, other: Domain) -> tuple[Figure, dict[str, int
     finite = difference.values[np.isfinite(difference.values)]
     largest = float(np.abs(finite).max()) if finite.size else 0.0
     return fig, agreement_counts(agreement) | {"largest_depth_difference": round(largest, 2)}
+
+
+def forcing_files(tree: str) -> dict[str, str]:
+    """The NEMO forcing files of a tree that the plots compare, ``{name: path}`` (name: file name without ``.nc``)."""
+    return {os.path.splitext(os.path.basename(f))[0]: os.path.join(tree, f) for f in FORCING_FILES}
+
+
+def compare_forcing(
+    reference_files: dict[str, str], test_files: dict[str, str], out_dir: str, labels: tuple[str, str]
+) -> dict:
+    """Draw every variable of the NEMO forcing files that differs between two trees.
+
+    The colour scales come from percentiles: the tidal mixing power has a few very large values.
+
+    Parameters
+    ----------
+    reference_files, test_files : dict
+        The files of the two trees (:func:`forcing_files`).
+    out_dir : str
+        Folder of the figures: ``<out_dir>/<name>/<variable>.png``.
+    labels : tuple of str
+        Names of the reference and test trees.
+
+    Returns
+    -------
+    dict
+        ``{name: summary}`` (:func:`ecefast.core.plotting.compare_datasets`).
+    """
+    summary = {}
+    for name, test_path in test_files.items():
+        with (
+            xr.open_dataset(reference_files[name], decode_times=False) as reference,
+            xr.open_dataset(test_path, decode_times=False) as test,
+        ):
+            summary[name] = compare_datasets(reference.load(), test.load(), name, out_dir, labels, robust=True)
+    return summary

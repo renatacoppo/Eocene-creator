@@ -62,6 +62,16 @@ def test_plot_comparison_categories_without_difference():
     assert labels == ["none", "forest"]  # only the classes found in the fields
 
 
+def test_plot_comparison_robust_scales():
+    """Robust scales ignore a few very large values (2nd and 98th percentiles)."""
+    values = np.linspace(0.0, 1.0, 100).reshape(4, 25)
+    values[0, 0] = 1000.0
+    fig = plot_comparison(field(np.zeros((4, 25))), field(values), robust=True)
+    maps = [ax for ax in fig.axes if ax.get_title()]
+    assert maps[0].collections[0].get_clim()[1] < 2.0
+    assert maps[2].collections[0].get_clim()[1] < 2.0
+
+
 def test_plot_comparison_rejects_3d():
     cube = xr.DataArray(np.zeros((2, 3, 4)), dims=("z", "y", "x"))
     with pytest.raises(ValueError, match="expected 2"):
@@ -79,6 +89,7 @@ def test_sample_nearest_between_grids_across_the_dateline():
 
 def test_symmetric_limit():
     assert symmetric_limit(np.array([-3.0, 2.0, np.nan])) == 3.0
+    assert symmetric_limit(np.array([-3.0, 1.0, 1.0, 1.0, 1.0]), 50) == 1.0
     assert symmetric_limit(np.array([np.nan])) == 1.0
     assert symmetric_limit(np.zeros(3)) == 1.0
 

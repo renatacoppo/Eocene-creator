@@ -9,7 +9,8 @@ Groups, each in its own folder of the plot directory:
 
 - ``nemo``: the depth, basins and one-cell passages of the NEMO domain; its land-sea mask compared with the
   reference domains (on the same grid: the cells that change and the depth difference; on another grid: sampled
-  at the domain's cells) and with the source of its bathymetry.
+  at the domain's cells) and with the source of its bathymetry; the geothermal heat flux and the tidal mixing
+  forcing (``nemo/initial``) that differ from the reference.
 - ``oifs``: the OIFS surface files (initial state and climate files) that differ from the reference.
 - ``coupling``: the OIFS land-sea mask against the NEMO ocean mask of the test tree.
 
@@ -28,8 +29,10 @@ import yaml
 from ecefast import __version__
 from ecefast.components.nemo.bathymetry import BathymetryProcessor
 from ecefast.components.nemo.plots import (
+    compare_forcing,
     domain_classes,
     domain_summary,
+    forcing_files,
     ocean_at,
     plot_agreement,
     plot_domain,
@@ -128,7 +131,9 @@ def plot_period(
     test_oifs = oifs_files(test, oifs.name, oifs.startdate, oifs.climate_version)
     reference_oifs = oifs_files(reference, oifs.name, oifs.startdate, oifs.climate_version)
     needed = {
-        "nemo": [test_domain, *reference_domains] + ([source[1]] if source else []),
+        "nemo": [test_domain, *reference_domains]
+        + ([source[1]] if source else [])
+        + [*forcing_files(test).values(), *forcing_files(reference).values()],
         "oifs": [*test_oifs.values(), *reference_oifs.values()],
         "coupling": [test_domain, test_oifs["ICMGGECE4INIT"]],
     }
@@ -150,6 +155,9 @@ def plot_period(
     domain = read_domain(test_domain, f"{ctx.period} {grid}") if {"nemo", "coupling"} & set(groups) else None
     if "nemo" in groups:
         summary["nemo"] = plot_nemo(domain, os.path.join(out_dir, "nemo"), reference_domains, grid, source)
+        summary["nemo"]["forcing"] = compare_forcing(
+            forcing_files(reference), forcing_files(test), os.path.join(out_dir, "nemo", "forcing"), labels
+        )
     if "coupling" in groups:
         summary["coupling"] = plot_coupling(domain, test_oifs["ICMGGECE4INIT"], os.path.join(out_dir, "coupling"))
     if "oifs" in groups:
