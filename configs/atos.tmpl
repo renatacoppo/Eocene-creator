@@ -14,7 +14,8 @@ schema: 2                       # configuration schema version (required)
 # data_version: v1              # version of the generated data. v1 = the data of the existing experiments
                                 # (PALEORCA2 domains of ECE4-DATA-V3 / PALEORCA2-definitive). It needs CDO 2.5.x:
                                 # another CDO moves land-sea mask cells of the NEMO bathymetries, so the run stops
-                                # (on Atos: module load cdo/2.5.3). v2 is not supported yet.
+                                # (on Atos: module load cdo/2.5.3). v2 = NEMO bathymetries from geography rules instead of
+                                # manual corrections (issue #58); it needs CDO 2.6.x.
 
 machine:
   name: atos                    # where DOMAINcfg runs: atos (here), local (laptop, not available) or fake (tests)
@@ -50,7 +51,8 @@ present:
       gridpoint: false                # remap ICMGGECE4INIT, ICMGGECE4INIUA
       boundary: false                 # climate file ICMCLECE4
   nemo:                               # present-day NEMO domain, bathymetry of {input}/nemo/domain/<source_grid>/
-    source_grid: eORCA1               # NEMO grid of the present-day bathymetry (needs strait corrections for it)
+    # source_grid: eORCA1             # NEMO grid of the present-day bathymetry; default eORCA1 in v1 (with its
+                                      # strait corrections), ORCA2 in v2 (geography rules)
     # source_staggering: T            # staggering of its coordinate bounds (used in setgrid), T or F
     minimum_depth: 30                 # m; depths 0 < d < minimum_depth are raised to it (required)
     steps:                            # on Atos the whole pipeline runs, DOMAINcfg included

@@ -17,7 +17,7 @@ from ecefast.core.cdo import get_cdo
 from ecefast.periods.eocene.bathymetry import BATHYMETRIES as EOCENE, EoceneBathymetry, EoceneBathymetryV2
 from ecefast.periods.present.bathymetry import BATHYMETRIES as PRESENT, PresentDayBathymetry, PresentDayBathymetryV2
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.data_v2]
 
 GRID = "TARGET"
 

@@ -64,8 +64,7 @@ Top level
    * - ``data_version``
      - str
      - ``v1``
-     - Version of the generated data, and the CDO series it needs (below). Only ``v1`` is
-       supported; ``v2`` is reserved and rejected.
+     - Version of the generated data, and the CDO series it needs (below): ``v1`` or ``v2``.
 
 .. _data-version:
 
@@ -89,8 +88,12 @@ is written to ``provenance.yml``.
        ``PALEORCA2-definitive``, made with CDO 2.5.0 (2.5.1 and 2.5.3 reproduce them bit for bit);
        the TL63L31 OIFS initial state of the input tree.
    * - ``v2``
-     - (none)
-     - Not defined yet.
+     - 2.6.x
+     - The NEMO bathymetries without manual corrections: conservative land-sea mask and depth,
+       geography rules and fixed sills, the present day from ORCA2 (see :ref:`bathymetry-v2`).
+       The ocean fraction is rounded before the 0.5 threshold, so cells at exactly 0.5 are ocean
+       with any CDO; v2 still pins its CDO series, as every data version. The other components
+       are those of v1.
 
 Why CDO matters: the land-sea mask of a NEMO bathymetry is the ``remapcon`` ocean fraction
 thresholded at 0.5 (see :doc:`bathymetry`), and many PALEORCA2 cells have a fraction of exactly
@@ -100,8 +103,9 @@ compared with 2.5.x. ``REMAP_AREA_MIN`` does not change this.
 
 .. code-block:: bash
 
-   module load cdo/2.5.3                     # ECMWF Atos
-   conda install -c conda-forge "cdo=2.5"    # elsewhere
+   module load cdo/2.5.3                     # ECMWF Atos, data_version v1
+   conda install -c conda-forge "cdo=2.5"    # elsewhere, data_version v1
+   conda install -c conda-forge "cdo=2.6"    # elsewhere, data_version v2
 
 ``machine``
 -----------
@@ -212,9 +216,10 @@ Read by ``ecefast present run`` and ``ecefast <component> run``. Its final files
        ``nemo`` add theirs.
    * - ``present.nemo.source_grid``
      - str
-     - ``eORCA1``
+     - ``eORCA1`` (v1), ``ORCA2`` (v2)
      - The present-day bathymetry: ``{input}/nemo/domain/<source_grid>/domain_cfg.nc``, which also
-       holds its horizontal grid. It needs strait corrections for this grid (see :doc:`bathymetry`).
+       holds its horizontal grid. In v1 it needs strait corrections for this grid; v2 uses the
+       geography rules (see :doc:`bathymetry`). Example: ``source_grid: ORCA2``.
    * - ``present.nemo.source_staggering``
      - str
      - ``T``
@@ -388,7 +393,6 @@ The ``present`` and ``eocene`` sections of ``configs/atos.tmpl``, without the co
      oifs:
        steps: {spectral: false, gridpoint: false, boundary: false}
      nemo:
-       source_grid: eORCA1
        minimum_depth: 30
        steps:
          coordinates: true

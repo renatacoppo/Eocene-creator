@@ -204,11 +204,15 @@ the docs.
 - **Data versions and CDO.** The config key `data_version` (default `v1`) names the data a run
   reproduces, and each version needs one CDO series (`DATA_VERSIONS` in `core/config.py`).
   `run_period` checks the CDO version before anything else, dry runs included, and raises a
-  `PipelineError` on a mismatch; never turn this into a warning. `v1` is the only version and
-  needs **CDO 2.5.x**; `v2` is reserved and rejected until it is defined (a new version, its CDO
-  and its output changes need an agreed issue). CDO is not part of `environment.yaml`: on Atos
-  `module load cdo/2.5.3`, elsewhere conda-forge `cdo=2.5` (Homebrew ships only the latest
-  release), CI pins `cdo=2.5`. Reason: the land-sea mask of a NEMO bathymetry is the
+  `PipelineError` on a mismatch; never turn this into a warning. `v1` needs **CDO 2.5.x**.
+  `v2` (issue #58) needs **CDO 2.6.x**: its NEMO bathymetries come from the geography rules
+  (`components/nemo/bathymetry/geography.py`) instead of manual corrections, and it rounds the
+  ocean fraction before the threshold (a cell at exactly 0.5 is ocean). A new version, its CDO and
+  its output changes need an agreed issue. CDO is not part of `environment.yaml`: on Atos
+  `module load cdo/2.5.3`, elsewhere conda-forge `cdo=2.5` or `cdo=2.6` (Homebrew ships only the
+  latest release); CI runs v1 with `cdo=2.5` and the `data_v2` tests with `cdo=2.6`. The v2
+  baseline lives in `BASELINE/v2/<period>/`, next to the v1 one. Reason for v1: the land-sea
+  mask of a NEMO bathymetry is the
   `remapcon` ocean fraction thresholded at 0.5, and many PALEORCA2 cells have a fraction of
   exactly 0.5 (200 for the Eocene, 135 for the present day). Floating-point rounding decides on
   which side they fall, and it changes between CDO versions: 2.6.x moves 25 Eocene and 4
@@ -287,6 +291,7 @@ Test groups (pytest markers):
 | `integration` | synthetic tree, `fake` backend; runner, NEMO, OASIS, RNFM, domain pipeline (OIFS: unit tests and `local_data` only) | CI |
 | `local_data` | real subset, `ECEFAST_TEST_DATA=<dir>` | your machine, opt-in |
 | `hpc` | real data and DOMAINcfg | ECMWF Atos, manual |
+| `data_v2` | data version v2 tests (also `unit`, `integration` or `local_data`) | CI job with CDO 2.6 |
 
 - **New or changed function → unit test** on synthetic data.
 - **New step in a pipeline → integration test** (dry run and real run with the `fake` backend).

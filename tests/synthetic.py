@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 import xarray as xr
 
 from ecefast.components.nemo.domain.pipeline import NEMOWorkflow
@@ -23,11 +24,24 @@ STEPS_WITHOUT_GRIDS = {
     "generate_mask": True,
     "generate_subbasins": False,
 }
-# the bathymetry files of the period processors in the work directory of the domain pipeline
+# the bathymetry files of the period processors in the work directory of the domain pipeline, per data version
 BATHYMETRY_FILES = {
-    "eocene": "bathymetry/PALEORCA2/HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc",
-    "present": "bathymetry/PALEORCA2/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc",
+    ("eocene", "v1"): "bathymetry/PALEORCA2/HEROLD_bathy_metry_remapbil_to_PALEORCA2_T.nc",
+    ("present", "v1"): "bathymetry/PALEORCA2/eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T_corrected.nc",
+    ("eocene", "v2"): "bathymetry/PALEORCA2/HEROLD_bathy_metry_remapcon_to_PALEORCA2_T.nc",
+    ("present", "v2"): "bathymetry/PALEORCA2/ORCA2_T_bathy_metry_remapcon_to_PALEORCA2_T.nc",
 }
+
+
+def cdo_series() -> str | None:
+    """Major and minor version of the CDO on PATH (e.g. ``"2.6"``), or None without CDO."""
+    from ecefast.core.cdo import cdo_version, find_cdo_binary
+
+    return ".".join(cdo_version().split(".")[:2]) if find_cdo_binary() else None
+
+
+# data version v2 runs (run_period checks the CDO version) need CDO 2.6: the second CI job (pytest -m data_v2)
+needs_cdo_2_6 = pytest.mark.skipif(cdo_series() != "2.6", reason="data_version v2 needs CDO 2.6")
 
 
 def write_domain_inputs(coords_file: Path, bathy_file: Path) -> None:
@@ -81,10 +95,12 @@ def make_config(root: Path, tmpdir: str | None = None, machine: str = "local", *
     )
 
 
-def write_domain_work(workdir: Path, period: str = "eocene") -> None:
+def write_domain_work(workdir: Path, period: str = "eocene", data_version: str = "v1") -> None:
     """The outputs of the domain steps that need real grids (``coordinates``, ``bathymetry`` of the period's
     processor), written as small synthetic files where the pipeline expects them in its work directory."""
-    write_domain_inputs(workdir / "coordinates" / "PALEORCA2" / "coords_halo.nc", workdir / BATHYMETRY_FILES[period])
+    write_domain_inputs(
+        workdir / "coordinates" / "PALEORCA2" / "coords_halo.nc", workdir / BATHYMETRY_FILES[period, data_version]
+    )
 
 
 # --- synthetic Eocene input tree ------------------------------------------------------------------------------------

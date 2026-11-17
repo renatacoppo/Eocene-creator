@@ -25,17 +25,18 @@ from ecefast.core.runner import component_steps
 from ecefast.core.steps import PipelineError, run_pipeline
 from ecefast.core.workspace import Context, Stage
 from ecefast.periods.eocene import pipeline as eocene_pipeline
-from ecefast.periods.eocene.bathymetry import EoceneBathymetry
+from ecefast.periods.eocene.bathymetry import BATHYMETRIES as EOCENE_BATHYMETRIES, EoceneBathymetry, EoceneBathymetryV2
 from ecefast.periods.eocene.nemo.domain import EoceneDomain
 from ecefast.periods.present import pipeline as present_pipeline
-from ecefast.periods.present.bathymetry import PresentDayBathymetry
+from ecefast.periods.present.bathymetry import BATHYMETRIES as PRESENT_BATHYMETRIES
+from ecefast.periods.present.bathymetry import PresentDayBathymetry, PresentDayBathymetryV2
 from ecefast.tools.ecearth import FakeBackend, LocalBackend
-from synthetic import STEPS_WITHOUT_GRIDS, _domain, write_domain_work
+from synthetic import BATHYMETRY_FILES, STEPS_WITHOUT_GRIDS, _domain, needs_cdo_2_6, write_domain_work
 
 pytestmark = pytest.mark.integration
 
 
-def write_config(tmp_path: Path, machine: str = "fake", steps: dict | None = None) -> Path:
+def write_config(tmp_path: Path, machine: str = "fake", steps: dict | None = None, data_version: str = "v1") -> Path:
     """A configuration on a synthetic tree, with the synthetic pipeline inputs already in the tmpdir of both
     periods; ``steps`` are the domain steps of both periods. The Eocene domain is built unless the machine is
     ``local``."""
@@ -51,10 +52,11 @@ def write_config(tmp_path: Path, machine: str = "fake", steps: dict | None = Non
     for sub in copied:  # what the present stage copies
         (tmp_path / "input" / sub).mkdir(parents=True, exist_ok=True)
     for period in ("present", "eocene"):
-        write_domain_work(tmp_path / "tmp" / period / "nemo", period)
+        write_domain_work(tmp_path / "tmp" / period / "nemo", period, data_version)
     steps = STEPS_WITHOUT_GRIDS if steps is None else steps
     raw = {
         "schema": 2,
+        "data_version": data_version,
         "machine": {"name": machine, "tmpdir": str(tmp_path / "tmp")},
         "grids": {"nemo": {"coords_ori": str(tmp_path / "coords_ori.nc")}},
         "present": {
@@ -80,7 +82,7 @@ def write_config(tmp_path: Path, machine: str = "fake", steps: dict | None = Non
 
 def workflow(config_file: Path, period: str = "present", backend=None) -> NEMOWorkflow:
     ctx = Context(load_config(config_file), period)
-    processor = PresentDayBathymetry if period == "present" else EoceneBathymetry
+    processor = (PRESENT_BATHYMETRIES if period == "present" else EOCENE_BATHYMETRIES)[ctx.config.data_version]
     domain_dir = str(Path(ctx.section.output) / "nemo" / "domain" / "PALEORCA2")
     return NEMOWorkflow.from_context(ctx, processor, domain_dir, backend or FakeBackend())
 
@@ -468,3 +470,68 @@ def test_sections_not_for_eocene_nor_local(tmp_path: Path) -> None:
     local = write_config(tmp_path, machine="local", steps={n: n == "sections" for n in NEMO_DOMAIN_STEPS})
     with pytest.raises(ConfigError, match="SECTIONS_DIADCT cannot run with 'machine.name: local'"):
         workflow(local, backend=LocalBackend())
+
+
+# --- data version v2 ---------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.data_v2
+def test_v2_processors_and_source_grid(tmp_path: Path) -> None:
+    """With data_version v2 both periods build their domain with the v2 processor; the present day from ORCA2."""
+    config = write_config(tmp_path, data_version="v2")
+    present = present_pipeline.PresentNEMO.from_context(Context(load_config(config), "present")).workflow
+    assert present.processor_class is PresentDayBathymetryV2
+    source = str(tmp_path / "input" / "nemo" / "domain" / "ORCA2" / "domain_cfg.nc")
+    assert present.bathymetry["source_file"] == source and present.paths["source_grid"] == source
+    present_day_domain(tmp_path)
+    eocene = EoceneDomain.from_context(Context(load_config(config), "eocene")).workflow
+    assert eocene.processor_class is EoceneBathymetryV2
+
+
+@pytest.mark.data_v2
+@pytest.mark.parametrize("period", ["present", "eocene"])
+def test_v2_domain_keeps_the_mask(tmp_path: Path, period: str) -> None:
+    """The domain built from a v2 bathymetry passes the mask check; the check reads the bathymetry (plan)."""
+    wf = workflow(write_config(tmp_path, data_version="v2"), period)
+    bathymetry = str(tmp_path / "tmp" / period / "nemo" / BATHYMETRY_FILES[period, "v2"])
+    assert bathymetry in dict((name, reads) for name, reads, _ in wf.plan())["generate_mask"]
+    wf.run()
+    assert (Path(wf.domain_dir) / "domain_cfg.nc").is_file()
+
+
+@pytest.mark.data_v2
+def test_v2_mask_check_reports_cells_changed_by_domaincfg(tmp_path: Path) -> None:
+    """A cell that DOMAINcfg turned into land is an error; the north-fold row is left out."""
+    wf = workflow(write_config(tmp_path, data_version="v2"), "eocene")
+    wf.run()
+    domain_file = Path(wf.domain_dir) / "domain_cfg.nc"
+    with xr.open_dataset(domain_file) as ds:
+        domain = ds.load()
+    top_level = domain["top_level"].values
+    top_level[..., -1, 3] = 1 - top_level[..., -1, 3]  # the fold row: ignored
+    wf.check_domain_mask()
+    domain.to_netcdf(domain_file)
+    wf.check_domain_mask()
+    top_level[..., 2, 4] = 0  # the 50 m point becomes land
+    domain.to_netcdf(domain_file)
+    with pytest.raises(
+        PipelineError, match=r"changed the land-sea mask of the 'eocene' bathymetry in 1 cells \(j, i: \(2, 4\)\)"
+    ):
+        wf.check_domain_mask()
+
+
+def test_v1_has_no_mask_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Data version v1 builds its domains as before: no mask check after DOMAINcfg."""
+    monkeypatch.setattr(NEMOWorkflow, "check_domain_mask", lambda self: pytest.fail("v1 must not check the mask"))
+    workflow(write_config(tmp_path), "eocene").run()
+
+
+@pytest.mark.data_v2
+@needs_cdo_2_6
+def test_v2_present_nemo_end_to_end(tmp_path: Path) -> None:
+    """``ecefast present run`` with data_version v2 (the CDO version check passes with CDO 2.6)."""
+    config = write_config(tmp_path, data_version="v2")
+    cli.main(["present", "run", "-c", str(config), "--steps", "stage,nemo", "-l", "WARNING"])
+    assert (tmp_path / "present" / "nemo" / "domain" / "PALEORCA2" / "domain_cfg.nc").is_file()
+    provenance = yaml.safe_load((tmp_path / "present" / "provenance.yml").read_text())
+    assert provenance["data_version"] == "v2"

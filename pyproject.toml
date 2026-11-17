@@ -75,6 +75,7 @@ markers = [
     "integration: synthetic input tree and fake backend (CI)",
     "local_data: needs the real data subset, set ECEFAST_TEST_DATA (opt-in, your machine)",
     "hpc: needs real data and DOMAINcfg on ECMWF Atos (manual)",
+    "data_v2: data version v2; also run in the CI job with CDO 2.6 (pytest -m data_v2)",
 ]
 
 [tool.ruff]

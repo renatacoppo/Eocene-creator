@@ -123,9 +123,9 @@ class PresentDayBathymetryV2(BathymetryProcessor):
     """
     Processor for the present-day bathymetry, data version v2.
 
-    Source: ``{input}/nemo/domain/<source_grid>/domain_cfg.nc`` (ORCA2 by default in v2), variable bathy_metry.
-    Remap:  conservative land-sea mask and ocean-mean depth, geography rules, fixed sills
-            (:func:`ecefast.components.nemo.bathymetry.geography.apply_rules`). No manual corrections.
+    - Source: ``{input}/nemo/domain/<source_grid>/domain_cfg.nc`` (ORCA2 by default in v2), variable bathy_metry.
+    - Remap: conservative land-sea mask and ocean-mean depth, geography rules, fixed sills
+      (:func:`ecefast.components.nemo.bathymetry.geography.apply_rules`). No manual corrections.
     """
 
     name = "present_day"

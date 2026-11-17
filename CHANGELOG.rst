@@ -15,6 +15,14 @@ Unreleased
 Added
 ~~~~~
 
+- ``data_version: v2`` (issue #58), with CDO 2.6.x: NEMO bathymetries without manual corrections. The land-sea mask
+  and the depth come from one conservative remap (ocean fraction rounded to 1e-6, ocean if at least 0.5; depth =
+  mean depth of the ocean part, at least ``minimum_depth``), then four geography rules
+  (``components/nemo/bathymetry/geography.py``): open corner contacts between water bodies, no closed seas, no
+  one-cell inlets, no isolated one-cell islands. The present day comes from ORCA2 and keeps fixed sills at Gibraltar
+  (284 m) and Bab-el-Mandeb (137 m). ``PresentDayBathymetryV2`` and ``EoceneBathymetryV2``; each period chooses its
+  processor by ``data_version`` (``BATHYMETRIES``). After DOMAINcfg, a v2 domain must keep the land-sea mask of its
+  bathymetry (north-fold row excepted). CI runs the ``data_v2`` tests in a second job with CDO 2.6 (#PR).
 - NEMO domain step ``sections`` (``present.nemo.steps.sections``, default ``true``): writes
   ``nemo/domain/<grid>/section_ijglobal.diadct``, the transport sections of the NEMO diagnostic ``diadct``, with the
   NEMO tool SECTIONS_DIADCT on the grid of the final ``domain_cfg.nc`` and its 132 global sections. The ``atos``
@@ -104,6 +112,9 @@ Added
 
 Changed
 ~~~~~~~
+
+- ``present.nemo.source_grid`` defaults to the source of the data version: ``eORCA1`` in v1 (as before), ``ORCA2``
+  in v2. The templates leave it commented out (#PR).
 
 - Documentation published on GitHub Pages (https://renatacoppo.github.io/Eocene-creator/) by the ``docs`` workflow
   on every push to ``main``, instead of Read the Docs: ``.readthedocs.yaml`` removed (#53).
@@ -322,6 +333,11 @@ Removed
 Output
 ~~~~~~
 
+- New data version v2 (``data_version: v2``): the NEMO PALEORCA2 bathymetry and domain of both periods
+  (``nemo/domain/PALEORCA2/`` and the bathymetry in ``<machine.tmpdir>/<period>/nemo/bathymetry/``) change as
+  described under *Added*. On the laptop inputs (fake DOMAINcfg, CDO 2.6.4) the present day has 16733 ocean cells,
+  11 one-cell-wide cells and 54 cells at 30 m (v1: 16870, 97, 308), the Eocene 17020, 11 and 484 (v1: 16832, 59,
+  501). The other components and every v1 output are unchanged (#PR).
 - Present-day tree: ``nemo/domain/<grid>/section_ijglobal.diadct`` is written by default (step ``sections``), as in
   the domain trees of ECE4-DATA-V3; it was missing from the trees made by ``ecefast`` so far (#52).
 - Present-day PALEORCA2 bathymetry and domain (``nemo/domain/PALEORCA2/`` of ``present.output``): the strait

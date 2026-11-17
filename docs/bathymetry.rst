@@ -3,7 +3,9 @@ Bathymetries
 
 A NEMO domain starts from a bathymetry on the model grid. The ``bathymetry`` step of the NEMO
 domain pipeline makes it from a source dataset, then DOMAINcfg builds the domain from it
-(:doc:`configuration`, *Steps of the NEMO domain pipeline*). Each period has its own bathymetry:
+(:doc:`configuration`, *Steps of the NEMO domain pipeline*). Each period has its own bathymetry,
+and how it is made depends on ``data_version`` (:ref:`data-version`): v1 is described first, v2 in
+:ref:`bathymetry-v2`. With ``data_version: v1``:
 
 .. list-table::
    :header-rows: 1
@@ -72,6 +74,71 @@ ocean already is left as it is, with a warning. The corrections of
 (``data_version: v1``): do not change them without an agreed issue. The plot
 ``landsea_mask_comparison.png``, next to the corrected file, shows the result next to every
 domain of the input tree.
+
+.. _bathymetry-v2:
+
+Data version v2: rules instead of corrections
+---------------------------------------------
+
+With ``data_version: v2`` (issue #58) the bathymetry has no manual corrections. The processors are
+``PresentDayBathymetryV2`` (source ``present.nemo.source_grid``, ORCA2 by default) and
+``EoceneBathymetryV2`` (the same Herold source as v1); ``BATHYMETRIES`` in each
+``periods/<period>/bathymetry.py`` gives the processor of each data version.
+
+1. **Mask and depth from one conservative remap.** The ocean indicator and the depth of the
+   source (0 on land) are remapped with ``remapcon``. The ocean fraction is rounded to 1e-6 and a
+   cell is ocean if it is at least 0.5, so a cell at exactly 0.5 is ocean whatever the CDO
+   rounding. Its depth is the mean depth of its ocean part (the remapped depth divided by the ocean
+   fraction), at least ``minimum_depth``. In v1 the depth comes from another remap than the mask,
+   and coastal cells could be ocean in the mask with depth 0.
+2. **Sills.** The present day gives the straits whose sill sets the exchange of a marginal sea a
+   fixed depth, as in ORCA2: Gibraltar 284 m, Bab-el-Mandeb 137 m (``PresentDayBathymetryV2.sills``,
+   by longitude and latitude). The sill cell must be the only link between the two basins.
+3. **Geography rules**, in this order
+   (:mod:`ecefast.components.nemo.bathymetry.geography`). Two cells are connected only through a
+   side (the velocity points of the C grid), across the dateline and the north fold:
+
+   - **open corner contacts**: two water bodies that touch only at a corner are joined, by the
+     land cell between them with the larger ocean fraction, at ``minimum_depth``. A corner inside
+     one water body (across a peninsula such as Italy) is left closed;
+   - **no closed seas**: water not connected to the main ocean becomes land (Caspian, Black Sea,
+     Great Lakes). It runs after the corner contacts, otherwise seas joined only at a corner, such
+     as the Mediterranean or the Baltic in the remapped mask, would be removed;
+   - **no one-cell inlets**: one-cell-wide dead ends become land, in a single pass;
+   - **no isolated islands**: a land cell with no land among its eight neighbours becomes ocean.
+
+After DOMAINcfg, the domain must keep the land-sea mask of the bathymetry (the north-fold row
+excepted, which DOMAINcfg makes symmetric): a difference stops the ``generate_mask`` step.
+
+On the laptop inputs (fake DOMAINcfg, CDO 2.6.4):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 22 22 22
+
+   * - PALEORCA2
+     - ocean cells
+     - one-cell-wide cells (strait)
+     - cells at 30 m
+   * - present day, v1
+     - 16870
+     - 97 (10)
+     - 308
+   * - present day, v2
+     - 16733
+     - 11 (8)
+     - 54
+   * - Eocene, v1
+     - 16832
+     - 59 (7)
+     - 501
+   * - Eocene, v2
+     - 17020
+     - 11 (1)
+     - 484
+
+Most Eocene cells at 30 m are real: Herold et al. (2014) have 2.7% of the ocean area at 30 m or
+shallower (the epicontinental seas of Europe and the Tethys).
 
 Adding a bathymetry
 -------------------
