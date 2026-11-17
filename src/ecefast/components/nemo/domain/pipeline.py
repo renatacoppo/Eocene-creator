@@ -6,7 +6,7 @@ The bathymetry is a :class:`~ecefast.components.nemo.bathymetry.base.BathymetryP
 every algorithm choice (variable, mask, remapping, corrections) and declares its source file. Each time period
 passes its own (``PresentDayBathymetry`` for ``present``, ``EoceneBathymetry`` for ``eocene``), with the backend
 that runs DOMAINcfg (``ecefast.tools.ecearth``). It runs as the ``nemo`` step of ``ecefast present run``
-(``ecefast nemo run``) and inside the ``domain`` step of ``ecefast eocene run`` with ``eocene.nemo.domain: build``.
+(``ecefast nemo run``) and inside the ``domain`` step of ``ecefast eocene run`` (unless ``eocene.nemo.domain_dir`` is set).
 """
 
 import logging

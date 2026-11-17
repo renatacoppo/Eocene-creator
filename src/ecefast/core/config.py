@@ -169,10 +169,12 @@ class Present:
 
 @dataclass
 class EoceneNEMO:
-    """Eocene NEMO options: where the Eocene domain comes from, and how it is built."""
+    """Eocene NEMO options: how the Eocene domain is built, or where a domain built before is."""
 
-    domain: str  # "build", or a directory holding domain_cfg.nc and maskutil.nc
     minimum_depth: float
+    # None: the domain step builds the domain (DOMAINcfg, Atos); a directory holding domain_cfg.nc and maskutil.nc
+    # (e.g. a domain built on Atos, copied to a laptop): the step installs it instead
+    domain_dir: str | None = None
     steps: EoceneDomainSteps = field(default_factory=EoceneDomainSteps)
 
 
@@ -297,8 +299,6 @@ BACKENDS = ("atos", "local", "fake")
 NEMO_DOMAIN_STEPS = tuple(f.name for f in dataclasses.fields(DomainSteps))
 OIFS_DATA_STEPS = tuple(f.name for f in dataclasses.fields(OIFSDataSteps))
 STAGGERING_OPTIONS = ("T", "F")
-# the value of eocene.nemo.domain that builds the domain
-BUILD = "build"
 # the top-level sections, and the sections whose values are themselves sections
 SECTIONS = {"machine": Machine, "grids": Grids, "present": Present, "eocene": Eocene}
 NESTED = {
@@ -321,7 +321,7 @@ SCHEMA_1_KEYS = {
     "paths.tmpdir": "machine.tmpdir",
     "tools.backend": "machine.name",
     "tools.atos": "machine.atos",
-    "tools.precomputed.domain": "eocene.nemo.domain",
+    "tools.precomputed.domain": "eocene.nemo.domain_dir",
     "grids.oifs": "grids.oifs.name",
     "grids.nemo": "grids.nemo.name",
     "nemo_domain": "present.nemo (present-day domain), eocene.nemo (Eocene domain), grids.nemo",
@@ -339,7 +339,7 @@ COMPONENT_LAYOUT_KEYS = {
     "nemo.domain.tools_dir": "machine.atos.ecearth4_sources",
     "nemo.domain.bathymetries": "removed: each period uses its own bathymetry",
     "eocene.output_dir": "eocene.output",
-    "eocene.domain": "eocene.nemo.domain: build, or the directory of the domain",
+    "eocene.domain": "eocene.nemo.domain_dir: unset to build the domain, or the directory of the domain",
 }
 
 
@@ -533,17 +533,11 @@ def _validate(config: Config) -> None:
     if eocene is not None:
         for name in ("input", "herold", "output"):
             _check_type(getattr(eocene, name), str, f"eocene.{name}", file)
-        _check_type(eocene.nemo.domain, str, "eocene.nemo.domain", file)
+        _check_type(eocene.nemo.domain_dir, (str, type(None)), "eocene.nemo.domain_dir", file)
         _check_type(eocene.nemo.minimum_depth, (int, float), "eocene.nemo.minimum_depth", file)
         _check_steps(eocene.nemo.steps, "eocene.nemo.steps", file)
         _check_type(eocene.oifs.aerosols, bool, "eocene.oifs.aerosols", file)
         _check_type(eocene.oasis.constant_sst, (int, float), "eocene.oasis.constant_sst", file)
-        if eocene.nemo.domain == BUILD and machine.name == "local":
-            raise ConfigError(
-                f"{file}: 'eocene.nemo.domain: build' runs DOMAINcfg, which is not available with "
-                "'machine.name: local'. Point 'eocene.nemo.domain' at the directory of a domain built on Atos "
-                "(its domain_cfg.nc and maskutil.nc), or run on Atos (machine.name: atos)."
-            )
 
     for key, value in staggering.items():
         if value not in STAGGERING_OPTIONS:
@@ -654,6 +648,12 @@ def load_config(path: str | Path) -> Config:
         raise ConfigError(f"{file}: unsupported schema {raw['schema']!r}, this version reads schema {SCHEMA_VERSION}")
     if any(key in raw for key in ("inputs", "oifs", "nemo", "tmpdir")):
         raise _old_layout_error(raw, file, COMPONENT_LAYOUT_KEYS, "configuration with component sections")
+    if has_key(raw, "eocene.nemo.domain"):
+        raise ConfigError(
+            f"{file}: 'eocene.nemo.domain' is replaced by 'eocene.nemo.domain_dir'. Remove 'domain: build' (the "
+            "domain step builds the domain unless domain_dir is set), or rename 'domain: <directory>' to "
+            "'domain_dir: <directory>'."
+        )
 
     unknown = sorted(set(raw) - set(SECTIONS) - {"schema", "data_version"})
     if unknown:

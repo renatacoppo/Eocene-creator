@@ -92,7 +92,7 @@ def substep_help() -> str:
     return "\n\n".join(
         [
             format_step_list("--oifs steps (present.oifs.steps)", OIFS_STEPS),
-            format_step_list("--nemo steps (present.nemo.steps, eocene.nemo.steps with domain: build)", NEMO_STEPS),
+            format_step_list("--nemo steps (present.nemo.steps, eocene.nemo.steps)", NEMO_STEPS),
         ]
     )
 

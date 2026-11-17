@@ -1,9 +1,10 @@
 """The ``domain`` step: install the Eocene NEMO domain and check the vertical grid rule.
 
-``eocene.nemo.domain`` says where the domain comes from: a directory holding its ``domain_cfg.nc`` and
-``maskutil.nc`` (e.g. the domain built on Atos, copied to a laptop), or ``build``: the step first builds it with
-the NEMO domain pipeline and the Eocene bathymetry (steps ``eocene.nemo.steps``), intermediate and final files in
-``<machine.tmpdir>/eocene/nemo``, which needs DOMAINcfg (``machine.name: atos``, or ``fake`` in tests).
+By default the step builds the domain with the NEMO domain pipeline and the Eocene bathymetry (steps
+``eocene.nemo.steps``), intermediate and final files in ``<machine.tmpdir>/eocene/nemo``, which needs DOMAINcfg
+(``machine.name: atos``, or ``fake`` in tests). With ``eocene.nemo.domain_dir`` set to a directory holding a
+``domain_cfg.nc`` and ``maskutil.nc`` (e.g. the domain built on Atos, copied to a laptop), it installs that one
+instead. To keep the Eocene domain of an earlier run, skip the step.
 
 ``EoceneNEMO`` reads only present-day domains (the PALEORCA2 levels for the ocean initial state). This is
 correct only if the Eocene domain has the same vertical grid as the present-day one, so the step stops when
@@ -18,7 +19,6 @@ import numpy as np
 import xarray as xr
 
 from ecefast.components.nemo.domain.pipeline import NEMOWorkflow
-from ecefast.core.config import BUILD
 from ecefast.core.io import atomic_write
 from ecefast.core.steps import ComponentStep, PipelineError
 from ecefast.core.workspace import Context
@@ -82,14 +82,14 @@ def check_vertical_grid(present: xr.Dataset, eocene: xr.Dataset, present_name: s
 
 
 class EoceneDomain(ComponentStep):
-    """Install the Eocene NEMO domain (eocene.nemo.domain: a directory, or build) and check its vertical grid."""
+    """Build the Eocene NEMO domain (or install eocene.nemo.domain_dir), and check its vertical grid."""
 
     name = "domain"
     component = "nemo"
     needs = ["stage"]
-    # It also reads domain_cfg.nc and maskutil.nc from the directory of eocene.nemo.domain; with build it runs the
-    # NEMO domain pipeline first, which reads and writes in machine.tmpdir. Neither fits a class-level list that
-    # cannot depend on eocene.nemo.domain, so both are checked in from_context, which the runner calls for every
+    # By default it runs the NEMO domain pipeline first, which reads and writes in machine.tmpdir; with
+    # eocene.nemo.domain_dir it reads domain_cfg.nc and maskutil.nc from that directory. Neither fits a class-level
+    # list that cannot depend on the config, so both are checked in from_context, which the runner calls for every
     # selected step before the first one runs.
     reads = ["{input}/nemo/domain/{grids.nemo.name}/domain_cfg.nc"]
     writes = [f"{{output}}/nemo/domain/{{grids.nemo.name}}/{filename}" for filename in DOMAIN_FILES]
@@ -124,19 +124,27 @@ class EoceneDomain(ComponentStep):
     def from_context(cls, ctx: Context) -> "EoceneDomain":
         section = ctx.section
         args = (section.input, section.output, ctx.config.grids.nemo.name)
-        if section.nemo.domain != BUILD:
-            domain_dir = section.nemo.domain
+        if section.nemo.domain_dir is not None:
+            domain_dir = section.nemo.domain_dir
             missing = [f for f in DOMAIN_FILES if not os.path.isfile(os.path.join(domain_dir, f))]
             if missing:
                 raise PipelineError(
-                    f"Step 'domain': missing in eocene.nemo.domain ({domain_dir}): {', '.join(missing)}. "
-                    "Build it on Atos (eocene.nemo.domain: build) and copy its <eocene.output>/nemo/domain/<grid> here."
+                    f"Step 'domain': missing in eocene.nemo.domain_dir ({domain_dir}): {', '.join(missing)}. "
+                    "Build the domain on Atos (eocene.nemo.domain_dir unset) and copy its "
+                    "<eocene.output>/nemo/domain/<grid> here."
                 )
             return cls(domain_dir, *args)
 
-        # build (the config refuses it with machine.name: local): the final files go to the tmpdir, then installed
+        # build: the final files go to the tmpdir, then they are installed
+        backend = get_backend(ctx.config)
+        if section.nemo.steps.domain_cfg and not backend.available():
+            raise PipelineError(
+                f"Step 'domain' builds the Eocene domain with DOMAINcfg, which cannot run with 'machine.name: "
+                f"{backend.name}'. Set eocene.nemo.domain_dir to the directory of a domain built on Atos (its "
+                "domain_cfg.nc and maskutil.nc), skip the step (--steps without domain), or run on Atos."
+            )
         domain_dir = os.path.join(ctx.tmpdir("nemo"), "domain", ctx.config.grids.nemo.name)
-        workflow = NEMOWorkflow.from_context(ctx, EoceneBathymetry, domain_dir, get_backend(ctx.config))
+        workflow = NEMOWorkflow.from_context(ctx, EoceneBathymetry, domain_dir, backend)
         try:
             workflow.check()
         except PipelineError as e:

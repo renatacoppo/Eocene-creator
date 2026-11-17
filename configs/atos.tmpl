@@ -68,10 +68,10 @@ eocene:
   herold: /path/to/herold-et-al-2014/Supp   # Herold et al. (2014) supplementary data, read-only (required)
   output: /path/to/OUTPUT/eocene      # the Eocene EC-Earth tree; --overwrite replaces it (required)
   nemo:
-    domain: build                     # build the Eocene domain in the `domain` step, or a directory with its
-                                      # domain_cfg.nc + maskutil.nc (required)
     minimum_depth: 30                 # m, used to build the domain (required)
-    steps:                            # steps of the domain pipeline, used with domain: build
+    # domain_dir: null                # null: the `domain` step builds the Eocene domain; or a directory with a
+                                      # domain_cfg.nc + maskutil.nc built before, installed instead
+    steps:                            # steps of the domain pipeline that builds the domain
       coordinates: true
       bathymetry: true                # remapped Herold bathymetry
       configure_domain: true
