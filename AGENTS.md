@@ -32,6 +32,7 @@ src/ecefast/
   tools/         EC-Earth binaries and HPC modules: ecearth backends               (imports core)
   components/    oifs/ nemo/ oasis/ rnfm/: tools that know no period         (imports core, tools)
   periods/       present/ eocene/: steps, bathymetry, PIPELINE of each period (imports components)
+                 plots.py: the plot command, shared by both periods (imports components)
   cli/           argument parsing only                                       (imports everything)
 ```
 
@@ -57,6 +58,7 @@ ecefast nemo run -c configs/laptop.yml --nemo coordinates,bathymetry   # only so
 ecefast nemo run -c configs/atos.yml --period eocene     # NEMO steps of the Eocene period (domain, nemo)
 ecefast oifs run -c configs/atos.yml                     # OIFS base data of grids.oifs (section present.oifs; Atos inputs)
 ecefast present run -c configs/atos.yml                  # every present-day step
+ecefast eocene plot -c configs/laptop.yml -o plots/eocene   # maps vs a reference tree (--reference, --only)
 
 # checks before pushing
 ruff check --fix . && ruff format .

@@ -2,16 +2,20 @@
 ``ecefast <component> run --period eocene``."""
 
 import logging
+import os
 
+from ecefast.core.config import load_config
 from ecefast.core.runner import run_period
 from ecefast.core.steps import ComponentStep
-from ecefast.core.workspace import Stage
+from ecefast.core.workspace import Context, Stage
+from ecefast.periods.eocene.bathymetry import EoceneBathymetry
 from ecefast.periods.eocene.nemo.domain import EoceneDomain
 from ecefast.periods.eocene.nemo.eoceneNEMO import EoceneNEMO
 from ecefast.periods.eocene.oasis.eoceneOASIS import EoceneOASIS
 from ecefast.periods.eocene.oifs.eoceneOIFS import EoceneOIFS
 from ecefast.periods.eocene.rnfm.eoceneRNFM import EoceneRNFM
 from ecefast.periods.eocene.verify import verify
+from ecefast.periods.plots import domain_file, plot_period
 
 logger = logging.getLogger(__name__)
 
@@ -64,3 +68,40 @@ def run(
     if not dry_run:
         verify([s for s in PIPELINE if s.name in names], ctx)
     return names
+
+
+def plot(config_file: str, out_dir: str, reference: str | None = None, groups: list[str] | None = None) -> dict:
+    """Draw the plots of the Eocene output (``ecefast eocene plot``), see :mod:`ecefast.periods.plots`.
+
+    The Eocene NEMO domain is compared with the domain of the same grid in the reference tree (by default the
+    present-day ``eocene.input``) and with the Herold et al. (2014) bathymetry it is made from
+    (``EoceneBathymetry.source_file``).
+
+    Parameters
+    ----------
+    config_file : str
+        Configuration file (schema 2) with an ``eocene`` section.
+    out_dir : str
+        Plot directory, outside the EC-Earth trees.
+    reference : str, optional
+        Root of the reference tree; default ``eocene.input``.
+    groups : list of str, optional
+        Groups to draw (``nemo``, ``oifs``, ``coupling``); default all.
+
+    Returns
+    -------
+    dict
+        The content of ``summary.yml``.
+
+    Raises
+    ------
+    ConfigError
+        If the configuration is invalid or has no ``eocene`` section.
+    PipelineError
+        If the plot directory is inside an EC-Earth tree or an input file is missing.
+    """
+    ctx = Context(load_config(config_file), PERIOD)
+    reference = reference or ctx.section.input
+    domains = [domain_file(reference, ctx.config.grids.nemo.name)]
+    source = (EoceneBathymetry, ctx.expand(EoceneBathymetry.source_file))
+    return plot_period(ctx, os.path.abspath(out_dir), os.path.abspath(reference), domains, source, groups)

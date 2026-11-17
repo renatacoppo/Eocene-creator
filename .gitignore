@@ -24,3 +24,5 @@ configs/*.yml
 
 # build outputs
 docs/_build/
+
+plots*/

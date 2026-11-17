@@ -1,6 +1,7 @@
 """Provenance of a run: what ran, with which configuration and which tool versions.
 
-:func:`write_provenance` writes ``provenance.yml`` into the output directory at the end of a successful run.
+:func:`write_provenance` writes ``provenance.yml`` into the output directory at the end of a successful run;
+:func:`read_data_version` reads the data version back from a tree.
 """
 
 import hashlib
@@ -46,6 +47,26 @@ def git_commit() -> str:
 def eccodes_version() -> str:
     """Version of the ecCodes command-line tools first on ``PATH`` (``codes_info -v``), or ``"unknown"``."""
     return _command_output(["codes_info", "-v"])
+
+
+def read_data_version(tree: str | os.PathLike) -> str | None:
+    """The ``data_version`` that the last run recorded in the ``provenance.yml`` of a tree.
+
+    Parameters
+    ----------
+    tree : str or os.PathLike
+        Root of an EC-Earth tree made by ``ecefast``.
+
+    Returns
+    -------
+    str or None
+        The data version, or ``None`` for a tree without ``provenance.yml`` or made before the data versions.
+    """
+    path = os.path.join(tree, PROVENANCE_FILE)
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        return (yaml.safe_load(f) or {}).get("data_version")
 
 
 def write_provenance(

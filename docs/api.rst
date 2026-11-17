@@ -35,6 +35,9 @@ Core
    :members:
    :undoc-members:
 
+.. automodule:: ecefast.core.plotting
+   :members:
+
 EC-Earth tools
 --------------
 
@@ -59,6 +62,9 @@ NEMO
 .. automodule:: ecefast.components.nemo.sections
    :members:
 
+.. automodule:: ecefast.components.nemo.plots
+   :members:
+
 OIFS
 ----
 
@@ -73,6 +79,17 @@ OIFS
    :members:
 
 .. automodule:: ecefast.components.oifs.grid_files
+   :members:
+
+.. automodule:: ecefast.components.oifs.plots
+   :members:
+
+.. automodule:: ecefast.components.oifs.land_cover
+
+Plots
+-----
+
+.. automodule:: ecefast.periods.plots
    :members:
 
 Present-day period

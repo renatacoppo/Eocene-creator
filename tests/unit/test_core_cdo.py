@@ -82,7 +82,7 @@ CDO_MODULES = [
     "ecefast.periods.eocene.oifs.fields",
     "ecefast.periods.eocene.oifs.vegetation",
     "ecefast.periods.eocene.nemo.eoceneNEMO",
-    "ecefast.periods.eocene.plots.helper_functions",
+    "ecefast.core.plotting",
 ]
 
 IMPORT_WITHOUT_SUBPROCESS = """
