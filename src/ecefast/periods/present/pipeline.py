@@ -15,7 +15,7 @@ from ecefast.components.oifs.generator import OIFSData
 from ecefast.core.runner import run_period
 from ecefast.core.steps import ComponentStep
 from ecefast.core.workspace import Context, Stage, pause_before_overwrite
-from ecefast.periods.present.bathymetry import PresentDayBathymetry
+from ecefast.periods.present.bathymetry import BATHYMETRIES
 from ecefast.tools.ecearth import get_backend
 
 logger = logging.getLogger(__name__)
@@ -68,7 +68,8 @@ class PresentNEMO(ComponentStep):
     @classmethod
     def from_context(cls, ctx: Context) -> "PresentNEMO":
         domain_dir = os.path.join(ctx.section.output, "nemo", "domain", ctx.config.grids.nemo.name)
-        workflow = NEMOWorkflow.from_context(ctx, PresentDayBathymetry, domain_dir, get_backend(ctx.config))
+        processor = BATHYMETRIES[ctx.config.data_version]
+        workflow = NEMOWorkflow.from_context(ctx, processor, domain_dir, get_backend(ctx.config))
         workflow.check()
         return cls(workflow, ctx.check_overwrite(workflow.final_files(), cls.name))
 

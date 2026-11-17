@@ -3,6 +3,9 @@ EoceneBathymetry: processor for the Herold et al. (2014) Eocene paleotopography.
 
 Remaps a negative-elevation field (ocean where value < 0) to PALEORCA2 using
 bilinear interpolation.  No strait corrections are applied.
+
+EoceneBathymetryV2 (data version v2): conservative mask and depth, then the geography rules. ``BATHYMETRIES`` gives
+the processor of each data version.
 """
 
 from ecefast.components.nemo.bathymetry import BathymetryProcessor
@@ -32,3 +35,19 @@ class EoceneBathymetry(BathymetryProcessor):
     # present-day straits and passages in lon/lat, which do not exist or lie elsewhere in the Eocene geography.
     transport_sections = False
     # setgrid is None — source file already carries a proper grid description
+
+
+class EoceneBathymetryV2(EoceneBathymetry):
+    """Processor for the Herold et al. (2014) Eocene paleotopography, data version v2.
+
+    - Source: as :class:`EoceneBathymetry`.
+    - Remap: conservative land-sea mask and ocean-mean depth, then the geography rules
+      (:func:`ecefast.components.nemo.bathymetry.geography.apply_rules`). No sills.
+    """
+
+    remap_method = "remapcon"
+    rule_based_geography = True
+
+
+# the processor of each data version (data_version of the configuration)
+BATHYMETRIES = {"v1": EoceneBathymetry, "v2": EoceneBathymetryV2}

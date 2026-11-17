@@ -115,11 +115,38 @@ def test_data_version_in_placeholder(tmp_path: Path) -> None:
     assert load_config(write(tmp_path, raw)).machine.tmpdir == str(tmp_path / "tmp-v1")
 
 
+def test_data_version_v2(tmp_path: Path) -> None:
+    assert load_config(write(tmp_path, minimal(tmp_path) | {"data_version": "v2"})).data_version == "v2"
+
+
+@pytest.mark.parametrize("version, source_grid", [(None, "eORCA1"), ("v1", "eORCA1"), ("v2", "ORCA2")])
+def test_present_nemo_source_grid_default_by_data_version(tmp_path: Path, version, source_grid: str) -> None:
+    """The present-day bathymetry comes from eORCA1 in v1 and from ORCA2 in v2, unless the file says otherwise."""
+    raw = minimal(tmp_path) | {"present": present(tmp_path) | {"nemo": {"minimum_depth": 30}}}
+    if version:
+        raw["data_version"] = version
+    assert load_config(write(tmp_path, raw)).present.nemo.source_grid == source_grid
+
+
+def test_present_nemo_source_grid_override_in_v2(tmp_path: Path) -> None:
+    raw = minimal(tmp_path) | {
+        "data_version": "v2",
+        "present": present(tmp_path) | {"nemo": {"minimum_depth": 30, "source_grid": "eORCA1"}},
+    }
+    assert load_config(write(tmp_path, raw)).present.nemo.source_grid == "eORCA1"
+
+
+def test_present_nemo_source_grid_in_placeholder(tmp_path: Path) -> None:
+    """The default of the data version is a value: placeholders may refer to it."""
+    raw = minimal(tmp_path) | {"data_version": "v2", "present": present(tmp_path) | {"nemo": {"minimum_depth": 30}}}
+    raw["machine"]["tmpdir"] = str(tmp_path / "tmp-{present.nemo.source_grid}")
+    assert load_config(write(tmp_path, raw)).machine.tmpdir == str(tmp_path / "tmp-ORCA2")
+
+
 @pytest.mark.parametrize(
     "value, match",
     [
-        ("v2", "'data_version: v2' is not supported yet. Supported: v1"),
-        ("v3", "'data_version' must be one of v1, got 'v3'"),
+        ("v3", "'data_version' must be one of v1, v2, got 'v3'"),
         (1, "'data_version' must be str, got 1"),
     ],
 )

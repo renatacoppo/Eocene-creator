@@ -75,9 +75,9 @@ def check_cdo_version(found: str, data_version: str) -> None:
         return
     raise PipelineError(
         f"data_version {data_version} needs CDO {series}.x, found CDO {found}. "
-        f"{data_version} reproduces the data of the existing experiments, made with CDO {series}: another CDO "
-        "changes the land-sea mask of the NEMO bathymetries (cells with an ocean fraction of exactly 0.5 fall on "
-        f"the other side). Load CDO {series}.x: its module on an HPC system (see 'module avail cdo'), "
+        f"The {data_version} data were made with CDO {series}, and another CDO can change them (the land-sea mask "
+        "of the NEMO bathymetries depends on how CDO rounds cells with an ocean fraction of exactly 0.5). "
+        f"Load CDO {series}.x: its module on an HPC system (see 'module avail cdo'), "
         f"'conda install -c conda-forge \"cdo={series}\"' elsewhere, "
         f"or point the CDO environment variable to a CDO {series} binary. See docs/configuration.rst (data_version)."
     )

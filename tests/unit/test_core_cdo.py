@@ -57,6 +57,15 @@ def test_check_cdo_version_rejects_other_versions(found: str) -> None:
     assert "module avail cdo" in message and "cdo=2.5" in message
 
 
+@pytest.mark.parametrize("found, accepted", [("2.6.0", True), ("2.6.4", True), ("2.5.0", False), ("2.7.0", False)])
+def test_check_cdo_version_v2_needs_2_6(found: str, accepted: bool) -> None:
+    if accepted:
+        core_cdo.check_cdo_version(found, "v2")
+    else:
+        with pytest.raises(core_cdo.PipelineError, match=f"data_version v2 needs CDO 2.6.x, found CDO {found}"):
+            core_cdo.check_cdo_version(found, "v2")
+
+
 # Modules that used to create a Cdo() at import time.
 CDO_MODULES = [
     "ecefast.cli.main",

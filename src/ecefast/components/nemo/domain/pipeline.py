@@ -13,6 +13,8 @@ import logging
 import os
 import shutil
 
+import xarray as xr
+
 from ecefast.core.cdo import get_cdo
 from ecefast.core.config import ConfigError
 from ecefast.core.io import atomic_write
@@ -346,6 +348,34 @@ class NEMOWorkflow:
         # Extract maskutil from mesh_mask
         extract_maskutil(src_dir, tgt_dir, name)
 
+        if self.processor_class.rule_based_geography:
+            self.check_domain_mask()
+
+    def check_domain_mask(self):
+        """Data version v2: the domain keeps the land-sea mask of the bathymetry, so the geography rules hold.
+
+        The top row is left out: DOMAINcfg makes the north-fold row symmetric.
+
+        Raises
+        ------
+        PipelineError
+            If DOMAINcfg turned ocean cells into land or the other way round.
+        """
+        processor = self._make_processor()
+        bathymetry_file = self.bathymetry.get("output_file") or processor.expected_output()
+        with xr.open_dataset(bathymetry_file) as ds:
+            bathymetry_ocean = ds[processor.variable_name()].squeeze().values > 0
+        with xr.open_dataset(os.path.join(self.domain_dir, "domain_cfg.nc")) as ds:
+            domain_ocean = ds["top_level"].squeeze().values > 0
+        differ = bathymetry_ocean[:-1] != domain_ocean[:-1]
+        if differ.any():
+            cells = ", ".join(f"({j}, {i})" for j, i in list(zip(*differ.nonzero()))[:10])
+            raise PipelineError(
+                f"DOMAINcfg changed the land-sea mask of the '{self.name}' bathymetry in {int(differ.sum())} cells "
+                f"(j, i: {cells}), outside the north-fold row. The geography rules no longer hold; check the "
+                f"DOMAINcfg namelist (rn_hmin, closed seas) against {bathymetry_file}."
+            )
+
     # ------------------------------------------------------------------
     # Step 6: Generate subbasin masks
     # ------------------------------------------------------------------
@@ -423,7 +453,10 @@ class NEMOWorkflow:
             "bathymetry": (processor.reads(), [bathymetry_file]),
             "configure_domain": ([self._target_halo(), bathymetry_file], [namelist]),
             "domain_cfg": ([*self.backend.required_paths(), namelist], raw_files),
-            "generate_mask": (raw_files, [os.path.join(self.domain_dir, f) for f in FINAL_FILES["generate_mask"]]),
+            "generate_mask": (
+                raw_files + ([bathymetry_file] if processor.rule_based_geography else []),
+                [os.path.join(self.domain_dir, f) for f in FINAL_FILES["generate_mask"]],
+            ),
             "generate_subbasins": (
                 [str(raw[1])],
                 [os.path.join(self.domain_dir, f) for f in FINAL_FILES["generate_subbasins"]],

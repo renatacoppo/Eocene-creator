@@ -22,7 +22,7 @@ from ecefast.components.nemo.domain.pipeline import NEMOWorkflow
 from ecefast.core.io import atomic_write
 from ecefast.core.steps import ComponentStep, PipelineError
 from ecefast.core.workspace import Context
-from ecefast.periods.eocene.bathymetry import EoceneBathymetry
+from ecefast.periods.eocene.bathymetry import BATHYMETRIES
 from ecefast.tools.ecearth import get_backend
 
 logger = logging.getLogger(__name__)
@@ -144,7 +144,7 @@ class EoceneDomain(ComponentStep):
                 "domain_cfg.nc and maskutil.nc), skip the step (--steps without domain), or run on Atos."
             )
         domain_dir = os.path.join(ctx.tmpdir("nemo"), "domain", ctx.config.grids.nemo.name)
-        workflow = NEMOWorkflow.from_context(ctx, EoceneBathymetry, domain_dir, backend)
+        workflow = NEMOWorkflow.from_context(ctx, BATHYMETRIES[ctx.config.data_version], domain_dir, backend)
         try:
             workflow.check()
         except PipelineError as e:
