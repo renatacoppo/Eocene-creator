@@ -41,7 +41,7 @@ def write_config(root: Path) -> Path:
             "input": str(root / "input"),
             "herold": str(root / "herold"),
             "output": str(root / "out"),
-            "nemo": {"domain": str(root / "precomputed"), "minimum_depth": 30},
+            "nemo": {"domain_dir": str(root / "precomputed"), "minimum_depth": 30},
         },
     }
     path = root / "config.yml"
