@@ -105,6 +105,8 @@ Added
 Changed
 ~~~~~~~
 
+- The conda environment of ``environment.yaml`` is named ``ecefast`` (was ``eocene``), like the package and the
+  command: create it again with ``mamba env create -f environment.yaml`` and ``pip install -e ".[dev,docs]"``.
 - Documentation rewritten for whoever generates data on ECMWF Atos, with Atos examples: ``quickstart.rst`` (setup,
   run, what each step makes, checking the result with ``scripts/compare_trees.py``), ``configuration.rst`` (every
   key, the steps of each component, ``data_version``), the new ``bathymetry.rst`` (how a NEMO bathymetry is made,

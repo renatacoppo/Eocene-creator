@@ -18,7 +18,7 @@ Eocene starts from its tree:
    git clone https://github.com/renatacoppo/Eocene-creator.git
    cd Eocene-creator
    module load conda                     # or your own Miniforge
-   mamba env create -f environment.yaml  # environment "eocene", with the package installed in editable mode
+   mamba env create -f environment.yaml  # environment "ecefast", with the package installed in editable mode
 
 What a run needs on Atos:
 
@@ -62,7 +62,7 @@ On an interactive node (``ecinteractive``) or in a batch job, not on a login nod
 
 .. code-block:: bash
 
-   conda activate eocene
+   conda activate ecefast
    module load cdo/2.5.3
 
    ecefast present run -c configs/atos.yml --dry-run   # check every input, show the plan, write nothing

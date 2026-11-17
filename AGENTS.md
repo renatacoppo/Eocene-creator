@@ -38,9 +38,9 @@ src/ecefast/
 ## Commands
 
 ```bash
-# environment (conda env name: eocene)
+# environment (conda env name: ecefast)
 mamba env create -f environment.yaml
-conda activate eocene
+conda activate ecefast
 pip install -e ".[dev,docs]"
 
 # local test data, see "Local test data" below

@@ -1,4 +1,4 @@
-# Create the eocene environment:
+# Create the ecefast environment:
 # mamba env create -f environment.yaml
 # or
 # conda env create -f environment.yaml
@@ -9,7 +9,7 @@
 # (`module load cdo/2.5.3` on Atos) or conda-forge `cdo=2.5`. A cdo shipped in the env would shadow it on PATH.
 # The baseline records the exact CDO version it was made with (see AGENTS.md, Scientific integrity).
 
-name: eocene
+name: ecefast
 channels:
   - conda-forge
 dependencies:
