@@ -12,15 +12,20 @@ import os
 
 from ecefast.components.nemo.domain.pipeline import NEMOWorkflow
 from ecefast.components.oifs.generator import OIFSData
+from ecefast.core.config import load_config
 from ecefast.core.runner import run_period
 from ecefast.core.steps import ComponentStep
 from ecefast.core.workspace import Context, Stage, pause_before_overwrite
+from ecefast.periods.plots import domain_file, plot_period
 from ecefast.periods.present.bathymetry import PresentDayBathymetry
 from ecefast.tools.ecearth import get_backend
 
 logger = logging.getLogger(__name__)
 
 PERIOD = "present"
+# NEMO grids of the reference tree that `ecefast present plot` compares the present-day domain with, besides the
+# domain of its own grid: the standard EC-Earth4 grid of the same resolution, and the 1 degree grid
+PLOT_REFERENCE_GRIDS = ("ORCA2", "eORCA1_ISO")
 
 
 class PresentOIFS(ComponentStep):
@@ -137,3 +142,41 @@ def run(
     """
     names, _ = run_period(PIPELINE, config_file, PERIOD, select, component, substeps, dry_run, overwrite)
     return names
+
+
+def plot(config_file: str, out_dir: str, reference: str | None = None, groups: list[str] | None = None) -> dict:
+    """Draw the plots of the present-day output (``ecefast present plot``), see :mod:`ecefast.periods.plots`.
+
+    The present-day NEMO domain of ``grids.nemo`` (built on Atos) is compared with the domains of the reference tree
+    (by default ``present.input``) that it holds: the one of the same grid cell by cell, those of
+    ``PLOT_REFERENCE_GRIDS`` (ORCA2, eORCA1_ISO) remapped conservatively onto its cells. Each reference domain also
+    gets its own domain map.
+
+    Parameters
+    ----------
+    config_file : str
+        Configuration file (schema 2) with a ``present`` section.
+    out_dir : str
+        Plot directory, outside the EC-Earth trees.
+    reference : str, optional
+        Root of the reference tree; default ``present.input``.
+    groups : list of str, optional
+        Groups to draw (``nemo``, ``oifs``, ``coupling``); default all.
+
+    Returns
+    -------
+    dict
+        The content of ``summary.yml``.
+
+    Raises
+    ------
+    ConfigError
+        If the configuration is invalid or has no ``present`` section.
+    PipelineError
+        If the plot directory is inside an EC-Earth tree or an input file is missing.
+    """
+    ctx = Context(load_config(config_file), PERIOD)
+    reference = os.path.abspath(reference or ctx.section.input)
+    grids = dict.fromkeys([ctx.config.grids.nemo.name, *PLOT_REFERENCE_GRIDS])
+    domains = [path for path in (domain_file(reference, grid) for grid in grids) if os.path.isfile(path)]
+    return plot_period(ctx, os.path.abspath(out_dir), reference, domains, groups=groups)

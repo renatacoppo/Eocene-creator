@@ -4,6 +4,8 @@ Commands (``-c CONFIG``, ``--dry-run``, ``--overwrite`` and ``-l LEVEL`` on ever
 
 - ``ecefast <period> run [--steps a,b] [--oifs a,b] [--nemo a,b]``: the whole pipeline of a time period
   (``present``, ``eocene``); ``ecefast <period> steps`` lists its steps.
+- ``ecefast <period> plot -c CONFIG -o DIR [--reference TREE] [--only a,b]``: maps of the period's output compared
+  with a reference tree, written to ``DIR``.
 - ``ecefast <component> run [--period present|eocene] [--<component> a,b]``: the steps of one component
   (``oifs``, ``nemo``, ``oasis``, ``rnfm``) in one period, ``present`` by default.
 
@@ -128,13 +130,44 @@ def period_main(period: str, argv: list[str]) -> None:
     run_parser.add_argument("--steps", type=comma_list, help="comma-separated step names")
     add_run_options(run_parser, STEP_COMPONENTS)
     commands.add_parser("steps", help="list the steps: what each needs, reads and writes")
+    add_plot_parser(commands, period)
     args = parser.parse_args(argv)
 
     if args.command == "steps":
         print(format_steps(pipeline.PIPELINE))
         return
+    if args.command == "plot":
+        call(pipeline.plot, args.loglevel, args.config, args.output, reference=args.reference, groups=args.only)
+        return
     substeps = {c: getattr(args, c) for c in STEP_COMPONENTS if getattr(args, c) is not None}
     run(pipeline, args, select=args.steps, substeps=substeps)
+
+
+def add_plot_parser(commands, period: str) -> None:
+    """The ``plot`` command of a period."""
+    from ecefast.periods.plots import GROUPS
+
+    default = {"present": "present.input", "eocene": "eocene.input"}[period]
+    plot_parser = commands.add_parser(
+        "plot", help=f"maps of the {period} output compared with a reference tree (default {default})"
+    )
+    plot_parser.add_argument("-c", "--config", required=True, help="configuration file (schema 2)")
+    plot_parser.add_argument(
+        "-o",
+        "--output",
+        required=True,
+        help="plot directory (outside the EC-Earth trees), created if needed; the plots of an earlier run are erased",
+    )
+    plot_parser.add_argument(
+        "--reference", help=f"root of the EC-Earth tree to compare with (default {default}), e.g. another run"
+    )
+    plot_parser.add_argument(
+        "--only",
+        type=comma_list,
+        metavar="GROUPS",
+        help=f"draw only these groups (comma-separated: {', '.join(GROUPS)})",
+    )
+    plot_parser.add_argument("-l", "--loglevel", default="INFO", help="log level (DEBUG, INFO, WARNING, ...)")
 
 
 def component_main(component: str, argv: list[str]) -> None:
@@ -170,12 +203,17 @@ def component_main(component: str, argv: list[str]) -> None:
 
 def run(pipeline, args: argparse.Namespace, **options) -> None:
     """Call ``pipeline.run`` with the common options; log a configuration or pipeline error and exit 1."""
+    call(pipeline.run, args.loglevel, args.config, dry_run=args.dry_run, overwrite=args.overwrite, **options)
+
+
+def call(function, loglevel: str, *args, **options) -> None:
+    """Set up the logger and call ``function``; log a configuration or pipeline error and exit 1."""
     from ecefast.core import ConfigError, setup_logger
     from ecefast.core.steps import PipelineError
 
-    logger = setup_logger(level=args.loglevel)
+    logger = setup_logger(level=loglevel)
     try:
-        pipeline.run(args.config, dry_run=args.dry_run, overwrite=args.overwrite, **options)
+        function(*args, **options)
     except (ConfigError, PipelineError) as e:
         logger.error("%s", e)
         sys.exit(1)
