@@ -3,11 +3,14 @@
 - **Ocean basins**: the connected ocean regions of a domain. Cells are connected through their faces (where NEMO
   has a velocity point), across the east-west period and across the north fold. Basins other than the largest are
   closed seas or lakes: wanted for some (Caspian Sea), a sign of a closed strait for others.
+- **Minimum depth**: the smallest ocean depth of a domain and the cells that have it, the shallowest columns.
+- **Inlets**: dead-end channels one cell wide, where water enters from one side only and nothing flows through
+  (:func:`ocean_inlets`).
 - **One-cell passages**: ocean cells with land on both sides along ``x`` or along ``y``, where a strait or a
   channel is one cell wide.
 - **Land-sea mask comparisons** of a domain with another domain on the same grid (cells that change, depth
-  differences), or with any field on another grid (another NEMO domain, the source of a bathymetry, the OIFS
-  land-sea mask), sampled at the domain's T points from the nearest point.
+  differences), or with a mask on another grid (another NEMO domain, the source of a bathymetry, the OIFS
+  land-sea mask), remapped conservatively onto the domain's T cells (:func:`write_cell_bounds`, :func:`ocean_on`).
 - **Forcing files** (``FORCING_FILES``): the geothermal heat flux and the tidal mixing forcing of two trees,
   every variable that differs.
 
@@ -15,6 +18,7 @@ Maps are in index space (``x``, ``y``), so a cell can be found in the domain, wi
 orientation.
 """
 
+import argparse
 import os
 from dataclasses import dataclass
 
@@ -24,17 +28,20 @@ from matplotlib.figure import Figure
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 
+from ecefast.core.io import atomic_write
 from ecefast.core.plotting import (
     compare_datasets,
     draw_categories,
     draw_field,
     new_figure,
+    remap_conservative,
     sample_nearest,
     symmetric_limit,
 )
 from ecefast.core.steps import PipelineError
 
 from .bathymetry.base import BathymetryProcessor
+from .orca_bounds import OrcaMesh
 
 # names of the depth (m) in NEMO domain and bathymetry files, in order of preference: domain_cfg.nc, bathy_meter.nc
 BATHYMETRY_NAMES = ("bathy_metry", "Bathymetry", "bathymetry", "bathy_meter")
@@ -47,14 +54,32 @@ FORCING_FILES = ("nemo/initial/Goutorbe_ghflux.nc", "nemo/initial/zdfiwm_forcing
 # Sign of an ocean value of each MASK_PRESETS convention (bathymetry/base.py): depth > 0, elevation < 0
 OCEAN_SIGN = {"positive_depth": 1, "negative_elevation": -1}
 
+# name of the ocean mask (1 ocean, 0 land) in the files written for conservative remapping
+OCEAN_FIELD = "ocean"
+# share of a cell that the ocean of another grid must cover for the cell to be ocean in a comparison: at least
+# half, the rule that makes the land-sea mask of a bathymetry (remapcon fraction against 0.5, bathymetry/base.py)
+OCEAN_COVER_THRESHOLD = 0.5
+
 # classes of the domain map
-LAND, OCEAN, PASSAGE, ISOLATED = 0, 1, 2, 3
+LAND, OCEAN, PASSAGE, ISOLATED, INLET = 0, 1, 2, 3, 4
 DOMAIN_CATEGORIES = {
     LAND: ("land", "#d9d9d9"),
     OCEAN: ("ocean, main basin", "#c6dbef"),
     PASSAGE: ("one-cell passage", "#e66101"),
     ISOLATED: ("other basin", "#5e3c99"),
+    INLET: ("inlet (dead end, one cell wide)", "#d01c8b"),
 }
+# number of inlets, the longest ones, that the summary describes with their length and a cell
+LONGEST_INLETS = 10
+# classes of the map of the cells at the minimum depth; their colour differs from every class of the domain map
+SHALLOWEST = 2
+MINIMUM_DEPTH_CATEGORIES = {
+    LAND: ("land", "#d9d9d9"),
+    OCEAN: ("ocean, deeper", "#c6dbef"),
+    SHALLOWEST: ("ocean, at the minimum depth", "#018571"),
+}
+# m; cells within this of the smallest depth of a domain are at its minimum depth (rounding of the depths)
+MINIMUM_DEPTH_ATOL = 1e-3
 # classes of a land-sea mask comparison
 BOTH_LAND, BOTH_OCEAN, ONLY_TEST, ONLY_OTHER = 0, 1, 2, 3
 AGREEMENT_KEYS = {
@@ -136,10 +161,37 @@ def read_domain(path: str, label: str) -> Domain:
     return Domain(label, path, ds[lon_name].values, ds[lat_name].values, ocean, depth)
 
 
-def source_ocean(processor: type[BathymetryProcessor], path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Ocean mask of the source dataset of a bathymetry, on its own grid.
+def write_cell_bounds(domain_file: str, outfile: str, ocean: np.ndarray | None = None) -> None:
+    """Write the T cells of a NEMO domain with their corners, as a grid CDO can remap conservatively from and onto.
 
-    Ocean follows the processor's ``mask_type`` (``MASK_PRESETS``): depth > 0 or elevation < 0.
+    The corners are the F points around each T point (:class:`ecefast.components.nemo.orca_bounds.OrcaMesh`, the
+    tool the domain pipeline uses for its own bounds). Cells of the north-fold row get corners beyond the fold and
+    have no area; they duplicate cells across the fold.
+
+    Parameters
+    ----------
+    domain_file : str
+        The ``domain_cfg.nc`` (``glam*``, ``gphi*``, ``e1t``, ``e2t``).
+    outfile : str
+        NetCDF file to write: ``lat``, ``lon`` and their bounds, on the dimensions of the domain.
+    ocean : numpy.ndarray, optional
+        Ocean mask of the domain, written as the field ``ocean`` (1 ocean, 0 land) so the file can be remapped.
+    """
+    mesh = OrcaMesh(argparse.Namespace(meshmask=domain_file, stagg="T", level=False, zname="level"))
+    cells = mesh.reorder_vars(mesh.get_ds_cf())
+    if ocean is not None:
+        # the mask becomes the one field of the file, in place of the cell area
+        cells = cells.drop_vars("cell_area").assign({OCEAN_FIELD: (cells["lat"].dims, ocean.astype("f4"))})
+    with atomic_write(outfile) as tmp:
+        cells.to_netcdf(tmp)
+
+
+def write_source_ocean(processor: type[BathymetryProcessor], path: str, outfile: str) -> None:
+    """Write the ocean mask of the source dataset of a bathymetry, on its own grid, as a file CDO can remap.
+
+    Ocean follows the processor's ``mask_type`` (``MASK_PRESETS``): depth > 0 or elevation < 0. A source on a NEMO
+    domain is written with its cell corners (:func:`write_cell_bounds`); of a regular grid CDO finds the bounds
+    itself.
 
     Parameters
     ----------
@@ -147,20 +199,23 @@ def source_ocean(processor: type[BathymetryProcessor], path: str) -> tuple[np.nd
         The bathymetry (its ``variable`` and ``mask_type``).
     path : str
         The source file (the processor's ``source_file``, expanded).
-
-    Returns
-    -------
-    tuple of numpy.ndarray
-        Longitude, latitude and ocean mask of the source points, all of the same 2D shape.
+    outfile : str
+        NetCDF file to write, with the field ``ocean`` (1 ocean, 0 land).
     """
     with xr.open_dataset(path) as ds:
         values = ds[processor.variable].squeeze(drop=True).load()
-        if "glamt" in ds:  # a NEMO domain: curvilinear T points
-            lon, lat = ds.glamt.squeeze(drop=True).values, ds.gphit.squeeze(drop=True).values
-        else:
-            lon, lat = np.meshgrid(values[values.dims[1]].values, values[values.dims[0]].values)
+        curvilinear = "glamt" in ds  # a NEMO domain
     ocean = OCEAN_SIGN[processor.mask_type] * np.nan_to_num(values.values) > 0
-    return lon, lat, ocean
+    if curvilinear:
+        write_cell_bounds(path, outfile, ocean)
+        return
+    lat, lon = values.dims
+    coords = {
+        lat: (lat, values[lat].values, {"standard_name": "latitude", "units": "degrees_north"}),
+        lon: (lon, values[lon].values, {"standard_name": "longitude", "units": "degrees_east"}),
+    }
+    with atomic_write(outfile) as tmp:
+        xr.Dataset({OCEAN_FIELD: ((lat, lon), ocean.astype("f4"))}, coords=coords).to_netcdf(tmp)
 
 
 def ocean_basins(ocean: np.ndarray, lon: np.ndarray, lat: np.ndarray) -> np.ndarray:
@@ -183,26 +238,88 @@ def ocean_basins(ocean: np.ndarray, lon: np.ndarray, lat: np.ndarray) -> np.ndar
         Basin number of every cell: 0 the largest basin, 1 the next largest and so on; -1 on land.
     """
     ny, nx = ocean.shape
-    index = np.arange(ny * nx).reshape(ny, nx)
+    a, b = (np.concatenate(pair) for pair in zip(_face_pairs(ocean), _same_cell_pairs(ocean, lon, lat)))
+    graph = coo_matrix((np.ones(a.size), (a, b)), shape=(ny * nx, ny * nx))
+    count, labels = connected_components(graph, directed=False)
+    labels = labels.reshape(ny, nx)
+    return _rank_by_size(ocean, labels, count)
+
+
+def _face_pairs(ocean: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Flat indices of the pairs of ocean cells that share an east or a north face (east-west periodic)."""
+    index = np.arange(ocean.size).reshape(ocean.shape)
     east = ocean & np.roll(ocean, -1, axis=1)
     north = ocean[:-1] & ocean[1:]
-    pairs = [(index[east], np.roll(index, -1, axis=1)[east]), (index[:-1][north], index[1:][north])]
-    # cells with the same coordinates are the same cell (north fold)
+    first = np.concatenate([index[east], index[:-1][north]])
+    second = np.concatenate([np.roll(index, -1, axis=1)[east], index[1:][north]])
+    return first, second
+
+
+def _same_cell_pairs(ocean: np.ndarray, lon: np.ndarray, lat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Flat indices of the pairs of ocean cells with the same coordinates: the same cell twice (north fold)."""
     key = np.round(np.mod(lon, 360.0), 4).ravel() * 1e4 + np.round(lat, 4).ravel()
     order = np.argsort(key, kind="stable")
     same = key[order][1:] == key[order][:-1]
     first, second = order[:-1][same], order[1:][same]
     both = ocean.ravel()[first] & ocean.ravel()[second]
-    pairs.append((first[both], second[both]))
-    a = np.concatenate([p[0] for p in pairs])
-    b = np.concatenate([p[1] for p in pairs])
-    graph = coo_matrix((np.ones(a.size), (a, b)), shape=(ny * nx, ny * nx))
-    count, labels = connected_components(graph, directed=False)
-    labels = labels.reshape(ny, nx)
-    ids, cells = np.unique(labels[ocean], return_counts=True)
+    return first[both], second[both]
+
+
+def _rank_by_size(cells: np.ndarray, labels: np.ndarray, count: int) -> np.ndarray:
+    """Number the groups of ``labels`` on ``cells`` by size, 0 the largest; -1 outside ``cells``."""
+    ids, sizes = np.unique(labels[cells], return_counts=True)
     rank = np.full(count, -1)
-    rank[ids[np.argsort(-cells, kind="stable")]] = np.arange(ids.size)
-    return np.where(ocean, rank[labels], -1)
+    rank[ids[np.argsort(-sizes, kind="stable")]] = np.arange(ids.size)
+    return np.where(cells, rank[labels], -1)
+
+
+def ocean_inlets(ocean: np.ndarray, lon: np.ndarray, lat: np.ndarray) -> np.ndarray:
+    """Number the inlets of a domain: the dead-end channels one cell wide.
+
+    A cell with ocean through one face only is the tip of an inlet: water enters it from one side, so nothing
+    flows through. Removing the tips and repeating follows each inlet to its mouth, the first cell that opens on
+    wider ocean (which is not part of it). The connections are those of :func:`ocean_basins`; cells with the same
+    coordinates count as one cell. A notch of one cell in a coast is an inlet of length 1. Dead ends two or more
+    cells wide are not found.
+
+    Parameters
+    ----------
+    ocean : numpy.ndarray
+        Ocean mask ``(y, x)``.
+    lon, lat : numpy.ndarray
+        T-point coordinates ``(y, x)``, degrees.
+
+    Returns
+    -------
+    numpy.ndarray
+        Inlet number of every cell: 0 the longest inlet, 1 the next longest and so on; -1 elsewhere.
+    """
+    size = ocean.size
+    # one node for the cells with the same coordinates
+    first, second = _same_cell_pairs(ocean, lon, lat)
+    same = coo_matrix((np.ones(first.size), (first, second)), shape=(size, size))
+    _, node = connected_components(same, directed=False)
+    a, b = _face_pairs(ocean)
+    a, b = node[a], node[b]
+    faces = coo_matrix((np.ones(a.size), (a, b)), shape=(size, size)).tocsr()
+    neighbours = ((faces + faces.T) > 0).astype(np.int32)
+    neighbours.setdiag(0)
+    alive = np.zeros(size, dtype=bool)
+    alive[node[ocean.ravel()]] = True
+    inlet = np.zeros(size, dtype=bool)
+    while True:
+        tips = alive & (neighbours @ alive.astype(np.int32) == 1)
+        if not tips.any():
+            break
+        inlet |= tips
+        alive &= ~tips
+    # the inlet cells that touch are one inlet
+    nodes = np.flatnonzero(inlet)
+    count, numbers = connected_components(neighbours[nodes][:, nodes], directed=False)
+    labels = np.full(size, -1)
+    labels[nodes] = numbers
+    cells = ocean & inlet[node].reshape(ocean.shape)
+    return _rank_by_size(cells, labels[node].reshape(ocean.shape), max(count, 1))
 
 
 def one_cell_passages(ocean: np.ndarray) -> np.ndarray:
@@ -224,38 +341,66 @@ def one_cell_passages(ocean: np.ndarray) -> np.ndarray:
     return ocean & ((~west & ~east) | (~south & ~north))
 
 
-def domain_classes(domain: Domain) -> tuple[np.ndarray, np.ndarray]:
-    """Classes of the domain map (``DOMAIN_CATEGORIES``) and the basin numbers (:func:`ocean_basins`)."""
+def domain_classes(domain: Domain) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Classes of the domain map (``DOMAIN_CATEGORIES``), the basin numbers (:func:`ocean_basins`) and the inlet
+    numbers (:func:`ocean_inlets`).
+
+    A cell of an inlet is drawn as an inlet, not as a one-cell passage: the passages left are those with ocean at
+    both ends. A cell of a basin other than the largest is drawn as that.
+    """
     basins = ocean_basins(domain.ocean, domain.lon, domain.lat)
+    inlets = ocean_inlets(domain.ocean, domain.lon, domain.lat)
     classes = np.full(domain.ocean.shape, LAND)
     classes[domain.ocean] = OCEAN
     classes[one_cell_passages(domain.ocean)] = PASSAGE
+    classes[inlets >= 0] = INLET
     classes[basins > 0] = ISOLATED
-    return classes, basins
+    return classes, basins, inlets
 
 
-def domain_summary(domain: Domain, basins: np.ndarray, classes: np.ndarray) -> dict:
-    """Numbers of a domain for ``summary.yml``: ocean cells, basins (each with a cell and its position) and
-    one-cell passages."""
-    other = []
-    for number in range(1, basins.max() + 1):
-        j, i = np.argwhere(basins == number)[0]
-        other.append(
+def _groups(domain: Domain, numbers: np.ndarray, limit: int | None = None) -> list[dict]:
+    """Size and one cell (indices and position) of each numbered group of cells, for ``summary.yml``."""
+    groups = []
+    for number in range(numbers.max() + 1 if limit is None else min(limit, numbers.max() + 1)):
+        j, i = np.argwhere(numbers == number)[0]
+        groups.append(
             {
-                "cells": int((basins == number).sum()),
+                "cells": int((numbers == number).sum()),
                 "j": int(j),
                 "i": int(i),
                 "lon": round(float(domain.lon[j, i]), 2),
                 "lat": round(float(domain.lat[j, i]), 2),
             }
         )
+    return groups
+
+
+def domain_summary(domain: Domain, basins: np.ndarray, inlets: np.ndarray, classes: np.ndarray) -> dict:
+    """Numbers of a domain for ``summary.yml``: ocean cells, the minimum depth (m) and the cells that have it, basins
+    (each with a cell and its position), one-cell passages that are not inlets, and inlets (their number, their
+    cells in the main basin, and the ``LONGEST_INLETS`` longest with their length and a cell)."""
+    main = np.where(basins == 0, inlets, -1)
+    minimum, shallowest = minimum_depth_cells(domain)
     return {
         "domain": domain.path,
         "ocean_cells": int(domain.ocean.sum()),
+        "minimum_depth": round(minimum, 2),
+        "minimum_depth_cells": int(shallowest.sum()),
         "basins": int(basins.max() + 1),
-        "other_basins": other,
+        "other_basins": _groups(domain, basins)[1:],
         "one_cell_passages": int((classes == PASSAGE).sum()),
+        "inlets": int(np.unique(main[main >= 0]).size),
+        "inlet_cells": int((classes == INLET).sum()),
+        "longest_inlets": _groups(domain, _renumber(main), LONGEST_INLETS),
     }
+
+
+def _renumber(numbers: np.ndarray) -> np.ndarray:
+    """The same groups numbered 0, 1, ... without gaps, in the same order; -1 stays -1."""
+    present = np.unique(numbers[numbers >= 0])
+    lookup = np.full(max(int(numbers.max()), 0) + 2, -1)
+    lookup[present] = np.arange(present.size)
+    return lookup[numbers]
 
 
 def _field(values: np.ndarray, units: str = "") -> xr.DataArray:
@@ -263,11 +408,40 @@ def _field(values: np.ndarray, units: str = "") -> xr.DataArray:
     return xr.DataArray(values, dims=("y", "x"), attrs={"units": units})
 
 
+def minimum_depth_cells(domain: Domain) -> tuple[float, np.ndarray]:
+    """The smallest ocean depth of a domain and the cells that have it.
+
+    They are the cells that the minimum depth of the domain build raised (``<period>.nemo.minimum_depth``, on the
+    vertical grid of the domain), the shallowest columns of the model.
+
+    Parameters
+    ----------
+    domain : Domain
+        The domain.
+
+    Returns
+    -------
+    tuple
+        The minimum depth (m; NaN for a domain without ocean) and the mask of the cells within
+        ``MINIMUM_DEPTH_ATOL`` of it.
+    """
+    depth = domain.depth.values
+    if not domain.ocean.any():
+        return float("nan"), np.zeros(depth.shape, dtype=bool)
+    minimum = float(np.nanmin(depth))
+    return minimum, np.nan_to_num(depth, nan=np.inf) <= minimum + MINIMUM_DEPTH_ATOL
+
+
 def plot_domain(domain: Domain, classes: np.ndarray) -> Figure:
-    """Map of the depth, and map of the basins and one-cell passages of a domain (:func:`domain_classes`)."""
-    fig, axes = new_figure(2, width=7.5)
+    """Map of the depth, of the basins, one-cell passages and inlets (:func:`domain_classes`) and of the cells at the
+    minimum depth (:func:`minimum_depth_cells`) of a domain."""
+    fig, axes = new_figure(3, width=7.5)
     draw_field(fig, axes[0], domain.depth, f"{domain.label}: depth", domain.lat, cmap="viridis_r")
     draw_categories(fig, axes[1], _field(classes), DOMAIN_CATEGORIES, f"{domain.label}: basins", domain.lat)
+    minimum, shallowest = minimum_depth_cells(domain)
+    shallow = np.where(shallowest, SHALLOWEST, np.where(domain.ocean, OCEAN, LAND))
+    title = f"{domain.label}: {int(shallowest.sum())} cells at the minimum depth ({minimum:.1f} m)"
+    draw_categories(fig, axes[2], _field(shallow), MINIMUM_DEPTH_CATEGORIES, title, domain.lat)
     return fig
 
 
@@ -306,22 +480,57 @@ def agreement_categories(test_label: str, other_label: str) -> dict[int, tuple[s
     }
 
 
-def ocean_at(domain: Domain, lon: np.ndarray, lat: np.ndarray, ocean: np.ndarray) -> np.ndarray:
-    """An ocean mask on another grid, sampled at the T points of ``domain`` from the nearest point.
+def fill_empty_cells(domain: Domain, values: np.ndarray) -> np.ndarray:
+    """Give the cells of ``domain`` that a conservative remapping left empty (NaN) the value of the nearest cell.
+
+    Empty cells are those of the north-fold row, which have no area in :func:`write_cell_bounds` and take the value
+    of their twin across the fold, and cells that the other grid does not cover (south of a domain that stops at
+    the Antarctic coast).
+
+    Parameters
+    ----------
+    domain : Domain
+        The domain.
+    values : numpy.ndarray
+        A field on its cells, NaN where empty.
+
+    Returns
+    -------
+    numpy.ndarray
+        The field without NaN.
+    """
+    empty = np.isnan(values)
+    if not empty.any():
+        return values
+    full = ~empty
+    filled = values.copy()
+    filled[empty] = sample_nearest(
+        domain.lon[full], domain.lat[full], values[full], domain.lon[empty], domain.lat[empty]
+    )
+    return filled
+
+
+def ocean_on(domain: Domain, source: str, cells: str) -> np.ndarray:
+    """An ocean mask on another grid, remapped conservatively onto the cells of ``domain``.
+
+    A cell is ocean when the ocean of the other grid covers at least ``OCEAN_COVER_THRESHOLD`` of it.
 
     Parameters
     ----------
     domain : Domain
         The domain whose cells receive the mask.
-    lon, lat, ocean : numpy.ndarray
-        Coordinates (degrees) and ocean mask of the other grid, all of the same shape.
+    source : str
+        File with the field ``ocean`` (1 ocean, 0 land) on the other grid (:func:`write_cell_bounds`,
+        :func:`write_source_ocean`).
+    cells : str
+        The cells of ``domain`` with their corners (:func:`write_cell_bounds`).
 
     Returns
     -------
     numpy.ndarray
         The ocean mask on the cells of ``domain``.
     """
-    return sample_nearest(lon, lat, ocean, domain.lon, domain.lat).astype(bool)
+    return fill_empty_cells(domain, remap_conservative(source, cells)) >= OCEAN_COVER_THRESHOLD
 
 
 def plot_agreement(domain: Domain, other: np.ndarray, other_label: str, title: str) -> tuple[Figure, dict[str, int]]:
@@ -332,7 +541,7 @@ def plot_agreement(domain: Domain, other: np.ndarray, other_label: str, title: s
     domain : Domain
         The domain.
     other : numpy.ndarray
-        The other ocean mask on the cells of ``domain`` (see :func:`ocean_at`).
+        The other ocean mask on the cells of ``domain`` (see :func:`ocean_on`).
     other_label : str
         Name of the other mask.
     title : str

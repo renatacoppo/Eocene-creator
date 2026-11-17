@@ -1,5 +1,5 @@
-"""Shared helpers of the ``ecefast <period> plot`` command: GRIB files on a regular grid, nearest-neighbour sampling
-between grids, comparison and category maps, and figure files.
+"""Shared helpers of the ``ecefast <period> plot`` command: GRIB files on a regular grid, conservative remapping and
+nearest-neighbour sampling between grids, comparison and category maps, and figure files.
 
 Figures have no map projection and no coastlines: present-day coastlines would be wrong on an Eocene field. Fields
 with 1D coordinates are drawn against them (lon/lat); fields on a curvilinear NEMO grid in index space (``x``,
@@ -81,6 +81,31 @@ def load_grib(path: str, names: list[str] | None = None, grid: str = REGULAR_GRI
         with xr.open_dataset(outfile, decode_times=False) as ds:
             ds = ds.load()
     return ds.drop_vars([name for name in ds.data_vars if name.endswith("_bnds")])
+
+
+def remap_conservative(source: str, target: str) -> np.ndarray:
+    """Remap one field onto another grid with first-order conservative remapping (``cdo remapcon``).
+
+    Parameters
+    ----------
+    source : str
+        NetCDF file with one field on a grid whose cell bounds CDO knows (a regular lon/lat grid, or a grid with
+        bounds), or a CDO operator chain ending in such a file.
+    target : str
+        CDO description of the target grid with cell bounds: a NetCDF file or a grid name.
+
+    Returns
+    -------
+    numpy.ndarray
+        The field on the target grid: the area-weighted mean of the source cells under each target cell, NaN where
+        a target cell has no area or no source cell under it.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        outfile = os.path.join(tmp, "remapped.nc")
+        get_cdo().remapcon(target, input=source, output=outfile, options="-f nc4")
+        with xr.open_dataset(outfile, decode_times=False) as ds:
+            (name,) = [name for name in ds.data_vars if not name.endswith("_bnds")]
+            return ds[name].squeeze(drop=True).values
 
 
 def _unit_vectors(lon: np.ndarray, lat: np.ndarray) -> np.ndarray:

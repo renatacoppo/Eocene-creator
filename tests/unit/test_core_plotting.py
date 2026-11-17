@@ -10,6 +10,7 @@ import xarray as xr
 
 from ecefast.core.plotting import (
     load_grib,
+    remap_conservative,
     plot_comparison,
     sample_nearest,
     save_figure,
@@ -113,6 +114,19 @@ def test_load_grib_gridpoint(tmp_path: Path):
     assert list(ds.data_vars) == ["var172"]
     assert ds.sizes["lat"] == 4 and ds.sizes["lon"] == 8
     np.testing.assert_allclose(ds["var172"].values, 1.0)
+
+
+@needs_cdo
+def test_remap_conservative_is_an_area_mean(tmp_path: Path):
+    """Ones from 0.5 W to 179.5 E and zeros elsewhere, onto cells 90 degrees wide that straddle the edges."""
+    path = tmp_path / "field.nc"
+    subprocess.run(
+        ["cdo", "-s", "-f", "nc4", "-expr,field=clon(const)<180", "-const,1,r360x180", str(path)], check=True
+    )
+    remapped = remap_conservative(str(path), "r4x2")
+    assert remapped.shape == (2, 4)
+    # the cells of r4x2 are centred on 0, 90, 180 and 270 E
+    np.testing.assert_allclose(remapped[0], [45.5 / 90, 1.0, 44.5 / 90, 0.0], atol=1e-6)
 
 
 @needs_cdo

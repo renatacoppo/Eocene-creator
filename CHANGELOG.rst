@@ -17,12 +17,17 @@ Added
 
 - ``ecefast <period> plot -c CONFIG -o DIR [--reference TREE] [--only nemo,oifs,coupling]``: maps of the output
   of a period against a reference tree (default the period's ``input``, or another run), and ``summary.yml`` with
-  the numbers. ``nemo``: depth, ocean basins and one-cell passages of the domain; its land-sea mask against the
-  domains of the reference (same grid: changed cells and depth difference; ORCA2, eORCA1: nearest point) and,
-  Eocene, the Herold bathymetry; the geothermal heat flux and tidal mixing forcing files that differ. The depth is
+  the numbers. The figures and the summary name the ``data_version``; the plot directory of
+  an earlier run is erased first. ``nemo``: depth, ocean basins, one-cell
+  passages, inlets (dead-end channels one cell wide) and cells at the minimum depth of the domain and of each compared domain of the reference (present day:
+  its own grid, ORCA2, eORCA1_ISO); its land-sea mask against the domains of the reference (same grid: changed cells and depth
+  difference; another grid: remapped conservatively onto its cells) and, Eocene, the Herold bathymetry (remapped
+  the same way); the geothermal heat flux and tidal mixing forcing files that differ. The depth is
   read as ``bathy_metry``, ``Bathymetry`` or ``bathymetry``. ``oifs``: the variables of the OIFS surface files that differ (monthly fields as
   annual mean and seasonal range, vegetation and soil types as classes). ``coupling``: OIFS land-sea mask against
-  the NEMO mask. Shared helpers in ``ecefast.core.plotting`` replace ``periods/eocene/plots/helper_functions.py``;
+  the NEMO mask on the NEMO grid (OIFS mask remapped conservatively onto the NEMO cells), and the same map for the coupled configurations of the reference tree (the grids of the
+  configuration, ``TL63L31-ORCA2``, ``TL255L91-eORCA1``, when the tree holds them), with ``mismatch_percent`` in
+  the summary. Shared helpers in ``ecefast.core.plotting`` replace ``periods/eocene/plots/helper_functions.py``;
   the IFS vegetation-type table moved to ``ecefast.components.oifs.land_cover`` (#56).
 - NEMO domain step ``sections`` (``present.nemo.steps.sections``, default ``true``): writes
   ``nemo/domain/<grid>/section_ijglobal.diadct``, the transport sections of the NEMO diagnostic ``diadct``, with the

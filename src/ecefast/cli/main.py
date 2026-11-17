@@ -153,7 +153,10 @@ def add_plot_parser(commands, period: str) -> None:
     )
     plot_parser.add_argument("-c", "--config", required=True, help="configuration file (schema 2)")
     plot_parser.add_argument(
-        "-o", "--output", required=True, help="plot directory (outside the EC-Earth trees), created if needed"
+        "-o",
+        "--output",
+        required=True,
+        help="plot directory (outside the EC-Earth trees), created if needed; the plots of an earlier run are erased",
     )
     plot_parser.add_argument(
         "--reference", help=f"root of the EC-Earth tree to compare with (default {default}), e.g. another run"

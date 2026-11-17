@@ -194,7 +194,9 @@ levels and depths.
 ``ecefast <period> plot`` draws maps of the output of a period next to a reference tree, by
 default the period's ``input`` (the present-day tree); ``--reference`` takes any other tree, for
 instance another run. The figures go to the directory given with ``-o``, outside the EC-Earth
-trees, with ``summary.yml`` holding the numbers, so two runs can be compared at a glance.
+trees, with ``summary.yml`` holding the numbers, so two runs can be compared at a glance. A plot
+directory of an earlier run (one with a ``summary.yml``) is erased first; a directory with other
+files is refused.
 
 .. code-block:: bash
 
@@ -209,12 +211,21 @@ trees, with ``summary.yml`` holding the numbers, so two runs can be compared at 
    * - Group
      - What it draws (``--only`` selects groups)
    * - ``nemo``
-     - ``nemo/domain.png``: depth, ocean basins and one-cell passages of the NEMO domain (basins
-       other than the main one are closed seas or closed straits; ``summary.yml`` gives a cell of
-       each). ``nemo/vs_reference_<grid>.png``: the land-sea mask against each domain of the
-       reference tree: on the same grid the cells that change and the depth difference, on another
-       grid (present day: ORCA2, eORCA1) the reference mask at the nearest point.
-       ``nemo/vs_source.png`` (Eocene): the mask against the Herold et al. (2014) bathymetry.
+     - ``nemo/domain.png``: depth, ocean basins, one-cell passages, inlets and the cells at the
+       minimum depth of the NEMO domain. Basins other than the main one are closed seas or
+       closed straits. An inlet is a dead-end channel one cell wide, followed from its tip (a
+       cell with ocean through one face only) to its mouth: nothing flows through it; a notch
+       of one cell in a coast is an inlet of length 1, and dead ends two or more cells wide are
+       not found. ``summary.yml`` gives a cell of each other basin, the number of inlets and of
+       their cells, the ten longest inlets with their length and a cell, the minimum depth and
+       the number of cells that have it. ``nemo/domain_reference_<grid>.png``: the same map for each domain of the
+       reference tree that is compared (the one of the same grid; present day: also ORCA2 and
+       eORCA1_ISO), with its numbers under ``reference_domains`` in ``summary.yml``. ``nemo/vs_reference_<grid>.png``: the land-sea mask against each domain
+       of the reference tree: on the same grid the cells that change and the depth difference, on
+       another grid the reference mask remapped conservatively (``remapcon``) onto the cells of
+       the domain, ocean where it covers at least half of a cell.
+       ``nemo/vs_source.png`` (Eocene): the mask against the Herold et al. (2014) bathymetry,
+       remapped the same way.
        ``nemo/forcing/<file>/<variable>.png``: the geothermal heat flux (``Goutorbe_ghflux.nc``)
        and the tidal mixing forcing (``zdfiwm_forcing_r720x360.nc``) of ``nemo/initial`` that
        differ from the reference, with colour scales from the 2nd and 98th percentiles. The depth
@@ -226,7 +237,18 @@ trees, with ``summary.yml`` holding the numbers, so two runs can be compared at 
        surface type; vegetation and soil types as classes.
    * - ``coupling``
      - ``coupling/oifs_lsm_vs_nemo.png``: the OIFS land-sea mask (land where ``lsm > 0.5``)
-       against the NEMO ocean mask.
+       against the NEMO ocean mask, on the NEMO grid: the OIFS mask is remapped conservatively
+       (``remapcon``) onto the NEMO cells, and a cell is OIFS land when OIFS land points cover
+       more than half of it. ``coupling/reference_<OIFS grid>-<NEMO grid>.png``: the same
+       map for the coupled configurations of the reference tree, to judge the mismatch against
+       an existing setup: the grids of the configuration, ``TL63L31-ORCA2`` and
+       ``TL255L91-eORCA1``, each drawn if the reference tree holds its ``domain_cfg.nc`` and
+       ``ICMGGECE4INIT`` (for ``TL255L91-eORCA1``, ``--reference`` a full ECE4-DATA tree).
+       ``summary.yml`` gives ``mismatch_percent`` for each: the share of the NEMO cells that
+       are ocean in only one of the two models.
+
+Titles and legends name the test tree with the data version it was made with (``eocene v1``), read
+from its ``provenance.yml``, and ``summary.yml`` records it.
 
 The present-day plot needs a built domain (``present.output/nemo/domain/<grid>/domain_cfg.nc``,
 made on Atos).

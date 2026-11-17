@@ -1,8 +1,9 @@
 """Tests of ``ecefast <period> plot`` through ``main(argv)``, on synthetic trees.
 
 The NEMO domains are the fake DOMAINcfg domains of ``tests/synthetic.py``. The OIFS GRIB files are empty
-placeholders and ``load_grib`` is replaced by synthetic datasets: CDO cannot give synthetic GRIB fields the ECMWF
-short names (``lsm``, ``z``) of the real files.
+placeholders: ``load_grib`` is replaced by synthetic datasets and ``land_fraction_on`` (the conservative remapping
+of the OIFS mask) by a synthetic land fraction: CDO cannot give synthetic GRIB fields the ECMWF short names
+(``lsm``, ``z``) of the real files, nor a reduced Gaussian grid.
 """
 
 import logging
@@ -17,6 +18,7 @@ from synthetic import READ_WRITERS, _lat_lon_1x1
 from ecefast.cli.main import main
 from ecefast.components.oifs import plots as oifs_plots
 from ecefast.components.oifs.plots import oifs_files
+from ecefast.periods import plots as periods_plots
 from ecefast.periods.plots import SUMMARY_FILE
 
 pytestmark = pytest.mark.integration
@@ -97,6 +99,15 @@ def write_oifs(tree: Path, value: float) -> dict[str, xr.Dataset]:
     return {files[name]: ds for name, ds in contents.items()}
 
 
+def fake_land_fraction(icmgg: str, grid: str, target: str, workdir: str) -> np.ndarray:
+    """Land north of the equator on the cells of ``target`` (the real one remaps a GRIB file with CDO)."""
+    with xr.open_dataset(target) as ds:
+        assert {"lat_bnds", "lon_bnds"} <= set(ds.variables)
+        fraction = (ds["lat"].values > 0).astype(float)
+    fraction[-1] = np.nan  # as the cells of the north-fold row
+    return fraction
+
+
 @pytest.fixture
 def log(caplog: pytest.LogCaptureFixture) -> pytest.LogCaptureFixture:
     """Capture the ``ecefast`` logger (it does not propagate to the root logger) and restore it afterwards."""
@@ -119,21 +130,34 @@ def trees(tmp_path: Path, monkeypatch) -> Path:
     monkeypatch.setattr(
         oifs_plots, "load_grib", lambda path, names=None: datasets[path][names] if names else datasets[path]
     )
+    monkeypatch.setattr(periods_plots, "land_fraction_on", fake_land_fraction)
+    (tmp_path / "out" / "provenance.yml").write_text("data_version: v1\n")
     write_config(tmp_path)
     return tmp_path
 
 
-def test_eocene_plot_all_groups(trees: Path):
+def test_eocene_plot_all_groups(trees: Path, log):
     out = trees / "plots"
+    write_domain(trees / "input", "ORCA2")
     main(["eocene", "plot", "-c", str(trees / "config.yml"), "-o", str(out)])
     summary = yaml.safe_load((out / SUMMARY_FILE).read_text())
-    assert summary["period"] == "eocene"
+    assert summary["period"] == "eocene" and summary["data_version"] == "v1"  # from the provenance of the tree
     assert summary["test"] == str(trees / "out") and summary["reference"] == str(trees / "input")
     nemo = summary["nemo"]
     assert nemo["basins"] == 1 and nemo["ocean_cells"] > 0
+    assert nemo["inlets"] == len(nemo["longest_inlets"]) and nemo["inlet_cells"] >= nemo["inlets"]
     assert list(nemo["comparisons"]) == ["reference PALEORCA2", "bathymetry source"]
     assert nemo["comparisons"]["reference PALEORCA2"]["ocean_only_in_test"] == 0
-    assert set(summary["coupling"]) == {"land_in_both", "ocean_in_both", "ocean_only_in_test", "ocean_only_in_other"}
+    counts = {"land_in_both", "ocean_in_both", "ocean_only_in_test", "ocean_only_in_other", "mismatch_percent"}
+    coupling = summary["coupling"]
+    assert set(coupling) == counts | {"reference"}
+    cells = sum(coupling[key] for key in counts - {"mismatch_percent"})
+    mismatch = coupling["ocean_only_in_test"] + coupling["ocean_only_in_other"]
+    assert coupling["mismatch_percent"] == pytest.approx(100 * mismatch / cells, abs=0.01)
+    # the grids of the configuration and the EC-Earth4 configurations that the reference tree holds
+    assert list(coupling["reference"]) == ["TL63L31-PALEORCA2", "TL63L31-ORCA2"]
+    assert set(coupling["reference"]["TL63L31-ORCA2"]) == counts | {"domain", "icmgg"}
+    assert "no reference coupling TL255L91-eORCA1" in log.text
     assert summary["oifs"]["ICMGGECE4INIT"]["changed"] == {"al": 0.2}
     assert summary["oifs"]["ICMSHECE4INIT"]["unchanged"] == ["orography"]
     forcing = nemo["forcing"]
@@ -142,7 +166,10 @@ def test_eocene_plot_all_groups(trees: Path):
     figures = sorted(str(p.relative_to(out)) for p in out.rglob("*.png"))
     assert figures == [
         "coupling/oifs_lsm_vs_nemo.png",
+        "coupling/reference_TL63L31-ORCA2.png",
+        "coupling/reference_TL63L31-PALEORCA2.png",
         "nemo/domain.png",
+        "nemo/domain_reference_PALEORCA2.png",
         "nemo/forcing/Goutorbe_ghflux/gh_flux.png",
         *(f"nemo/forcing/zdfiwm_forcing_r720x360/{name}.png" for name in sorted(ZDFIWM)),
         "nemo/vs_reference_PALEORCA2.png",
@@ -165,14 +192,52 @@ def test_eocene_plot_with_another_reference(trees: Path):
     assert "oifs" not in summary and "coupling" not in summary
 
 
-def test_present_plot_compares_every_domain_of_the_reference(trees: Path):
+def test_present_plot_compares_the_chosen_domains_of_the_reference(trees: Path, log):
     write_domain(trees / "present")
     write_forcing(trees / "present")
-    write_domain(trees / "input", "ORCA2")
+    for grid in ("ORCA2", "eORCA1"):  # eORCA1 is not one of PLOT_REFERENCE_GRIDS; eORCA1_ISO is not in the tree
+        write_domain(trees / "input", grid)
     main(["present", "plot", "-c", str(trees / "config.yml"), "-o", str(trees / "plots"), "--only", "nemo"])
     summary = yaml.safe_load((trees / "plots" / SUMMARY_FILE).read_text())
-    assert list(summary["nemo"]["comparisons"]) == ["reference ORCA2", "reference PALEORCA2"]
-    assert (trees / "plots" / "nemo" / "vs_reference_ORCA2.png").is_file()
+    assert summary["data_version"] == "unknown" and "no data version" in log.text  # a tree without provenance.yml
+    assert list(summary["nemo"]["comparisons"]) == ["reference PALEORCA2", "reference ORCA2"]
+    # the map and the numbers of every reference domain
+    assert list(summary["nemo"]["reference_domains"]) == ["PALEORCA2", "ORCA2"]
+    assert summary["nemo"]["reference_domains"]["ORCA2"]["ocean_cells"] > 0
+    assert summary["nemo"]["minimum_depth_cells"] > 0 and summary["nemo"]["minimum_depth"] > 0
+    figures = sorted(p.name for p in (trees / "plots" / "nemo").glob("*.png"))
+    assert figures == [
+        "domain.png",
+        "domain_reference_ORCA2.png",
+        "domain_reference_PALEORCA2.png",
+        "vs_reference_ORCA2.png",
+        "vs_reference_PALEORCA2.png",
+    ]
+    # the same domain under another grid name, remapped conservatively onto itself: the same mask
+    other = summary["nemo"]["comparisons"]["reference ORCA2"]
+    assert other["ocean_only_in_test"] == 0 and other["ocean_only_in_other"] == 0
+
+
+def test_plot_erases_the_plots_of_an_earlier_run(trees: Path, log):
+    out = trees / "plots"
+    command = ["eocene", "plot", "-c", str(trees / "config.yml"), "-o", str(out)]
+    main(command)
+    stale = out / "nemo" / "vs_reference_ORCA1.png"
+    stale.write_bytes(b"left by an earlier run")
+    main([*command, "--only", "nemo"])
+    assert "Erasing the plots of an earlier run" in log.text
+    assert not stale.exists() and not (out / "coupling").exists()
+    assert (out / "nemo" / "domain.png").is_file() and (out / SUMMARY_FILE).is_file()
+
+
+def test_plot_does_not_erase_a_directory_that_is_not_a_plot_directory(trees: Path, log):
+    out = trees / "notes"
+    out.mkdir()
+    (out / "keep.txt").write_text("not a plot")
+    with pytest.raises(SystemExit):
+        main(["eocene", "plot", "-c", str(trees / "config.yml"), "-o", str(out)])
+    assert "is not empty and holds no summary.yml" in log.text
+    assert [p.name for p in out.iterdir()] == ["keep.txt"]
 
 
 def test_plot_refuses_a_directory_in_an_output_tree(trees: Path, log):

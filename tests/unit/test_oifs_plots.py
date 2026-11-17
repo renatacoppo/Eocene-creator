@@ -4,6 +4,7 @@
 synthetic GRIB fields the ECMWF short names (``lsm``, ``z``) of the real files.
 """
 
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +12,14 @@ import pytest
 import xarray as xr
 
 from ecefast.components.oifs import plots
-from ecefast.components.oifs.plots import STANDARD_GRAVITY, compare_file, compare_oifs, oifs_files
+from ecefast.components.oifs.corners import reduced_grid_corners, write_corner_grid
+from ecefast.components.oifs.plots import (
+    STANDARD_GRAVITY,
+    compare_file,
+    compare_oifs,
+    land_fraction_on,
+    oifs_files,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -106,3 +114,24 @@ def test_compare_oifs_uses_the_land_sea_masks(tmp_path: Path, monkeypatch):
     assert list(summary) == ["ICMGGECE4INIT", "ICMSHECE4INIT", "ICMCLECE4", "bare_soil_albedos"]
     assert summary["ICMGGECE4INIT"]["changed"] == {"lsm": 1.0, "al": 0.1}
     assert summary["bare_soil_albedos"]["unchanged"] == ["var117"]
+
+
+@pytest.mark.skipif(shutil.which("cdo") is None, reason="needs cdo")
+def test_land_fraction_on_is_conservative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Four latitude bands of 45 degrees, land (lsm > 0.5) in the two northern ones, onto the same bands."""
+    lat, reduced_points = np.array([67.5, 22.5, -22.5, -67.5]), np.array([4, 8, 8, 4])
+    lsm = np.repeat([1.0, 0.6, 0.4, 0.0], reduced_points)
+
+    def corner_grid(icmgg, kind, spectral, outfile, workdir, masked_outfile):
+        assert (icmgg, kind, spectral) == ("ICMGGECE4INIT", "L", 63)
+        write_corner_grid(masked_outfile, *reduced_grid_corners(lat, reduced_points), mask=lsm)
+
+    monkeypatch.setattr(plots, "create_corner_grid", corner_grid)
+    fraction = land_fraction_on("ICMGGECE4INIT", "TL63L31", "r8x4", str(tmp_path))
+    assert fraction.shape == (4, 8)
+    np.testing.assert_allclose(fraction[:, 0], [0.0, 0.0, 1.0, 1.0], atol=1e-6)  # south to north
+
+
+def test_land_fraction_on_rejects_an_unknown_grid(tmp_path: Path):
+    with pytest.raises(ValueError, match="not an OIFS grid name"):
+        land_fraction_on("ICMGGECE4INIT", "ORCA2", "r1x2", str(tmp_path))
