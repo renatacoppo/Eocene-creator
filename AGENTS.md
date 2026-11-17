@@ -308,8 +308,9 @@ The tool is used from the command line; there are no tutorial notebooks.
 
 ## Documentation
 
-Documentation is written in reStructuredText (`.rst`) and built with Sphinx, so it can be
-published on Read the Docs.
+Documentation is written in reStructuredText (`.rst`) and built with Sphinx and published on
+GitHub Pages (<https://renatacoppo.github.io/Eocene-creator/>) by the `docs` workflow on every push
+to `main`.
 
 - **Location.** User and developer docs live in `docs/` as `.rst` files, with `docs/conf.py` and
   `docs/index.rst` as the entry point. They are written for whoever generates new data, on

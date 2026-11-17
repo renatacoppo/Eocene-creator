@@ -105,6 +105,8 @@ Added
 Changed
 ~~~~~~~
 
+- Documentation published on GitHub Pages (https://renatacoppo.github.io/Eocene-creator/) by the ``docs`` workflow
+  on every push to ``main``, instead of Read the Docs: ``.readthedocs.yaml`` removed (#53).
 - ``eocene.nemo.domain`` (``build`` or a directory, required) is replaced by the optional ``eocene.nemo.domain_dir``:
   unset, the ``domain`` step builds the Eocene domain; set, it installs the domain of that directory. Migrate with
   ``domain: build`` -> remove the key, ``domain: <dir>`` -> ``domain_dir: <dir>``; an old file gets an error saying

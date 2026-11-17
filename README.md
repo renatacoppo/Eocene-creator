@@ -29,7 +29,8 @@ configuration, git commit, data version, CDO and ecCodes versions).
 
 ## Documentation
 
-The documentation is in `docs/` (Sphinx: `pip install -e ".[docs]" && sphinx-build -b html docs docs/_build/html`):
+The documentation is online at <https://renatacoppo.github.io/Eocene-creator/> (built from `main`).
+Its source is in `docs/` (Sphinx: `pip install -e ".[docs]" && sphinx-build -b html docs docs/_build/html`):
 
 - `docs/quickstart.rst`: setup, running, what each step makes, checking the result;
 - `docs/configuration.rst`: every configuration key;
