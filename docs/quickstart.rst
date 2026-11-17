@@ -18,7 +18,7 @@ Eocene starts from its tree:
    git clone https://github.com/renatacoppo/Eocene-creator.git
    cd Eocene-creator
    module load conda                     # or your own Miniforge
-   mamba env create -f environment.yaml  # environment "eocene", with the package installed in editable mode
+   mamba env create -f environment.yaml  # environment "ecefast", with the package installed in editable mode
 
 What a run needs on Atos:
 
@@ -62,7 +62,7 @@ On an interactive node (``ecinteractive``) or in a batch job, not on a login nod
 
 .. code-block:: bash
 
-   conda activate eocene
+   conda activate ecefast
    module load cdo/2.5.3
 
    ecefast present run -c configs/atos.yml --dry-run   # check every input, show the plan, write nothing
@@ -116,7 +116,7 @@ What the steps make
      - the EC-Earth tree
    * - ``domain``
      - Builds the Eocene domain with the NEMO domain pipeline and the Herold bathymetry
-       (``eocene.nemo.domain: build``), installs it, and checks that it has the vertical grid of
+       (or takes the one in ``eocene.nemo.domain_dir``), installs it, and checks that it has the vertical grid of
        the present-day domain.
      - ``nemo/domain/PALEORCA2/domain_cfg.nc``, ``maskutil.nc``
    * - ``oasis``
@@ -195,6 +195,6 @@ Without Atos
 ------------
 
 On a laptop (``configs/laptop.tmpl``, ``machine.name: local``) there is no DOMAINcfg: the
-Eocene run installs the domain built on Atos (``eocene.nemo.domain`` set to its directory), and
+Eocene run installs the domain built on Atos (``eocene.nemo.domain_dir`` set to its directory), and
 ``ecefast nemo run`` goes as far as the DOMAINcfg namelist. ``scripts/get_ece4_data.sh`` fetches the
 subset of ECE4-DATA the Eocene run reads. This is meant for development and tests.

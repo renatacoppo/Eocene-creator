@@ -69,7 +69,7 @@ def make_config(root: Path, tmpdir: str | None = None, machine: str = "local", *
         input=str(root / "input"),
         herold=str(root / "herold"),
         output=str(root / "out"),
-        nemo=EoceneNEMO(domain=str(root / "precomputed"), minimum_depth=30),
+        nemo=EoceneNEMO(minimum_depth=30, domain_dir=str(root / "precomputed")),
     )
     values = {
         "present": present,

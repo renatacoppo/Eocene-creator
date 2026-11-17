@@ -38,7 +38,7 @@ def tree(tmp_path_factory: pytest.TempPathFactory) -> dict:
             "input": str(root / "input"),
             "herold": str(root / "herold"),
             "output": str(root / "out"),
-            "nemo": {"domain": "build", "minimum_depth": 30, "steps": STEPS_WITHOUT_GRIDS},
+            "nemo": {"minimum_depth": 30, "steps": STEPS_WITHOUT_GRIDS},
         },
     }
     config_file.write_text(yaml.safe_dump(raw))
