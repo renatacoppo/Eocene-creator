@@ -106,7 +106,7 @@ Changed
 ~~~~~~~
 
 - Documentation published on GitHub Pages (https://renatacoppo.github.io/Eocene-creator/) by the ``docs`` workflow
-  on every push to ``main``, instead of Read the Docs: ``.readthedocs.yaml`` removed (#PR).
+  on every push to ``main``, instead of Read the Docs: ``.readthedocs.yaml`` removed (#53).
 - Documentation rewritten for whoever generates data on ECMWF Atos, with Atos examples: ``quickstart.rst`` (setup,
   run, what each step makes, checking the result with ``scripts/compare_trees.py``), ``configuration.rst`` (every
   key, the steps of each component, ``data_version``), the new ``bathymetry.rst`` (how a NEMO bathymetry is made,
