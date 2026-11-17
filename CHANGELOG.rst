@@ -22,7 +22,7 @@ Added
   Eocene, the Herold bathymetry. ``oifs``: the variables of the OIFS surface files that differ (monthly fields as
   annual mean and seasonal range, vegetation and soil types as classes). ``coupling``: OIFS land-sea mask against
   the NEMO mask. Shared helpers in ``ecefast.core.plotting`` replace ``periods/eocene/plots/helper_functions.py``;
-  the IFS vegetation-type table moved to ``ecefast.components.oifs.land_cover`` (#PR).
+  the IFS vegetation-type table moved to ``ecefast.components.oifs.land_cover`` (#56).
 - NEMO domain step ``sections`` (``present.nemo.steps.sections``, default ``true``): writes
   ``nemo/domain/<grid>/section_ijglobal.diadct``, the transport sections of the NEMO diagnostic ``diadct``, with the
   NEMO tool SECTIONS_DIADCT on the grid of the final ``domain_cfg.nc`` and its 132 global sections. The ``atos``
