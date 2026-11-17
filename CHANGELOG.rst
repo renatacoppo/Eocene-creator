@@ -15,7 +15,102 @@ Unreleased
 Added
 ~~~~~
 
+- ``ecefast <period> plot -c CONFIG -o DIR [--reference TREE] [--only nemo,oifs,coupling]``: maps of the output
+  of a period against a reference tree (default the period's ``input``, or another run), and ``summary.yml`` with
+  the numbers. The figures and the summary name the ``data_version``; the plot directory of
+  an earlier run is erased first. ``nemo``: depth, ocean basins, one-cell
+  passages, inlets (dead-end channels one cell wide) and cells at the minimum depth of the domain and of each compared domain of the reference (present day:
+  its own grid, ORCA2, eORCA1_ISO); its land-sea mask against the domains of the reference (same grid: changed cells and depth
+  difference; another grid: remapped conservatively onto its cells) and, Eocene, the Herold bathymetry (remapped
+  the same way); the geothermal heat flux and tidal mixing forcing files that differ. The depth is
+  read as ``bathy_metry``, ``Bathymetry`` or ``bathymetry``. ``oifs``: the variables of the OIFS surface files that differ (monthly fields as
+  annual mean and seasonal range, vegetation and soil types as classes). ``coupling``: OIFS land-sea mask against
+  the NEMO mask on the NEMO grid (OIFS mask remapped conservatively onto the NEMO cells), and the same map for the coupled configurations of the reference tree (the grids of the
+  configuration, ``TL63L31-ORCA2``, ``TL255L91-eORCA1``, when the tree holds them), with ``mismatch_percent`` in
+  the summary. Shared helpers in ``ecefast.core.plotting`` replace ``periods/eocene/plots/helper_functions.py``;
+  the IFS vegetation-type table moved to ``ecefast.components.oifs.land_cover`` (#56).
+- NEMO domain step ``sections`` (``present.nemo.steps.sections``, default ``true``): writes
+  ``nemo/domain/<grid>/section_ijglobal.diadct``, the transport sections of the NEMO diagnostic ``diadct``, with the
+  NEMO tool SECTIONS_DIADCT on the grid of the final ``domain_cfg.nc`` and its 132 global sections. The ``atos``
+  backend compiles and runs the tool (``run_sections_diadct.sh``; the module loading moved to ``hpc_env.sh``, shared
+  with ``run_domain_cfg.sh``); ``fake`` writes a file without sections. Present day only:
+  ``EoceneBathymetry.transport_sections`` is ``False`` and ``eocene.nemo.steps.sections`` defaults to ``false``
+  (``EoceneDomainSteps``) (#52).
+- ``data_version`` (top-level config key, default ``v1``): the version of the generated data, and the CDO series it
+  needs. ``v1`` (the data of the existing experiments, PALEORCA2 domains of ECE4-DATA-V3 and ``PALEORCA2-definitive``)
+  needs CDO 2.5.x: every run and dry run stops with an error naming the CDO found and how to load 2.5. ``v2`` is
+  reserved and rejected. The data version is logged and written to ``provenance.yml`` (#49).
+- ``scripts/compare_trees.py``: compares two EC-Earth input trees and writes a Markdown report (files only in one
+  tree, identical files, and for files that differ the number of differing points, the largest difference and
+  where; for ``domain_cfg.nc`` the vertical grid, the ocean/land changes and ``bottom_level``) (#49).
+- ``EoceneNEMO`` writes a third ocean initial state, ``initial_state/nemo/ts_state/deepmip-L31_warm-34.nc``
+  (profile ``deepmip_warm``): the deeper DeepMIP-like profile of the original code (``(5000 - z) / 5000 * 19 *
+  cos(lat) + 15`` above 5000 m, 15 °C below; 34 °C at the equator surface), salinity 34.7. The profiles are named
+  constants (``DEEPMIP_PROFILES``); ``deepmip_cold`` is unchanged.
+- Every run and dry run ends with a recap of the files written (or that would be written), grouped by the
+  period's ``output``, ``machine.tmpdir`` and other places (e.g. the DOMAINcfg namelists); a dry run marks files
+  that exist already, a run marks files that are not there (``ComponentStep.planned_writes``).
+- Log levels: the steps (and the plan of a dry run) stay at INFO, messages about single files (copied, written,
+  saved, repacked) and the files of each planned step move to DEBUG; ``-l DEBUG`` shows them.
+- ``ecefast oifs data -c CONFIG [--dry-run]`` (task 8.2): the OIFS generator as a command. It makes the OIFS base
+  data of ``oifs.grid`` from ``oifs.data.source_grid`` (spectral truncation, gridpoint remapping, optional climate
+  file, vertical interpolation), with its former module-level constants in ``oifs.data`` (``source_grid``,
+  ``startdate``, ``climate_version`` with today's values as defaults; ``climate_dir``,
+  ``precomputed_climate_dir``, ``vertical_grids_dir``; ``steps``). It writes only to ``oifs.data.output_dir``
+  (final files through ``atomic_write``, intermediates in ``work/``), logs instead of printing, and checks every
+  input first. The generation logic is unchanged; ``tests/hpc/test_oifs_data_hpc.py`` compares an Atos run with
+  ECE4-DATA (#47).
+- ``ecefast nemo domain --dry-run``: checks the inputs of the enabled steps and logs the plan, writing
+  nothing. A normal run does the same checks first and lists every missing input at once
+  (``NEMOWorkflow.plan`` and ``check``, ``BathymetryProcessor.reads``).
+- Missing-input errors say where to get inputs that are not in the standard trees (``ComponentStep.sources``):
+  the ``nemo`` step points to the EarthByte 55 Ma age grid ``age_depth_bath_55.xyadb``.
+- ``ecefast eocene run -h`` and ``ecefast nemo domain -h`` list the available steps with a one-line
+  description, in run order.
+- ``docs/overview.rst``, the first page of the docs: what the tool does, inputs and outputs, a schematic
+  of the Eocene workflow and of the NEMO domain pipeline with what each step changes and writes, and
+  where each part runs (pushed to ``refactor``).
+- ``tests/hpc/test_domaincfg_contract.py``: checks on Atos that the ``fake`` backend has the structure of
+  the real DOMAINcfg output; checklist for a run on Atos in ``docs/external_tools.rst`` (#44).
+- Tutorial notebooks in ``notebooks/tutorials/`` (``01_quickstart``, ``02_oifs``, ``03_nemo``,
+  ``04_oasis_rnfm``), linked from ``docs/quickstart.rst``; plot helper ``plot_before_after`` (#43).
+- ``ecefast eocene run`` checks the outputs of the steps that ran (``paleo/eocene/verify.py``): every
+  declared output exists, no NaN in NetCDF data variables, vertical grid rule; integration test of
+  the pipeline on a synthetic input tree that holds only the declared ``reads`` (#42).
+- OIFS unit tests on synthetic data and tiny GRIB files (``tests/unit/oifs/``) (#40).
+- CI step that fails on hardcoded personal or HPC paths (allowlist: the OIFS generator and planning
+  notes) (#38).
+- import-linter contracts in ``pyproject.toml`` (layers ``cli > paleo > components > tools >
+  core``; OIFS, NEMO, OASIS and RNFM independent), checked by ``lint-imports`` in CI (#37).
+- The Eocene ``domain`` step builds the Eocene domain with the NEMO domain pipeline when
+  ``tools.backend`` is ``atos`` or ``fake`` (``local`` still installs ``tools.precomputed.domain``);
+  the vertical grid check runs in both cases (#37).
+
+- ``ecefast eocene run -c CONFIG [--steps a,b] [--dry-run] [--overwrite] [-l LEVEL]`` runs the
+  Eocene pipeline (``paleo/eocene/pipeline.py``: ``stage``, ``domain``, ``oasis``, ``oifs``,
+  ``nemo``, ``rnfm``); ``ecefast eocene steps`` lists the steps with what they need, read and
+  write. A successful run writes ``provenance.yml`` into the output directory (steps, config file
+  and its SHA-256, ``ecefast`` version and git commit, Python, CDO and ecCodes versions, start and
+  end time); ``docs/workflow.rst`` describes the pipeline and each step (#36).
+- ``ecefast.tools.ecearth`` with the ``atos``, ``local`` and ``fake`` backends for NEMO DOMAINcfg;
+  config keys ``tools.atos.profile`` and ``tools.atos.oasis_lib_dir``; ``tools.backend`` accepts
+  ``atos`` and ``fake`` (#35).
+- Step runner: ``ComponentStep`` and ``run_pipeline`` (``needs`` order, preflight on ``reads``
+  that lists every missing input at once, dry run, step selection, check of ``writes``) in
+  ``core/steps.py``; run ``Context`` with path placeholders and read-only guards, and the
+  ``Stage`` step (the former ``run_copy``, used by ``eocene --copy``) in ``core/workspace.py``;
+  ``atomic_write`` in ``core/io.py``; ``docs/workflow.rst`` (#31).
+- Config options ``eocene.oifs.aerosols`` (default ``false``) and ``eocene.oasis.constant_sst``
+  (default ``290.0``) (#30).
 - ``AGENTS.md``: rules for contributors and coding agents; ``CLAUDE.md`` imports it (#17).
+- ``scripts/compare_outputs.py``: compares a run with the frozen baseline (NetCDF within
+  ``rtol=1e-6``, GRIB with ``grib_compare``), with a self-test (#20).
+- pytest markers (``unit``, ``integration``, ``local_data``, ``hpc``), first unit tests, a local
+  regression test against the baseline and a CI workflow on Python 3.14 (#24).
+- Documentation skeleton (Sphinx, reStructuredText, Read the Docs config) and a docs build
+  workflow (#23).
+- ruff configuration (line length 120, lenient rule set) and a lint/format check in CI;
+  ``.git-blame-ignore-revs`` (#25).
 - ``CHANGELOG.rst`` (#17).
 - ``get_ece4_data.sh``: fetches the OIFS TL63L31, NEMO PALEORCA2, OASIS PALEORCA2 and
   runoff-mapper subset of ECE4-DATA-V3 for local runs (#17).
@@ -24,10 +119,269 @@ Added
 Changed
 ~~~~~~~
 
+- Documentation published on GitHub Pages (https://renatacoppo.github.io/Eocene-creator/) by the ``docs`` workflow
+  on every push to ``main``, instead of Read the Docs: ``.readthedocs.yaml`` removed (#53).
+- ``eocene.nemo.domain`` (``build`` or a directory, required) is replaced by the optional ``eocene.nemo.domain_dir``:
+  unset, the ``domain`` step builds the Eocene domain; set, it installs the domain of that directory. Migrate with
+  ``domain: build`` -> remove the key, ``domain: <dir>`` -> ``domain_dir: <dir>``; an old file gets an error saying
+  so. On a machine without DOMAINcfg the step (not the config file) stops and says to set ``domain_dir`` or skip it (#54).
+- The conda environment of ``environment.yaml`` is named ``ecefast`` (was ``eocene``), like the package and the
+  command: create it again with ``mamba env create -f environment.yaml`` and ``pip install -e ".[dev,docs]"`` (#54).
+- Documentation rewritten for whoever generates data on ECMWF Atos, with Atos examples: ``quickstart.rst`` (setup,
+  run, what each step makes, checking the result with ``scripts/compare_trees.py``), ``configuration.rst`` (every
+  key, the steps of each component, ``data_version``), the new ``bathymetry.rst`` (how a NEMO bathymetry is made,
+  the strait corrections, how to add a bathymetry), ``contributing.rst`` (checks on Atos) and the API reference,
+  which now covers the configuration, CDO check, EC-Earth tools, bathymetry and sections modules. README and
+  ``AGENTS.md`` follow (#TBD).
+- ``EoceneRNFM`` logs less: one INFO line when the basin tracking starts and one with the number of basins; the
+  per-basin and per-round messages and the id checks moved to DEBUG (``-l DEBUG`` shows them), and the unassigned
+  points are one WARNING with their count, the list at DEBUG (#TBD).
+- Configuration templates: the ``steps`` of every component are listed in full, the ones that are off included, so a
+  step is switched on or off by changing its value. The ``present.oifs`` steps are all off, because the OIFS initial
+  state of ``data_version: v1`` is the TL63L31 one shipped in the input tree (``docs/configuration.rst``).
+- CDO 2.5.x is required for ``data_version: v1`` (``module load cdo/2.5.3`` on Atos, conda-forge ``cdo=2.5``
+  elsewhere, ``cdo=2.5`` in CI): it reproduces the domains of the existing experiments, while 2.6.x moves land-sea
+  mask cells whose ocean fraction is exactly 0.5 (25 Eocene, 4 present-day cells). ``AGENTS.md``,
+  ``docs/installation.rst``, ``docs/external_tools.rst`` and ``environment.yaml`` updated (#49).
+- The OIFS component is split by process: ``generator`` only plans, checks and runs (``OIFSData``);
+  ``initial_state`` holds the spectral truncation, gridpoint remapping, install and vertical interpolation;
+  ``climate`` the climate file; ``grid_files`` the paths of the shipped ``grids/`` files. Logic unchanged.
+- The steps read and write the initial state in ``initial_state/`` (ECE4-DATA 4.1.10 and later), whose paths come
+  from the new ``core/layout.py``: ``initial_state/oifs/<grid>/<startdate>/`` (``EoceneOIFS``, the OIFS generator),
+  ``initial_state/oasis/<grid>/default/rstos.nc`` (``EoceneOASIS``), ``initial_state/nemo/ts_state/``
+  (``EoceneNEMO``). ``stage`` copies ``initial_state/oifs/<oifs grid>``, ``initial_state/oasis/<nemo grid>`` and
+  ``initial_state/nemo/ts_state``, symlinks the other components of ``initial_state/``, and keeps the old paths
+  (``oifs/<grid>/<startdate>``, ``oasis/<grid>/rstos.nc``, ``nemo/initial/woa13-levitus-L*.nc``) as relative links
+  into the copy, as in ECE4-DATA; no step reads them. An input tree without ``initial_state/`` stops in the
+  preflight. ``scripts/get_ece4_data.sh`` fetches the ``initial_state/`` subset and keeps the links.
+- The present-day period starts with ``stage`` (``[stage, oifs, nemo]``): ``present.output`` is a complete EC-Earth
+  tree, a copy of ``present.input`` with the present-day files, and the Atos template starts the Eocene from it
+  (``eocene.input: "{present.output}"``). ``oifs`` and ``nemo`` need ``stage``: the first run is
+  ``ecefast present run`` or ``--steps stage,...``, and the error says so.
+- A run with ``stage`` is atomic: the steps write into ``<output>.partial``, moved to ``output`` when all of them
+  have succeeded (``core.io.replace_directory``); a failed run leaves ``output`` unchanged. ``--overwrite`` is
+  needed only if ``output`` holds files, and is checked before anything runs.
+- ``stage`` also copies ``runoff-mapper/`` (read by the Eocene ``rnfm`` step when it starts from the present-day
+  tree), follows symlinks inside the copied folders (ECE4-DATA 4.1.10 links ``oasis/<grid>/rstos.nc`` to
+  ``initial_state/``), and always creates ``oifs/``, ``nemo/`` and ``oasis/``.
+- A missing CDO binary stops the command with a one-line error that suggests ``module load cdo`` (HPC) or the
+  conda-forge / Homebrew package, instead of a ``FileNotFoundError`` traceback from python-cdo.
+- Configuration by time period (task 8.3), still ``schema: 2``: ``machine`` (with the required ``tmpdir`` for the
+  intermediate files of every command, ``<tmpdir>/<period>/<component>/``, and ``atos.ecearth4_sources``, which
+  replaces ``oasis_lib_dir`` and ``nemo.domain.tools_dir``), ``grids`` (``oifs``: ``name``, ``startdate``,
+  ``climate_version``; ``nemo``: ``name``, ``coords_ori``, ``staggering``), then one section per period,
+  ``present`` and ``eocene``, each with ``input`` (the EC-Earth tree it starts from), ``output`` and its component
+  subsections. The Herold data is ``eocene.herold`` and is no longer required by the present-day commands.
+  Bathymetries are no longer configured: each period uses its own (``present.nemo.source_grid`` stays visible),
+  and the strait corrections are looked up by source grid. ``eocene.nemo.domain`` is ``build`` or a directory
+  (was ``eocene.domain.from`` + ``build``); ``minimum_depth`` is set per period. A file in the component layout
+  of task 8.1 stops with an error listing each old key and its new name (#48).
+- Commands: ``ecefast <period> run`` (``present``, ``eocene``) and ``ecefast <component> run [--period ...]``
+  (``oifs``, ``nemo``, ``oasis``, ``rnfm``; default ``present``) replace ``ecefast oifs data`` and
+  ``ecefast nemo domain [--bathymetry ...]``; ``--oifs a,b`` and ``--nemo c,d`` override the configured steps of
+  a component for one run. ``--overwrite`` on every run: it logs what it replaces and waits 5 s (Ctrl-C to
+  stop); a present-day run refuses existing final files without it. ``stage`` counts files only, so empty
+  folders made by the preflight of later steps no longer block a first run (#48).
+- Code: ``ecefast.paleo`` is now ``ecefast.periods`` (``periods/eocene``, new ``periods/present`` with
+  ``PresentDayBathymetry`` and the present-day steps); the domain pipeline builds one bathymetry; the
+  processor registry (``PROCESSORS``, ``EOCENE_PROCESSORS``) is removed. Steps declare their ``component``.
+  ``EoceneOIFS`` and ``EoceneNEMO`` take ``startdate``, ``climate_version`` and the NEMO grid from ``grids``
+  (were hardcoded). The present-day mask comparison plot is always on, one panel per domain of the input tree.
+  Intermediate files of the domain pipeline and of the OIFS generator move from ``<output_dir>/work/`` to
+  ``machine.tmpdir``; local folders are ``OUTPUT/{present,eocene}`` and ``BASELINE/{present,eocene}`` (#48).
+- Configuration schema 2 (task 8.1): sections follow the components and commands
+  (``ecefast <component> <command>`` reads ``<component>.<command>``): ``inputs`` (read-only,
+  shared), ``tmpdir``, ``machine`` (was ``tools``), ``oifs.grid``, ``nemo.grid``, ``nemo.domain`` (was
+  ``nemo_domain``), ``eocene``. Every command writes only to its own ``output_dir``
+  (``eocene.output_dir`` was ``paths.output``). Any string may use ``{section.key}`` placeholders,
+  also in the steps' ``reads``/``writes`` (``{inputs.ece4_data}``, ``{eocene.output_dir}``,
+  ``{nemo.grid}``, ...); an unknown key or a cycle is an error. The Eocene domain is explicit:
+  ``eocene.domain.from`` and ``eocene.domain.build`` replace ``tools.precomputed.domain`` and the
+  backend-implied build; ``build: true`` with ``machine.name: local`` is a config error. A schema 1
+  file fails with one error listing each old key and its new name; old → new table in
+  ``docs/configuration.rst`` (#46).
+- Local folders named one way: ``OUTPUT/<command>`` and ``BASELINE/<command>`` (``eocene``,
+  ``nemo-domain``) replace ``EOCENE-TEST``, ``EOCENE-DOMAIN-TEST`` and ``EOCENE-BASELINE/{eocene,domain}``
+  in templates, docs, tutorials and ``tests/local`` (#46).
+- ``ecefast eocene run`` builds every selected step before the first one runs, also in a dry run: the
+  ``domain`` step then checks all inputs of the NEMO domain pipeline (``atos`` and ``fake`` backends,
+  e.g. ``nemo_domain.coords_ori``), and a missing ``tools.precomputed.domain`` file is a
+  ``PipelineError`` reported before anything is written.
+- WEIGHTS namelists use ``{input}`` and ``{woce_dir}`` placeholders instead of HPC paths;
+  ``create_corners.py`` (``--oifs-dir``, ``--tgt-dir``) and ``descriptor_generator.py``
+  (``--oifs-bc``) take their paths as arguments; notebook paths are placeholders (#38).
+- The NEMO domain pipeline writes ``subbasins.nc`` for every bathymetry; processors with
+  ``regional_subbasins = False`` (``EoceneBathymetry``) get the global mask ``glomsk`` only;
+  ``subbasins.py`` logs instead of printing; ``notebooks/analysis/eocene-subbasins.ipynb`` records
+  the assessment of present-day basins on Eocene geography (#39).
+- The vertical grid check of the ``domain`` step accepts differences up to 1e-6 m in ``nav_lev``
+  and ``e3t_1d`` (floating-point rounding between DOMAINcfg builds and the fake backend, about
+  1e-12 m); a different number of levels or a larger difference is still an error, whose message
+  now shows the maximum absolute difference (#37).
+- ``ecefast nemo domain -c CONFIG [--bathymetry NAME ...]`` replaces ``ecefast nemo-domain`` and
+  its ``--only``. The NEMO domain pipeline runs DOMAINcfg through the backend of
+  ``tools.backend`` (``run_domain_cfg.sh`` moved to ``tools/``) and stops before its first step
+  if ``domain_cfg`` is on and the backend is not available. Bathymetry processors come from plain
+  mappings passed by the caller (``components/nemo/bathymetry.PROCESSORS``,
+  ``paleo/eocene/bathymetry.EOCENE_PROCESSORS``), so ``components`` no longer imports ``paleo``;
+  an unknown ``processor`` name lists the known ones (#37).
+
+- ``stage`` refuses an output directory that is not empty unless ``--overwrite`` is given (the old
+  ``--copy`` always replaced it); configuration errors and preflight failures exit with code 1
+  after one log line (#36).
 - ``.gitignore`` ignores local test data and outputs (#17).
 - Refactor plan and ``AGENTS.md`` revised after a feasibility review: domain-pipeline baseline,
   shared CDO wrapper in ``core``, per-file atomic writes, old ``eocene`` CLI and ``dirs:`` config
   dropped, phases 1 and 4 split, Eocene subbasins as the one planned output change (#18).
+- Refactor work moves to the ``refactor`` branch; ``docs/refactor-plan.md`` gets the task and wave
+  table; ``data/`` is ignored (#16).
+- ``EoceneNEMO.create_ocean_init`` defaults to ``profile=None``, which builds both ocean initial
+  files (``deepmip_cold`` and ``woa_pi``); the ``eocene`` CLI calls it without arguments (#19).
+- ``get_ece4_data.sh`` also fetches ``nemo/domain/eORCA1/domain_cfg.nc`` (#20).
+- Frozen baseline layout ``EOCENE-BASELINE/{eocene,domain}`` documented; the Eocene domain is read
+  from ``data/``; pre-existing issues found while building the baseline added to the plan (#21).
+- Notebooks moved to ``notebooks/analysis/`` with outputs cleared; ``get_ece4_data.sh`` and
+  ``add_lonlat.py`` moved to ``scripts/``; placeholder paths in ``eocene/config.tmpl`` (#22).
+- ``environment.yaml``: Python >= 3.11, all Python dependencies from conda-forge, ``jinja2`` and
+  ``shapely`` declared; CDO is no longer part of the environment (system CDO, not pinned; the
+  baseline records its version) (#24).
+- One logger hierarchy ``ecefast``: ``core.logger.setup_logger`` replaces the NEMO
+  ``setup_logging``, modules log through ``logging.getLogger(__name__)``; one shared, lazily
+  created ``Cdo`` instance (``core.cdo.get_cdo``), so importing a module no longer starts CDO; the
+  ``eocene`` CLI and the NEMO domain pipeline log the CDO version at start (#27).
+- Whole repository formatted with ``ruff format`` in one formatting-only commit (#25).
+- All code moves into one ``ecefast`` package with a ``src/`` layout (``core``, ``tools``,
+  ``components``, ``paleo/eocene``, ``cli``); new ``ecefast`` command with the ``eocene`` and
+  ``nemo-domain`` subcommands; the config template moves to ``configs/eocene.tmpl`` (#26).
+- One configuration file per machine, schema 1 (``paths``, ``tools``, ``grids``, ``nemo_domain``,
+  ``eocene``), read by ``ecefast.core.config.load_config``; the old ``dirs:`` and ``profiles:``
+  formats are no longer read, see ``docs/configuration.rst`` (#30).
+- GRIB and grid helpers merged into ``ecefast.core.grib``; Eocene OIFS field operations in
+  ``paleo/eocene/oifs/fields.py``; the OIFS generator logs instead of printing (#29).
+- NEMO domain post-processing: ``common/util.py`` is the one ``domain_cfg``/``maskutil`` writer,
+  with docstrings and tests (#28).
+- ``EoceneOASIS`` and a new ``EoceneRNFM`` (today's runoff code, moved as-is) are pipeline steps
+  (``oasis``, ``rnfm``) with declared reads and writes; outputs written atomically (#32).
+- ``EoceneNEMO`` is the ``nemo`` step (needs only ``stage``); new ``domain`` step
+  (``EoceneDomain``) installs the precomputed Eocene domain and fails if its vertical grid
+  (``nav_lev``, ``e3t_1d``) differs from the present-day one; outputs written atomically (#33).
+- ``EoceneOIFS`` is the ``oifs`` step with declared reads and writes; outputs written
+  atomically (#34).
+- HPC modules moved to ``tools/hpc_profiles.yaml``; ``run_domain_cfg.sh`` reads them with the
+  running Python and adds the OASIS library to ``LD_LIBRARY_PATH`` only if
+  ``tools.atos.oasis_lib_dir`` is set (it was a hardcoded path) (#35).
+
+Fixed
+~~~~~
+
+- The OIFS vertical interpolation (``ecefast oifs run`` and ``present run`` from TL255L91 of ECE4-DATA 4.1.11) no
+  longer stops at ``gp2spl`` ("Variable name t not found"): the source ``ICMGGECE4INIUA`` also holds ~130 composition
+  fields, some with the same shortName, and with them ``remapeta`` dropped the hybrid levels. Only the fields that are
+  written (``UPPER_AIR_FIELDS``: q, o3, crwc, cswc, clwc, ciwc, cc) go into ``remapeta`` now; the written files have
+  the fields and levels of the TL63L31 files of ECE4-DATA.
+- The OIFS generator (``ecefast oifs run``, ``present run``) no longer stops when it builds the grid with cell corners:
+  ``ICMGGECE4INIT`` holds GRIB1 and GRIB2 messages after the gridpoint step, and the land-sea mask was read with
+  CDO's own GRIB decoder (``var172``), which reads GRIB1 only. It is now read through ecCodes (``--eccodes``,
+  ``lsm``). The grid (latitudes, reduced points) is the same; no output changes.
+- The present-day ``stage`` (``PresentStage``) also copies ``nemo/domain/ORCA2``: ``EoceneNEMO`` reads it, and with
+  ``eocene.input: "{present.output}"`` the Eocene could not start. A unit test checks that the present-day tree holds
+  every input the Eocene reads.
+- The land-sea mask plot of the present-day bathymetry leaves out, with a warning, an input-tree domain without
+  ``bathy_metry`` (``ORCA1`` in ECE4-DATA 4.1.11 names it ``bathy_meter``) instead of stopping the run.
+- ``load_grib_var_spec`` returned ``lat_bnds`` instead of the field for spectral GRIB files (#43).
+- Tests restore the ``ecefast`` logger after each test, so the ``local_data`` NEMO domain test no longer
+  breaks the logger unit test (#41).
+- NEMO domain pipeline: with ``domaincfg_dir: null`` the ``generate_mask`` and
+  ``generate_subbasins`` steps looked for the DOMAINcfg output in a relative ``DOMAINcfg/``
+  folder instead of next to the namelists (``output_dir/domain``) (#37).
+
+- NEMO domain pipeline: helper scripts run with the current Python interpreter, not ``python3``
+  from ``PATH``, and are found from the package directory (#26).
+- OIFS: intermediate files (``landsea_mask.nc``, ``orography.nc``, ``sd_orography.nc``, their
+  ``_remap`` versions, the aerosol standard atmosphere) go to ``tmpdir`` instead of the read-only
+  Herold folder (#34).
+- ``run_domain_cfg.sh`` could not import its module list after the ``src/`` move (#35).
+
+Removed
+~~~~~~~
+
+- Documentation pages ``overview.rst``, ``installation.rst``, ``workflow.rst`` and ``external_tools.rst`` (their
+  content is in the quickstart, the configuration page and the docstrings), the refactor plan
+  ``docs/refactor-plan.md`` and the issue draft ``docs/issue-refactor.md``, and the tutorial notebooks
+  ``notebooks/tutorials/``: the tool is used from the command line (#TBD).
+- The standalone OIFS scripts ``convert_aka_bika.py``, ``descriptor_generator.py`` and ``create_corners.py``:
+  they are now the functions ``grid_files.write_hybrid_coefficients`` (which rejects a table without the half
+  level ``n=0``, such as ``grids/L19.csv``), ``grid_files.write_grid_descriptions`` and
+  ``corners.create_corner_grid`` (``masked_outfile`` for the masked variant).
+- ``present.oifs.vertical_grids_dir``: the vertical interpolation of the OIFS generator builds the grid with cell
+  corners of the target (``T<kind><N>_grid.nc``) itself, in ``<machine.tmpdir>/present/oifs``, from the
+  ``ICMGGECE4INIT`` of the ``gridpoint`` step (``corners`` in the plan, ``ecefast.components.oifs.corners``);
+  ``create_corners.py`` is now a thin command over the same functions. Configs that set the key must drop it.
+- The OIFS generator's hardcoded Atos paths, its own argument parser (``-t``, ``--clean``) and its option to
+  delete the intermediate files: they stay in ``<oifs.data.output_dir>/work/`` (the default before) (#47).
+- Config key ``nemo_domain.aliases`` and the pipeline-internal placeholders (``{output_dir}``,
+  ``{coordsdir}``, ...) in ``bathymetries`` entries: use ``{section.key}`` placeholders (#46).
+- Config key ``nemo_domain.mesh_mask`` and the ``data/eORCA1/mesh_mask.nc`` input: the source grid of the
+  present-day bathymetry is read from ``{input}/nemo/domain/<grids.source>/domain_cfg.nc``, which holds the
+  same horizontal grid; an old config with the key fails with an unknown-key error (pushed to ``refactor``).
+- The old ``eocene`` command and ``cli/eocene.py`` (``-r/--run``, ``--copy``), replaced by
+  ``ecefast eocene run`` (#36).
+- Tracked ``__pycache__`` files; ``modify_oifs.ipynb`` and ``modify_nemo.ipynb``, replaced by
+  ``notebooks/analysis/plots.ipynb`` (#22).
+- ``nemo-workflow.sh``, superseded by the NEMO domain pipeline (#26).
+- Standalone ``domain/mask_util.py``, a duplicate of the pipeline's ``maskutil`` writer (#28).
+- ``configs/eocene.tmpl`` and the in-package ``nemo_workflow.yaml``, replaced by
+  ``configs/laptop.tmpl`` and ``configs/atos.tmpl`` (#30).
+
+Output
+~~~~~~
+
+- Present-day tree: ``nemo/domain/<grid>/section_ijglobal.diadct`` is written by default (step ``sections``), as in
+  the domain trees of ECE4-DATA-V3; it was missing from the trees made by ``ecefast`` so far (#52).
+- Present-day PALEORCA2 bathymetry and domain (``nemo/domain/PALEORCA2/`` of ``present.output``): the strait
+  corrections of ``eORCA1_to_PALEORCA2_remapnn`` are the ones that made ``PALEORCA2-definitive`` and ECE4-DATA-V3
+  (data_version v1), kept until now only in a git stash. Indonesia also opens (103-105, 11) and no longer averages
+  (94, 16); new region Philippines opens (111, 13) and (112, 13); Thailand closes column 3 only down to row 107
+  and closes (98-106, 4). With CDO 2.5.3 the corrected bathymetry equals the one of ``PALEORCA2-definitive``
+  (0 differing cells). ``open_region`` leaves a cell that is ocean already as it is, with a warning (no cell of
+  these corrections is). The Eocene domain does not change.
+- The Eocene initial state moves to ``initial_state/`` with the same values: ``oifs/TL63L31/19900101/*`` to
+  ``initial_state/oifs/TL63L31/19900101/`` (the old folder is a link to it), ``oasis/PALEORCA2/rstos.nc`` to
+  ``initial_state/oasis/PALEORCA2/default/rstos.nc`` (the old file is a link to it). The ocean initial states move
+  to ``initial_state/nemo/ts_state/``; ``woa13-levitus-L31_deepmip-30.nc`` is renamed ``deepmip-L31_cold-30.nc``,
+  since it is an idealised DeepMIP profile, not WOA13 data, and ``woa13-levitus-L31_woa-pi.nc`` keeps its name.
+  The output also holds ``initial_state/nemo/ts_state/woa13-levitus-L{31,75}.nc`` (copied) and links to the other
+  components of ``initial_state/``. Experiments that used ``nemo/initial/woa13-levitus-L31_deepmip-30.nc`` must
+  point to the new file.
+- New file ``initial_state/nemo/ts_state/deepmip-L31_warm-34.nc`` (warm DeepMIP-like ocean initial state, see
+  *Added*).
+- Each ocean initial state written by ``EoceneNEMO`` gets a relative link ``nemo/initial/<file>`` ->
+  ``../../initial_state/nemo/ts_state/<file>``, where EC-Earth reads it (the job stopped on a missing
+  ``nemo/initial/deepmip-L31_cold-30.nc``).
+- ``present.output`` (``BASELINE/nemo-domain``) now also holds the copy of the input tree made by ``stage``
+  (``oifs/``, ``nemo/``, ``oasis/<grid>/``, ``runoff-mapper/``, the ``cmip6-data`` link); the domain files are
+  unchanged. ``eocene.output`` gains nothing new (``runoff-mapper/`` holds only ``runoff_maps.nc``, which ``rnfm``
+  writes); with ``eocene.input: "{present.output}"`` on Atos, the Eocene starts from the present-day files made by
+  ``ecefast`` instead of ECE4-DATA (e.g. the rebuilt PALEORCA2 domain).
+- Domain pipeline layout (file contents unchanged, checked against the domain baseline): the present-day domain
+  goes to ``present.output/nemo/domain/<grid>/`` (no ``<name>/`` folder), the Eocene one built with
+  ``eocene.nemo.domain: build`` to ``<tmpdir>/eocene/nemo/domain/<grid>/`` before it is installed;
+  coordinates, bathymetries and namelists go to ``<tmpdir>/<period>/nemo/``. The mask comparison plot is
+  ``landsea_mask_comparison.png`` (was ``landsea_mask_comparison_orca2_paleorca2.png``), with one panel per domain
+  of the input tree. The Eocene output is unchanged (0 differences against ``BASELINE/eocene``) (#48).
+- NEMO domain pipeline layout (file contents unchanged): final files move from
+  ``<output_dir>/domain/<grid>/<name>/`` to ``<output_dir>/nemo/domain/<grid>/<name>/``, as in ECE4-DATA;
+  ``coordinates/`` and ``bathymetry/`` move to ``<output_dir>/work/``, and the laptop DOMAINcfg namelists
+  (and raw DOMAINcfg output) from ``<output_dir>/domain/`` to ``<output_dir>/work/domaincfg/``. The
+  namelists hold the new absolute paths of the coordinates and bathymetry; the domain baseline is
+  regenerated after the merge (#46).
+- NEMO domain pipeline: the intermediate ``coordinates/eORCA1/coords_bounds_{T,F}.nc`` carry the global
+  attributes of the eORCA1 ``domain_cfg.nc`` (``CfgName``, ``Iperio``, ``NFold``, ...); their data and every
+  bathymetry, namelist and domain file are unchanged (pushed to ``refactor``).
+- NEMO domain pipeline: ``domain/PALEORCA2/eocene/subbasins.nc`` is now built, with ``glomsk`` only
+  (present-day basin polygons do not fit Eocene geography; Eocene basins are a later task) (#39).
+- ``nemo/initial/woa13-levitus-L31_deepmip-30.nc`` is now built alongside
+  ``nemo/initial/woa13-levitus-L31_woa-pi.nc`` (#19).
 
 0.0.2
 -----

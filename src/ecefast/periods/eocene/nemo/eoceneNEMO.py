@@ -1,0 +1,399 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Functions to create boundary conditions for NEMO EOCENE
+
+"""
+
+import os
+import logging
+import numpy as np
+import xarray as xr
+import pandas as pd
+from scipy.spatial import cKDTree
+from ecefast.core.cdo import get_cdo
+from ecefast.core.io import atomic_symlink, atomic_write
+from ecefast.core.layout import nemo_ts_state_dir
+from ecefast.core.steps import ComponentStep
+from ecefast.core.workspace import Context
+
+logger = logging.getLogger(__name__)
+
+
+def _lonlat_to_xyz(lon, lat):
+    """Convert lon/lat in degrees to unit-sphere cartesian coordinates."""
+    lon, lat = np.deg2rad(lon), np.deg2rad(lat)
+    return np.column_stack([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
+
+
+def present_day_ocean_mask(domain_file, lon, lat, nz):
+    """
+    3D present-day ocean mask (z, y, x) on a target lon/lat grid,
+    from the bottom_level of a present-day NEMO domain (nearest neighbour).
+    Level k (0-based) is ocean where bottom_level >= k+1.
+    """
+    domain = xr.open_dataset(domain_file).squeeze("time_counter", drop=True)
+    bottom = domain["bottom_level"].values.ravel()
+    tree = cKDTree(_lonlat_to_xyz(domain["glamt"].values.ravel(), domain["gphit"].values.ravel()))
+    _, idx = tree.query(_lonlat_to_xyz(lon.ravel(), lat.ravel()))
+    bottom_tgt = bottom[idx].reshape(lon.shape)
+    domain.close()
+    levels = np.arange(1, nz + 1)[:, np.newaxis, np.newaxis]
+    return xr.DataArray(bottom_tgt[np.newaxis, :, :] >= levels, dims=("z", "y", "x"))
+
+
+def woa_zonal_mean(thetao, ocean_mask):
+    """Zonal mean over present-day ocean, broadcast in longitude, gaps filled."""
+    zm = thetao.where(ocean_mask).mean("x", skipna=True)  # (time_counter, z, y)
+    zm = zm.interpolate_na(
+        "z", method="nearest", fill_value="extrapolate"
+    )  # levels below the deepest ocean at that latitude
+    zm = zm.interpolate_na("y", method="nearest", fill_value="extrapolate")  # all-land latitudes (Antarctica)
+    return zm.broadcast_like(thetao)
+
+
+# EarthByte palaeo ocean floor age grids (Muller, Sdrolias, Gaina, Steinberger and Heine, 2008, Science), 0.1 deg,
+# ASCII columns lon, lat, age (Myr), depth-to-basement, bathymetry (m); create_geothermal_flux reads the 55 Ma one
+AGE_GRID_URL = "https://www.earthbyte.org/webdav/ftp/earthbyte/agegrid/Palaeo/2008/Data/age_depth_bath_55.xyadb.bz2"
+
+# present-day ocean initial state (World Ocean Atlas 2013, 31 levels) and the Eocene ones made from it, in
+# initial_state/nemo/ts_state (the old path nemo/initial/woa13-levitus-L31.nc is a link to it). deepmip_cold and
+# deepmip_warm are idealised DeepMIP-like profiles, not WOA data: their names say so (the number is the surface
+# temperature at the equator, degC); woa_pi is still WOA data, a variant of the file.
+WOA_FILE = "woa13-levitus-L31.nc"
+OCEAN_INIT_FILES = {
+    "deepmip_cold": "deepmip-L31_cold-30.nc",
+    "deepmip_warm": "deepmip-L31_warm-34.nc",
+    "woa_pi": "woa13-levitus-L31_woa-pi.nc",
+}
+# Idealised DeepMIP-like temperature profiles: T = (depth - z) / depth * amplitude * cos(lat) + deep above ``depth``
+# (m), ``deep`` (degC) below. cold: the profile used so far (30 degC at the equator surface); warm: the deeper
+# variant of the original code (5000 m, 15 degC below), with the amplitude set to 19 degC for 34 degC at the equator
+# surface (choice of the authors, Nov 2026).
+DEEPMIP_PROFILES = {
+    "deepmip_cold": {"depth": 1000.0, "amplitude": 20.0, "deep": 10.0},
+    "deepmip_warm": {"depth": 5000.0, "amplitude": 19.0, "deep": 15.0},
+}
+TS_STATE_IN = nemo_ts_state_dir("{input}")
+TS_STATE_OUT = nemo_ts_state_dir("{output}")
+# EC-Earth reads the ocean initial state from nemo/initial/: as ECE4-DATA does for woa13-levitus-L31.nc, each file
+# written in ts_state gets a relative link there (nemo/initial/<file> -> ../../initial_state/nemo/ts_state/<file>)
+NEMO_INITIAL = "nemo/initial"
+
+
+class EoceneNEMO(ComponentStep):
+    """Modify NEMO input files for the Eocene: tidal mixing, geothermal flux, ocean initial state, runoff."""
+
+    name = "nemo"
+    component = "nemo"
+    # reads only present-day domains from the input tree, on purpose: not the Eocene domain of the 'domain' step
+    needs = ["stage"]
+    # ORCA2 is the reference present-day ocean mask of the woa-pi profile (create_ocean_init), always that grid
+    reads = [
+        "{herold}/Green_Huber_eocene_tidal_dissipation_1x1.nc",
+        "{herold}/herold_etal_eocene_topo_1x1.nc",
+        "{herold}/age_depth_bath_55.xyadb",
+        "{input}/nemo/initial/zdfiwm_forcing_r720x360.nc",
+        "{input}/nemo/initial/Goutorbe_ghflux.nc",
+        f"{TS_STATE_IN}/{WOA_FILE}",
+        "{input}/nemo/domain/{grids.nemo.name}/domain_cfg.nc",
+        "{input}/nemo/domain/ORCA2/domain_cfg.nc",
+        "{input}/nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc",
+    ]
+    # the age grid is not in the Herold et al. (2014) supplement
+    sources = {
+        "{herold}/age_depth_bath_55.xyadb": (f"{AGE_GRID_URL} (bunzip2, then put it in the herold folder)"),
+    }
+    writes = [
+        "{output}/nemo/initial/zdfiwm_forcing_r720x360.nc",
+        "{output}/nemo/initial/Goutorbe_ghflux.nc",
+        f"{TS_STATE_OUT}/{OCEAN_INIT_FILES['deepmip_cold']}",
+        f"{TS_STATE_OUT}/{OCEAN_INIT_FILES['deepmip_warm']}",
+        f"{TS_STATE_OUT}/{OCEAN_INIT_FILES['woa_pi']}",
+        f"{{output}}/{NEMO_INITIAL}/{OCEAN_INIT_FILES['deepmip_cold']}",
+        f"{{output}}/{NEMO_INITIAL}/{OCEAN_INIT_FILES['deepmip_warm']}",
+        f"{{output}}/{NEMO_INITIAL}/{OCEAN_INIT_FILES['woa_pi']}",
+        "{output}/nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc",
+    ]
+
+    def __init__(self, herold_folder, input_folder, output_folder, grid="r720x360", nemo_grid="PALEORCA2"):
+        self.herold_folder = herold_folder
+        self.input_folder = input_folder
+        self.output_folder = output_folder
+        self.cdo = get_cdo()
+
+        self.grid = grid
+        # NEMO grid (grids.nemo.name): directory under nemo/domain/ and suffix of the runoff climatology
+        self.nemo_grid = nemo_grid
+
+    @classmethod
+    def from_context(cls, ctx: Context) -> "EoceneNEMO":
+        return cls(
+            herold_folder=ctx.section.herold,
+            input_folder=ctx.section.input,
+            output_folder=ctx.section.output,
+            nemo_grid=ctx.config.grids.nemo.name,
+        )
+
+    def run(self) -> None:
+        """Create the Eocene NEMO files."""
+        self.create_tidal_mixing()
+        self.create_geothermal_flux()
+        self.create_ocean_init()
+        self.create_runoff()
+
+    def create_tidal_mixing(self, hcri_value=500.0, cleanup=True):
+
+        m2_varname = "eo_tidal_dissipation"
+
+        herold_file_orig = os.path.join(self.herold_folder, "Green_Huber_eocene_tidal_dissipation_1x1.nc")
+        herold_file_remap = os.path.join(self.herold_folder, "Green_Huber_eocene_tidal_dissipation_r720x360.nc")
+        herold_bath_orig = os.path.join(self.herold_folder, "herold_etal_eocene_topo_1x1.nc")
+        herold_bath_remap = os.path.join(self.herold_folder, "herold_etal_eocene_topo_1x1_r720x360.nc")
+        zdfiwm_file = os.path.join(self.input_folder, "nemo/initial/zdfiwm_forcing_r720x360.nc")
+        output_file = os.path.join(self.output_folder, "nemo/initial/zdfiwm_forcing_r720x360.nc")
+
+        if cleanup and os.path.exists(output_file):
+            os.remove(output_file)
+            logger.debug("Cleaning file: %s", output_file)
+
+        herold_file_remap = self.cdo.remapcon(self.grid, input=herold_file_orig)
+        herold_bath_remap = self.cdo.remapcon(self.grid, input=herold_bath_orig)
+
+        ds_m2 = xr.open_dataset(herold_file_remap)
+        ds_bt = xr.open_dataset(herold_bath_remap)
+        ds_pd = xr.open_dataset(zdfiwm_file)
+
+        m2 = ds_m2[m2_varname]
+
+        # Interpolate topo onto the ds_pd grid
+        topo_interp = ds_bt["topo"].interp(lat=ds_pd.latitude, lon=ds_pd.longitude, method="linear")
+
+        ocean_topo = topo_interp.where(topo_interp < 0.0)
+
+        # make a copy of present-day file
+        ds_out = ds_pd.copy(deep=True)
+
+        # inject M2 into power_cri (1/3 only)
+        ds_out["power_cri"][:] = (1.0 / 3.0) * m2.values
+
+        # modify bathymetry
+        ds_out["bathymetry"][:] = ocean_topo
+
+        # zero in other energy reservoirs
+        ds_out["power_nsq"][:] = 0.0
+        ds_out["power_sho"][:] = 0.0
+        ds_out["power_bot"][:] = 0.0
+
+        # set vertical length scales
+        ds_out["scale_cri"][:] = hcri_value
+        ds_out["scale_bot"][:] = 0.0  # unused if power_bot = 0
+
+        # convert NaN into zeroes
+        ds_out = ds_out.fillna(0)
+
+        # write output file
+        os.makedirs(os.path.join(self.output_folder, "nemo/initial"), exist_ok=True)
+        with atomic_write(output_file) as tmp:
+            ds_out.to_netcdf(tmp)
+        logger.debug("Written NEMO 4.2 tidal file: %s", output_file)
+
+        ds_m2.close()
+        ds_pd.close()
+
+        return None
+
+    def create_geothermal_flux(self, cap_value=400, cleanup=True):
+
+        gh_file = os.path.join(self.input_folder, "nemo/initial/Goutorbe_ghflux.nc")
+        age_file = os.path.join(self.herold_folder, "age_depth_bath_55.xyadb")
+        gh_file_out = os.path.join(self.output_folder, "nemo/initial/Goutorbe_ghflux.nc")
+
+        if cleanup and os.path.exists(gh_file_out):
+            os.remove(gh_file_out)
+            logger.debug("Cleaning file: %s", gh_file_out)
+
+        # Loading Geothermal flux NEMO file
+        ds_gh = xr.open_dataset(gh_file)
+        lat_tgt = ds_gh.lat.values
+        lon_tgt = ds_gh.lon.values
+
+        age = pd.read_csv(age_file, sep=r"\s+", header=None, usecols=[0, 1, 2], names=["lon", "lat", "age"], engine="c")
+        t = age.set_index(["lat", "lon"])["age"].to_xarray()
+
+        q = xr.where(t <= 55, 510 * t ** (-0.5), 48 + 96 * np.exp(-0.0278 * t))
+
+        q_min = float(q.min())
+        q = q.fillna(q_min)
+
+        # Flip lat if needed (so it’s increasing)
+        q = q.sortby("lat")
+
+        # 1D interpolation along lon
+        tmp = np.empty((q.lat.size, lon_tgt.size))
+        for i in range(q.lat.size):
+            tmp[i, :] = np.interp(lon_tgt, q.lon.values, q.values[i, :])
+
+        # 1D interpolation along lat
+        q_interp_values = np.empty((lat_tgt.size, lon_tgt.size))
+        for j in range(len(lon_tgt)):
+            q_interp_values[:, j] = np.interp(lat_tgt, q.lat.values, tmp[:, j])
+
+        # Wrap as DataArray on NEMO grid
+        q_interp = xr.DataArray(
+            q_interp_values, coords={"lat": lat_tgt, "lon": lon_tgt}, dims=("lat", "lon"), name="gh_flux"
+        )
+
+        # Cap values
+        q_interp = xr.where(q_interp > cap_value, cap_value, q_interp)
+
+        if lat_tgt[0] > lat_tgt[-1]:
+            q_interp = q_interp.sortby("lat", ascending=False)
+        # Assign into Goutorbe_ghflux.nc
+        ds_gh["gh_flux"][0, :, :] = q_interp
+
+        with atomic_write(gh_file_out) as tmp:
+            ds_gh.to_netcdf(tmp)
+        logger.debug("Written NEMO 4.2 tidal file: %s", gh_file_out)
+        ds_gh.close()
+
+        return None
+
+    def create_ocean_init(self, profile=None, so_value=34.7, output_file=None):
+        """
+        Create ocean initial conditions (thetao and so) for NEMO
+        based on WOA climatology and an idealized temperature profile.
+
+        Parameters
+        ----------
+        profile : str or None
+            None (default): build all the profiles below, one file each.
+            "deepmip_cold": idealized cold DeepMIP-like profile (``deepmip-L31_cold-30.nc``).
+            "deepmip_warm": idealized warm DeepMIP-like profile (``deepmip-L31_warm-34.nc``).
+            "woa_pi": zonal mean of present-day WOA over the present-day ocean,
+            broadcast in longitude (``woa13-levitus-L31_woa-pi.nc``).
+        so_value : float
+            Salinity to assign everywhere (default = 34.7).
+        output_file : str or None
+            Output path for a single profile. Default: the file of the profile in
+            ``OCEAN_INIT_FILES``, in ``initial_state/nemo/ts_state`` of the output
+            folder, with a relative link to it in ``nemo/initial`` (where EC-Earth
+            reads it). Not allowed with ``profile=None``.
+
+        Returns
+        -------
+        xarray.Dataset or dict of xarray.Dataset
+            The written dataset; with ``profile=None``, a dict keyed by profile.
+
+        Raises
+        ------
+        ValueError
+            If ``profile`` is unknown, or ``output_file`` is given with ``profile=None``.
+        """
+
+        if profile is None:
+            if output_file is not None:
+                raise ValueError(
+                    f"output_file needs a single profile ({', '.join(OCEAN_INIT_FILES)}); "
+                    "profile=None builds all the files with their default names"
+                )
+            return {name: self.create_ocean_init(profile=name, so_value=so_value) for name in OCEAN_INIT_FILES}
+
+        if profile not in OCEAN_INIT_FILES:
+            raise ValueError(f"Unknown profile: {profile}. Options are: {', '.join(OCEAN_INIT_FILES)}")
+
+        woa_file = os.path.join(nemo_ts_state_dir(self.input_folder), WOA_FILE)
+        domain_file = os.path.join(self.input_folder, f"nemo/domain/{self.nemo_grid}/domain_cfg.nc")
+        woa = xr.open_dataset(woa_file)
+        domain = xr.open_dataset(domain_file)
+
+        # Assign depths from domain_cfg
+        woa = woa.assign_coords(z=domain["nav_lev"])
+
+        # Extract coordinates
+        depths = woa["z"].values  # (nz,)
+        lat = woa["lat"].values  # (ny, nx) usually
+        lon = woa["lon"].values  # (ny, nx) usually
+        lat_rad = np.deg2rad(lat)
+
+        # Build 3D mesh (depth, lat, lon)
+        Z, LAT, LON = np.meshgrid(depths, lat_rad[:, 0], lon[0, :], indexing="ij")
+
+        if profile in DEEPMIP_PROFILES:
+            # Temperature profile formula
+            depth, amplitude, deep = (DEEPMIP_PROFILES[profile][k] for k in ("depth", "amplitude", "deep"))
+            thetao = np.where(
+                Z <= depth,
+                ((depth - Z) / depth) * amplitude * np.cos(LAT) + deep,
+                deep,
+            )
+
+            # thetao = np.where(
+            #    Z <= 5000,
+            #    ((5000 - Z) / 5000) * 20 * np.cos(LAT) + 15,
+            #    15,
+            # )
+
+            thetao = np.broadcast_to(thetao, woa["thetao"].shape)  # keep the 12 months
+
+        elif profile == "woa_pi":
+            # Present-day ocean mask from the ORCA2 domain (WOA is filled over land)
+            orca2_file = os.path.join(self.input_folder, "nemo/domain/ORCA2/domain_cfg.nc")
+            pd_ocean_mask = present_day_ocean_mask(orca2_file, lon, lat, len(depths))
+            thetao = woa_zonal_mean(woa["thetao"], pd_ocean_mask).values
+
+        # Salinity constant
+        so = np.full_like(thetao, so_value)
+
+        woa = woa.assign(
+            thetao=(("time_counter", "z", "y", "x"), thetao, woa["thetao"].attrs),
+            so=(("time_counter", "z", "y", "x"), so, woa["so"].attrs),
+        )
+
+        # === Decide output path ===
+        link = None
+        if output_file is None:
+            output_file = os.path.join(nemo_ts_state_dir(self.output_folder), OCEAN_INIT_FILES[profile])
+            link = os.path.join(self.output_folder, NEMO_INITIAL, OCEAN_INIT_FILES[profile])
+
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+        # overwrite-safe
+        if os.path.exists(output_file):
+            os.remove(output_file)
+
+        with atomic_write(output_file) as tmp:
+            woa.to_netcdf(tmp, mode="w")
+
+        logger.debug("Ocean initial conditions written to %s", output_file)
+        if link is not None:
+            os.makedirs(os.path.dirname(link), exist_ok=True)
+            atomic_symlink(os.path.relpath(output_file, os.path.dirname(link)), link)
+            logger.debug("Linked %s -> %s", link, output_file)
+
+        return woa
+
+    def create_runoff(self):
+
+        runoff = os.path.join(self.input_folder, f"nemo/climatology/runoff_DaiTrenberth_{self.nemo_grid}.nc")
+        runoff_output = os.path.join(self.output_folder, f"nemo/climatology/runoff_DaiTrenberth_{self.nemo_grid}.nc")
+
+        ds_rnf = xr.open_dataset(runoff)
+
+        ds_out = ds_rnf.copy(deep=True)
+        ds_out["socoefr"][:] = 0.0
+        ds_out["sorunoff"][:] = 0.0
+
+        # convert NaN into zeroes
+        ds_out = ds_out.fillna(0)
+
+        # write output file
+        os.makedirs(os.path.join(self.output_folder, "nemo/climatology"), exist_ok=True)
+        with atomic_write(runoff_output) as tmp:
+            ds_out.to_netcdf(tmp)
+        logger.debug("Written NEMO 4.2 runoff file: %s", runoff_output)
+
+        ds_rnf.close()
+
+        return None

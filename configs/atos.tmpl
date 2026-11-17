@@ -1,0 +1,85 @@
+# ecefast configuration, schema 2: ECMWF Atos (HPC).
+# Copy to configs/atos.yml (gitignored) and set the paths. Every key is described in docs/configuration.rst.
+# Keys shown commented out are optional; the value shown is the default. The `steps` of each component are
+# listed in full, with their default: set one to true or false to run or skip that step.
+#
+# Sections follow the time periods: `machine` (where), `grids` (the model resolution, shared by every period),
+# then one section per period, `present` and `eocene`. A period has `input` (the EC-Earth tree it starts from,
+# read-only), `output` (the tree it makes) and one subsection per component.
+#   ecefast <period> run -c CONFIG                       the whole period
+#   ecefast <component> run -c CONFIG [--period eocene]  one component of one period (default: present)
+# Any string may refer to another value with a {section.key} placeholder, e.g. {present.input}.
+
+schema: 2                       # configuration schema version (required)
+# data_version: v1              # version of the generated data. v1 = the data of the existing experiments
+                                # (PALEORCA2 domains of ECE4-DATA-V3 / PALEORCA2-definitive). It needs CDO 2.5.x:
+                                # another CDO moves land-sea mask cells of the NEMO bathymetries, so the run stops
+                                # (on Atos: module load cdo/2.5.3). v2 is not supported yet.
+
+machine:
+  name: atos                    # where DOMAINcfg runs: atos (here), local (laptop, not available) or fake (tests)
+  tmpdir: /path/to/tmp/ecefast   # intermediate files of every command: <tmpdir>/<period>/<component>/ (required)
+  atos:
+    # profile: atos             # HPC modules to load: a profile of ecefast/tools/hpc_profiles.yaml
+    ecearth4_sources: /path/to/ecearth4/sources   # EC-Earth4 sources: DOMAINcfg in nemo-4.2/tools, OASIS libraries
+
+# Model resolution, shared by every period
+grids:
+  # oifs:
+  #   name: TL63L31             # OIFS resolution (directory under oifs/)
+  #   startdate: '19900101'     # initial-state folder under initial_state/oifs/<name>/; quote it
+  #   climate_version: climate.v020   # climate files folder under oifs/<name>/: climate.v020 for cy48, v015 for cy43
+  nemo:
+    # name: PALEORCA2           # NEMO grid (directory under oasis/ and nemo/domain/)
+    coords_ori: /path/to/data/PALEORCA2/coords_ori.nc   # its coordinates with halo (NEMO 3.6), to build a domain
+    # staggering: T             # staggering of the grid's coordinate bounds used in remapping, T or F
+
+# Present-day period: `ecefast present run`, or `ecefast oifs run` and `ecefast nemo run`
+present:
+  input: /path/to/ECE4-DATA-V3        # EC-Earth4 input tree, read-only (required)
+  output: /path/to/OUTPUT/present     # the present-day tree: stage copies the input, then oifs/, nemo/domain/ (required)
+  oifs:                               # OIFS base data of grids.oifs made from a finer grid
+    # All steps are off for data_version v1: its OIFS initial state is the TL63L31 one shipped in the input tree,
+    # copied by stage. It was made by an IFS run (experiment i8ak), and rebuilding it from TL255L91 gives another
+    # state. Turn the steps on to make the OIFS base data from source_grid instead.
+    source_grid: TL255L91             # read from {input}/initial_state/oifs/<source_grid>/<startdate>
+    climate_dir: /path/to/climate/climate.v020   # ECMWF monthly climate fields; read by the boundary step
+    precomputed_climate_dir: /path/to/oifs48-icmcl # ready ICMCLECE4 files (<grid>/<climate_version>/), copied if there
+    steps:
+      spectral: false                 # truncate ICMSHECE4INIT
+      gridpoint: false                # remap ICMGGECE4INIT, ICMGGECE4INIUA
+      boundary: false                 # climate file ICMCLECE4
+  nemo:                               # present-day NEMO domain, bathymetry of {input}/nemo/domain/<source_grid>/
+    source_grid: eORCA1               # NEMO grid of the present-day bathymetry (needs strait corrections for it)
+    # source_staggering: T            # staggering of its coordinate bounds (used in setgrid), T or F
+    minimum_depth: 30                 # m; depths 0 < d < minimum_depth are raised to it (required)
+    steps:                            # on Atos the whole pipeline runs, DOMAINcfg included
+      coordinates: true               # coordinates and cell bounds of the target and source grids
+      bathymetry: true                # remapped bathymetry with the strait corrections
+      configure_domain: true          # DOMAINcfg namelist
+      domain_cfg: true                # run DOMAINcfg (Atos only)
+      generate_mask: true             # post-process domain_cfg.nc and extract maskutil.nc
+      generate_subbasins: true        # ocean subbasin masks
+      sections: true                  # diadct transport sections section_ijglobal.diadct (SECTIONS_DIADCT)
+
+# Eocene (DeepMIP) period: `ecefast eocene run`
+eocene:
+  input: "{present.output}"           # EC-Earth tree to start from: the one of `ecefast present run` (required)
+  herold: /path/to/herold-et-al-2014/Supp   # Herold et al. (2014) supplementary data, read-only (required)
+  output: /path/to/OUTPUT/eocene      # the Eocene EC-Earth tree; --overwrite replaces it (required)
+  nemo:
+    minimum_depth: 30                 # m, used to build the domain (required)
+    # domain_dir: null                # null: the `domain` step builds the Eocene domain; or a directory with a
+                                      # domain_cfg.nc + maskutil.nc built before, installed instead
+    steps:                            # steps of the domain pipeline that builds the domain
+      coordinates: true
+      bathymetry: true                # remapped Herold bathymetry
+      configure_domain: true
+      domain_cfg: true                # run DOMAINcfg (Atos only)
+      generate_mask: true
+      generate_subbasins: true        # global mask only for the Eocene
+      sections: false                 # no diadct sections: they follow present-day straits and passages
+  # oifs:
+  #   aerosols: false                 # build the Herold Eocene aerosol climatology (EoceneOIFS.aerosols); off
+  # oasis:
+  #   constant_sst: 290.0             # SST (K) written everywhere in OASIS rstos.nc (value used so far, placeholder)

@@ -1,126 +1,40 @@
-# Eocene Creator CLI
+# Eocene-creator (`ecefast`)
 
-This repository provides a workflow to prepare Eocene boundary conditions for EC-Earth4 components from an existing input dataset.
+`ecefast` builds EC-Earth4 input data for a time period, on ECMWF Atos:
 
-The main entry point is:
+- `present`: the present-day NEMO PALEORCA2 domain (`domain_cfg.nc`, `maskutil.nc`, `subbasins.nc`,
+  `section_ijglobal.diadct`), built with DOMAINcfg from the eORCA1 bathymetry of an ECE4-DATA tree;
+- `eocene`: Eocene (DeepMIP) boundary conditions for OIFS TL63L31, NEMO PALEORCA2, OASIS and the runoff-mapper,
+  from Herold et al. (2014), with the Eocene NEMO domain.
 
-```bash
-./eocene/cli-eocene.py
-```
+Each period writes a tree laid out as an EC-Earth4 input tree.
 
-## What the CLI does
-
-The CLI can:
-
-- copy a filtered subset of the original input tree into a new output directory
-- generate OASIS modifications
-- generate OIFS modifications
-- generate NEMO modifications
-- generate runoff-mapper products
-
-
-## Requirements
-
-You need:
-
-- a Python environment with the project dependencies installed
-- access to the EC-Earth4 input data tree
-- access to the Herold et al. (2013) paleo datasets
-- external tools required by the selected workflow, especially `cdo` for several OIFS/NEMO operations
-
-Typical setup:
+## Quickstart on Atos
 
 ```bash
-conda env create -f environment.yaml
-conda activate eocene
-pip install -e .
+git clone https://github.com/renatacoppo/Eocene-creator.git && cd Eocene-creator
+module load conda
+mamba env create -f environment.yaml           # once
+conda activate ecefast
+module load cdo/2.5.3                          # data_version v1 needs CDO 2.5.x
+
+cp configs/atos.tmpl configs/atos.yml          # set the /path/to/... values
+ecefast present run -c configs/atos.yml --dry-run
+ecefast present run -c configs/atos.yml        # present-day tree
+ecefast eocene run -c configs/atos.yml         # Eocene tree, starting from the present-day one
 ```
 
-## Running the CLI
+Run on an interactive node (`ecinteractive`) or in a batch job. Each tree ends with `provenance.yml` (steps,
+configuration, git commit, data version, CDO and ecCodes versions).
 
-From the repository root:
+## Documentation
 
-```bash
-python eocene/cli-eocene.py -c eocene/config.yml --copy
-```
+The documentation is online at <https://renatacoppo.github.io/Eocene-creator/> (built from `main`).
+Its source is in `docs/` (Sphinx: `pip install -e ".[docs]" && sphinx-build -b html docs docs/_build/html`):
 
-## Command-line options
+- `docs/quickstart.rst`: setup, running, what each step makes, checking the result;
+- `docs/configuration.rst`: every configuration key;
+- `docs/bathymetry.rst`: how a NEMO bathymetry is made, and how to add a new one;
+- the API reference, generated from the docstrings.
 
-```text
--c, --config   Path to the YAML configuration file. Required.
--l, --log      Logging level. Default: INFO.
--r, --run      Workflow section to run: oifs, nemo, oasis, rnfm, all. Default: all.
---copy         Copy the required input subtree to the output directory before running.
-```
-
-Examples:
-
-```bash
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --copy
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --run oifs -l DEBUG
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --run nemo -l INFO
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --run rnfm
-./eocene/cli-eocene.py -c eocene/config-paolo.yml --run all --copy
-```
-
-## Configuration file
-
-The CLI expects a YAML file with a top-level `dirs` section.
-
-Minimal structure:
-
-```yaml
-dirs:
-  input: /path/to/ECE4-DATA-V2
-  output: /path/to/output
-  herold: /path/to/herold-data
-  domain: /path/to/nemo/domain/PALEORCA2
-  tmpdir: /path/to/tmp
-```
-
-Field meaning:
-
-- `input`: source EC-Earth data tree, the one retrieved from official repo
-- `output`: destination tree where copied and generated files are written
-- `herold`: directory containing Herold paleo input datasets
-- `domain`: directory containing `domain_cfg.nc` and `maskutil.nc` modified for Eocene bathymetry
-- `tmpdir`: reserved temporary directory path (not used yet)
-
-A real example is available in `eocene/config.tmpl`.
-
-## What `--copy` copies
-
-The copy step does not clone the full input tree. It copies only the subsets currently used by the workflow:
-
-## Workflow notes
-
-### OASIS
-
-The OASIS workflow:
-
-- modifies the `rstos.nc` so that it can be used with a different land-sea mask
-
-### OIFS
-
-The OIFS workflow:
-
-- prepares Herold-derived land-sea mask, orography, and subgrid orography
-- updates climate and initialization files
-- writes aerosol climatology products
-
-### NEMO
-
-The NEMO workflow:
-
-- copies `domain_cfg.nc` and `maskutil.nc` into the output tree
-- creates tidal mixing forcing
-- creates geothermal heat flux forcing
-- creates ocean initial conditions
-
-### RNFM
-
-The runoff workflow:
-
-- reads the Herold runoff slope dataset
-- computes drainage basins and arrival points
-- writes a new `runoff_maps.nc`
+Rules for contributors and coding agents: [AGENTS.md](AGENTS.md). Changes: [CHANGELOG.rst](CHANGELOG.rst).
