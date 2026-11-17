@@ -259,7 +259,7 @@ Fixed
   pads the spectral fields back to the truncation of ``grids.oifs`` instead of a hardcoded T63 and removes its
   temporary file; the geothermal step logs "geothermal flux file" (was "tidal file"), the tidal step closes its
   datasets and no longer names unused remapped files inside the read-only Herold folder; the GDH1 coefficients of the
-  geothermal flux are named constants citing Stein and Stein (1992) (#TBD).
+  geothermal flux are named constants citing Stein and Stein (1992) (#57).
 - The OIFS vertical interpolation (``ecefast oifs run`` and ``present run`` from TL255L91 of ECE4-DATA 4.1.11) no
   longer stops at ``gp2spl`` ("Variable name t not found"): the source ``ICMGGECE4INIUA`` also holds ~130 composition
   fields, some with the same shortName, and with them ``remapeta`` dropped the hybrid levels. Only the fields that are
@@ -295,7 +295,7 @@ Removed
   ``vegetation.prepare_vegetation`` (failed on an undefined ``NC4``), ``fields.modify_grib`` (wrote ``tmp_grib*`` into
   the working directory), ``eoceneRNFM.track_rivers_vct`` (marked "Don't use", called ``find_sea`` without
   ``flowdir``) and the commented-out ``__main__`` of ``eoceneRNFM.py``, with the tests that only showed they fail
-  (#TBD).
+  (#57).
 - Documentation pages ``overview.rst``, ``installation.rst``, ``workflow.rst`` and ``external_tools.rst`` (their
   content is in the quickstart, the configuration page and the docstrings), the refactor plan
   ``docs/refactor-plan.md`` and the issue draft ``docs/issue-refactor.md``, and the tutorial notebooks
