@@ -253,6 +253,21 @@ Read by ``ecefast present run`` and ``ecefast <component> run``. Its final files
      - bool
      - see below
      - The steps of the OIFS generator (below).
+   * - ``present.rnfm.weights_dir``
+     - str
+     - required
+     - Run directory of an EC-Earth run on ``grids.nemo``, made with the ``runoff_maps.nc`` of
+       ``present.input``: the ``rnfm`` step reads its OASIS weights
+       ``rmp_F128R-ocean_to_<grids.nemo.name>-T_BILINEAR.nc`` and ``areas.nc``. Without a
+       ``present.rnfm`` section the step does not run. Example:
+       ``weights_dir: /path/to/ece4/AA01``.
+   * - ``present.rnfm.max_error``
+     - float
+     - ``0.5``
+     - The ``rnfm`` step rebuilds the arrival and calving points of the basins that deliver a
+       fraction of their water to NEMO outside ``1 +/- max_error``; the rebuilt ones deliver
+       ``1 +/- 0.02``. ``0.5`` fixes the basins whose sea is not in the NEMO grid and those that
+       lose half of their water; ``0.02`` rebuilds almost every basin. Example: ``max_error: 0.1``.
 
 Steps of the NEMO domain pipeline
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

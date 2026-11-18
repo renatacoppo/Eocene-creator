@@ -54,6 +54,9 @@ present:
       generate_mask: false            # post-process domain_cfg.nc and extract maskutil.nc (needs DOMAINcfg output)
       generate_subbasins: false       # ocean subbasin masks (needs DOMAINcfg output)
       sections: false                 # diadct transport sections (SECTIONS_DIADCT, Atos only)
+  # rnfm:                             # runoff-mapper arrival points that deliver their water to grids.nemo (optional)
+  #   weights_dir: /path/to/ecearth/run   # run dir of an EC-Earth run on grids.nemo: rmp_F128R-ocean_to_<grid>-T_BILINEAR.nc, areas.nc (required)
+  #   max_error: 0.5                  # rebuild the basins delivering outside 1 +/- max_error of their water
 
 # Eocene (DeepMIP) period: `ecefast eocene run`
 eocene:

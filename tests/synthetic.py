@@ -205,12 +205,45 @@ def _rstos(path: Path) -> None:
     xr.Dataset({n: (("y", "x"), np.ones((NY, NX))) for n in names}).to_netcdf(path)
 
 
+RUNOFF_MAPS_LAT, RUNOFF_MAPS_LON = np.linspace(-80.0, 80.0, 9), np.arange(0.0, 360.0, 20.0)
+# the synthetic runoff maps have one basin, on land at the equator, whose arrival cell delivers nothing to NEMO;
+# the synthetic OASIS weights take the water of the next sea cell (RUNOFF_MAPS_DELIVERING) only
+RUNOFF_MAPS_DELIVERING = (4, 4)
+
+
 def _runoff_maps(path: Path) -> None:
-    """Runoff-mapper target grid (regular lat/lon, coarse)."""
-    lat, lon = np.linspace(-80.0, 80.0, 9), np.arange(0.0, 360.0, 20.0)
-    zeros = np.zeros((lat.size, lon.size), dtype="int32")
-    names = ["drainage_basin_id", "arrival_point_id", "calving_point_id"]
-    xr.Dataset({n: (("lat", "lon"), zeros) for n in names}, coords={"lat": lat, "lon": lon}).to_netcdf(path)
+    """Runoff-mapper grid (regular lat/lon, coarse) with one basin (land in row 4, columns 0-2, arrival in 3)."""
+    drainage = np.full((RUNOFF_MAPS_LAT.size, RUNOFF_MAPS_LON.size), -2, dtype="int32")
+    drainage[4, :3] = 1
+    arrival = np.full_like(drainage, -2)
+    arrival[4, 3] = 1
+    data = {"drainage_basin_id": drainage, "arrival_point_id": arrival, "calving_point_id": arrival}
+    coords = {"lat": RUNOFF_MAPS_LAT, "lon": RUNOFF_MAPS_LON}
+    xr.Dataset({n: (("lat", "lon"), v) for n, v in data.items()}, coords=coords).to_netcdf(path)
+
+
+def _rnfm_weights(path: Path) -> None:
+    """OASIS weights from the runoff-mapper grid to a one-cell NEMO grid: only RUNOFF_MAPS_DELIVERING delivers."""
+    source = RUNOFF_MAPS_DELIVERING[0] * RUNOFF_MAPS_LON.size + RUNOFF_MAPS_DELIVERING[1] + 1  # 1-based
+    xr.Dataset(
+        {
+            "src_address": ("num_links", np.array([source, 0], dtype="int32")),  # 0: OASIS padding
+            "dst_address": ("num_links", np.array([1, 0], dtype="int32")),
+            "remap_matrix": (("num_links", "num_wgts"), np.array([[1.0], [0.0]])),
+        }
+    ).to_netcdf(path)
+
+
+def _rnfm_areas(path: Path) -> None:
+    """``areas.nc`` of rdy2cpl for the runoff-mapper grid and the one-cell NEMO grid (equal areas)."""
+    shape = (RUNOFF_MAPS_LAT.size, RUNOFF_MAPS_LON.size)
+    xr.Dataset(
+        {
+            "F128R-ocean.srf": (("y_F128R-ocean", "x_F128R-ocean"), np.ones(shape)),
+            "F128R-land.srf": (("y_F128R-land", "x_F128R-land"), np.ones(shape)),
+            "PALEORCA2-T.srf": (("y_PALEORCA2-T", "x_PALEORCA2-T"), np.ones((1, 1))),
+        }
+    ).to_netcdf(path)
 
 
 def _domain(path: Path) -> None:
@@ -260,6 +293,8 @@ READ_WRITERS = {
     "{input}/nemo/climatology/runoff_DaiTrenberth_{grids.nemo.name}.nc": _nemo_runoff,
     "{herold}/herold_etal_eocene_runoff_1x1.nc": _herold_runoff,
     "{input}/runoff-mapper/runoff_maps.nc": _runoff_maps,
+    "{rnfm.weights_dir}/rmp_F128R-ocean_to_{grids.nemo.name}-T_BILINEAR.nc": _rnfm_weights,
+    "{rnfm.weights_dir}/areas.nc": _rnfm_areas,
 }
 
 
