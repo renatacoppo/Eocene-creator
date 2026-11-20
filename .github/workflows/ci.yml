@@ -7,6 +7,19 @@ on:
 
 jobs:
   tests:
+    # Each data version needs its own CDO series (DATA_VERSIONS in core/config.py): v1 runs everything with CDO 2.5,
+    # v2 runs its tests (marker data_v2) with CDO 2.6. Lint and import checks run once, in the v1 job.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - data_version: v1
+            cdo: "2.5"
+            tests: unit or integration
+          - data_version: v2
+            cdo: "2.6"
+            tests: data_v2
+    name: tests (data ${{ matrix.data_version }}, CDO ${{ matrix.cdo }})
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -18,6 +31,7 @@ jobs:
       # Allowlist: the OIFS generator (moved as-is, flagged for later), planning notes and the changelog that
       # quote old paths, and AGENTS.md, which states the rule with examples.
       - name: No hardcoded personal or HPC paths
+        if: matrix.data_version == 'v1'
         # [P]ERM: the pattern must not match this file itself.
         shell: bash
         run: |
@@ -27,13 +41,13 @@ jobs:
             exit 1
           fi
 
-      - name: Set up the environment from environment.yaml (Python 3.14, CDO 2.5 from conda-forge, see AGENTS.md)
+      - name: Set up the environment from environment.yaml (Python 3.14, CDO from conda-forge, see AGENTS.md)
         uses: mamba-org/setup-micromamba@v3.2.1
         with:
           environment-file: environment.yaml
           create-args: >-
             python=3.14
-            cdo=2.5
+            cdo=${{ matrix.cdo }}
             pytest
             pytest-cov
             ruff
@@ -50,12 +64,14 @@ jobs:
           codes_info -v
 
       - name: Lint and format check
+        if: matrix.data_version == 'v1'
         run: |
           ruff check .
           ruff format --check .
 
       - name: Import contracts (layers, independent components)
+        if: matrix.data_version == 'v1'
         run: lint-imports
 
-      - name: Unit and integration tests
-        run: pytest -m "unit or integration"
+      - name: Tests (${{ matrix.tests }})
+        run: pytest -m "${{ matrix.tests }}"

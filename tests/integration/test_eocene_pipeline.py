@@ -32,6 +32,7 @@ def tree(tmp_path_factory: pytest.TempPathFactory) -> dict:
     config_file = root / "config.yml"
     raw = {
         "schema": 2,
+        "data_version": "v1",  # the v1 pipeline, with the CDO 2.5 of the v1 CI job
         "machine": {"name": "fake", "tmpdir": str(root / "tmp")},
         "grids": {"nemo": {"coords_ori": str(root / "coords_ori.nc")}},
         "eocene": {

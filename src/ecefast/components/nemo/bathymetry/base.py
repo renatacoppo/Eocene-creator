@@ -5,6 +5,13 @@ Subclasses declare *what* to do by setting class-level attributes and optionally
 overriding `postprocess()`.  The generic CDO pipeline (preprocess → land-sea
 mask → remap) is inherited unchanged.
 
+Two pipelines:
+
+- data version v1 (``rule_based_geography = False``): conservative land-sea mask, depth remapped with
+  ``remap_method``, then the subclass's ``postprocess()`` (manual corrections);
+- data version v2 (``rule_based_geography = True``): conservative land-sea mask and conservative ocean-mean depth
+  from the same remap, then the geography rules of :mod:`.geography` and the fixed sills of ``sills``.
+
 Minimal subclass example
 ------------------------
     class MyBathymetry(BathymetryProcessor):
@@ -17,22 +24,43 @@ Minimal subclass example
 import logging
 import os
 import tempfile
+from typing import ClassVar
+
+import numpy as np
+import xarray as xr
+
+from ecefast.core.io import atomic_write
+
+from .geography import T_PIVOT, apply_rules
 
 logger = logging.getLogger(__name__)
 
 
 # CDO operator chains and sign-flip flag per mask type.
 # Add new entries here if a new input convention is needed.
+# "depth" (v2 only): the positive depth of the source, 0 on land, before the conservative remap.
 MASK_PRESETS = {
     "positive_depth": {
         "lsm_preprocess": "-setrtoc,0.0001,10000,1",
         "sign_flip": False,
+        "depth": "-setrtoc,-100000,0,0",
     },
     "negative_elevation": {
         "lsm_preprocess": "-setrtoc,-10000,-0.0001,1 -setrtoc,0,10000,0",
         "sign_flip": True,
+        "depth": "-mulc,-1 -setrtoc,0,100000,0",
     },
 }
+
+# North fold of the target grid: the DOMAINcfg namelist (domain/namelist_cfg.j2) sets jperio = 4, T-point pivot
+NORTH_FOLD = T_PIVOT
+# v2: the ocean fraction is rounded to this before the 0.5 threshold, so a cell at exactly 0.5 is ocean whatever
+# the floating-point rounding of CDO (the 0.5 ties of data version v1, see DATA_VERSIONS in core/config.py)
+FRACTION_DECIMALS = 6
+OCEAN_THRESHOLD = 0.5
+# v2 remaps: double precision, and -L (serialized I/O): a remapcon that reads from a chain of operators crashed in
+# about 1 run in 4 with CDO 2.6.4 (Homebrew build, macOS) without it
+REMAP_OPTIONS = "-O -L -b F64"
 
 
 class BathymetryProcessor:
@@ -51,7 +79,8 @@ class BathymetryProcessor:
         ``{input}/nemo/domain/{nemo.source_grid}/domain_cfg.nc``).
     has_source_grid : bool
         The source is on a NEMO grid of the input tree (``<period>.nemo.source_grid``), whose cell bounds the
-        coordinates step makes.
+        coordinates step makes: they are the CDO grid description of the source (``setgrid``), and the output file
+        name starts with ``<source grid>_T``.
     variable : str
         Variable name in the source NetCDF.
     rename_to : str or None
@@ -70,6 +99,12 @@ class BathymetryProcessor:
     transport_sections : bool
         The transport sections of NEMO diadct (present-day straits and passages, step ``sections``) fit this
         bathymetry; ``False``: the step is a configuration error.
+    rule_based_geography : bool
+        Data version v2: conservative land-sea mask and ocean-mean depth, then the geography rules
+        (:func:`.geography.apply_rules`); ``remap_method`` must be ``remapcon``, and there is no ``postprocess()``.
+    sills : dict
+        v2: straits with a fixed sill depth, name -> ``(lon, lat, depth in m)``; the cell nearest to ``(lon, lat)``
+        gets the depth and must be the only link between two basins (:func:`.geography.check_sills`).
     """
 
     name: str = ""
@@ -83,6 +118,8 @@ class BathymetryProcessor:
     output_prefix = None
     regional_subbasins: bool = True
     transport_sections: bool = True
+    rule_based_geography: bool = False
+    sills: ClassVar[dict[str, tuple[float, float, float]]] = {}
 
     def __init__(self, cfg, paths, grids, params, cdo):
         """
@@ -99,6 +136,12 @@ class BathymetryProcessor:
         self.grids = grids
         self.params = params
         self.cdo = cdo
+        if self.has_source_grid:
+            # the cell bounds of the source grid (coordinates step), in the source staggering of the config
+            src = grids["source"]
+            stagg = grids.get("staggering_source", "T")
+            self.setgrid = os.path.join(paths["coordsdir"], src, f"coords_bounds_{stagg}.nc")
+            self.output_prefix = f"{src}_T"  # e.g. eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T.nc
 
         self.output_file = None
 
@@ -120,11 +163,15 @@ class BathymetryProcessor:
             logger.debug("Preprocessing...")
             preprocessed = self._preprocess()
 
-            logger.debug("Building land-sea mask...")
-            lsm = self._build_lsm(preprocessed)
+            if self.rule_based_geography:
+                logger.debug("Conservative mask and depth, then the geography rules...")
+                self._remap_rule_based(preprocessed, remap_file)
+            else:
+                logger.debug("Building land-sea mask...")
+                lsm = self._build_lsm(preprocessed)
 
-            logger.debug("Remapping...")
-            self._remap(preprocessed, lsm, remap_file)
+                logger.debug("Remapping...")
+                self._remap(preprocessed, lsm, remap_file)
 
         finally:
             for tmp in [preprocessed, lsm]:
@@ -225,6 +272,78 @@ class BathymetryProcessor:
             remap_chain = f"-mul {lsm} -{self.remap_method},{target_bounds} {preprocessed}"
 
         self.cdo.setrtoc(f"0.00001,{min_depth},{min_depth}", input=remap_chain, output=output_file, options="-O")
+
+    def _remap_rule_based(self, preprocessed, output_file):
+        """Data version v2: conservative mask and ocean-mean depth, the sills, then the geography rules.
+
+        Both come from one conservative remap: the ocean fraction of each target cell, and the area-weighted sum of
+        the source depth (0 on land). A cell is ocean if its fraction, rounded to ``FRACTION_DECIMALS``, is at least
+        ``OCEAN_THRESHOLD``; its depth is the sum divided by the fraction (the mean depth of its ocean part), at
+        least ``minimum_depth``. The output keeps the grid and variable of the CDO remap.
+        """
+        if self.remap_method != "remapcon":
+            raise ValueError(f"{type(self).__name__}: rule_based_geography needs remap_method remapcon")
+        preset = MASK_PRESETS[self.mask_type]
+        target_bounds = self._target_bounds()
+        min_depth = self.params["minimum_depth"]
+        fraction_file, depth_file = self._tmp(), self._tmp()
+        try:
+            self.cdo.remapcon(
+                target_bounds,
+                input=f"{preset['lsm_preprocess']} {preprocessed}",
+                output=fraction_file,
+                options=REMAP_OPTIONS,
+            )
+            self.cdo.remapcon(
+                target_bounds, input=f"{preset['depth']} {preprocessed}", output=depth_file, options=REMAP_OPTIONS
+            )
+            with xr.open_dataset(fraction_file) as ds:
+                fraction = ds[self.variable_name()].squeeze().values
+            with xr.open_dataset(depth_file) as ds:
+                result = ds.load()
+        finally:
+            for tmp in (fraction_file, depth_file):
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+
+        var = result[self.variable_name()]
+        ocean = np.round(fraction, FRACTION_DECIMALS) >= OCEAN_THRESHOLD
+        mean_depth = var.squeeze().values / np.where(ocean, fraction, 1.0)
+        depth = np.where(ocean, np.maximum(mean_depth, min_depth), 0.0)
+
+        report = apply_rules(
+            ocean,
+            depth,
+            fraction,
+            min_depth,
+            NORTH_FOLD,
+            lon=result["lon"].values,
+            lat=result["lat"].values,
+            sills=self.sills,
+        )
+        logger.info(
+            "Geography rules: fold row made symmetric (%d cells), opened %d corner contacts, removed %d closed seas "
+            "(%d cells), %d inlet cells, %d isolated islands; sills: %s",
+            report.fold_cells,
+            len(report.opened_corners),
+            len(report.closed_seas),
+            sum(report.closed_seas),
+            report.removed_inlets,
+            len(report.removed_islands),
+            ", ".join(f"{name} {depth_m:.0f} m" for name, (_, _, depth_m) in self.sills.items()) or "none",
+        )
+
+        result[var.name] = var.copy(data=depth.reshape(var.shape).astype(var.dtype))
+        result.attrs["history"] = (
+            f"{result.attrs.get('history', '')}\necefast: ocean-mean depth of the conservative remap, "
+            "geography rules and sills (data version v2)"
+        ).strip()
+        with atomic_write(output_file) as tmp:
+            result.to_netcdf(tmp)
+
+    def variable_name(self) -> str:
+        """Name of the bathymetry variable after preprocessing."""
+        return self.rename_to or self.variable
 
     # ------------------------------------------------------------------
     # Helpers

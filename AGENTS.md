@@ -63,6 +63,7 @@ ecefast eocene plot -c configs/laptop.yml -o plots/eocene   # maps vs a referenc
 # checks before pushing
 ruff check --fix . && ruff format .
 pytest -m "unit or integration"
+# the BASELINE/<period> trees are v1: run with data_version: v1 in the config and CDO 2.5.x to compare
 python scripts/compare_outputs.py BASELINE/eocene OUTPUT/eocene            # Eocene workflow
 python scripts/compare_outputs.py BASELINE/present <machine.tmpdir>/present/nemo   # present-day domain, laptop part
 sphinx-build -W -b html docs docs/_build/html
@@ -122,8 +123,10 @@ These come first; the more specific rules below follow from them.
 - **`reads` and `writes` are the truth.** A step reads only the paths it declares in `reads` and
   writes only the paths in `writes`. No hidden file access inside `create_*`.
 - **Bathymetries** belong to a period: `PresentDayBathymetry` in `periods/present`, `EoceneBathymetry`
-  in `periods/eocene`, never in `components/nemo`. Each declares its source file; the period's
-  pipeline passes it to the domain pipeline (no registry by name).
+  in `periods/eocene` (and their `V2` classes), never in `components/nemo`. Each declares its source
+  file; the period's pipeline passes the processor of its data version (`BATHYMETRIES` of the
+  period) to the domain pipeline (no registry by name). The geography rules of v2 are generic and
+  live in `components/nemo/bathymetry/geography.py`.
 - **External tools** (DOMAINcfg, OASIS lib, HPC modules) are reached only through
   `tools.ecearth` and its backends `atos`, `local`, `fake`. No direct `subprocess` calls to
   EC-Earth binaries elsewhere.
@@ -183,7 +186,8 @@ the docs.
 ## Scientific integrity
 
 - **Output must not change by accident.** Every refactor must reproduce the frozen baseline
-  (`BASELINE/`), checked with `scripts/compare_outputs.py`: same file
+  (`BASELINE/`, data version v1: run with `data_version: v1`, as the default is v2), checked with
+  `scripts/compare_outputs.py`: same file
   list, NetCDF data variables equal within `rtol=1e-6` with the same names, order, dtypes and
   attributes, GRIB files identical in values, keys and message order (`grib_compare`);
   `history` and date attributes are ignored. A refactor PR that changes numbers is a bug.
@@ -203,14 +207,18 @@ the docs.
   floating-point rounding between DOMAINcfg builds, `VERTICAL_GRID_ATOL`). `EoceneNEMO` reads the
   present-day domain from the input tree on purpose; do not change which domain it reads. The
   check in `EoceneDomain` / `verify` is a hard error on a mismatch, never a warning.
-- **Data versions and CDO.** The config key `data_version` (default `v1`) names the data a run
+- **Data versions and CDO.** The config key `data_version` (default `v2`) names the data a run
   reproduces, and each version needs one CDO series (`DATA_VERSIONS` in `core/config.py`).
   `run_period` checks the CDO version before anything else, dry runs included, and raises a
-  `PipelineError` on a mismatch; never turn this into a warning. `v1` is the only version and
-  needs **CDO 2.5.x**; `v2` is reserved and rejected until it is defined (a new version, its CDO
-  and its output changes need an agreed issue). CDO is not part of `environment.yaml`: on Atos
-  `module load cdo/2.5.3`, elsewhere conda-forge `cdo=2.5` (Homebrew ships only the latest
-  release), CI pins `cdo=2.5`. Reason: the land-sea mask of a NEMO bathymetry is the
+  `PipelineError` on a mismatch; never turn this into a warning. `v1` needs **CDO 2.5.x**.
+  `v2` (issue #58) needs **CDO 2.6.x**: its NEMO bathymetries come from the geography rules
+  (`components/nemo/bathymetry/geography.py`) instead of manual corrections, and it rounds the
+  ocean fraction before the threshold (a cell at exactly 0.5 is ocean). A new version, its CDO and
+  its output changes need an agreed issue. CDO is not part of `environment.yaml`: on Atos
+  `module load cdo/2.6.5` (v2) or `cdo/2.5.3` (v1), elsewhere conda-forge `cdo=2.5` or `cdo=2.6` (Homebrew ships only the
+  latest release); CI runs v1 with `cdo=2.5` and the `data_v2` tests with `cdo=2.6`. The v2
+  baseline lives in `BASELINE/v2/<period>/`, next to the v1 one. Reason for v1: the land-sea
+  mask of a NEMO bathymetry is the
   `remapcon` ocean fraction thresholded at 0.5, and many PALEORCA2 cells have a fraction of
   exactly 0.5 (200 for the Eocene, 135 for the present day). Floating-point rounding decides on
   which side they fall, and it changes between CDO versions: 2.6.x moves 25 Eocene and 4
@@ -289,6 +297,7 @@ Test groups (pytest markers):
 | `integration` | synthetic tree, `fake` backend; runner, NEMO, OASIS, RNFM, domain pipeline (OIFS: unit tests and `local_data` only) | CI |
 | `local_data` | real subset, `ECEFAST_TEST_DATA=<dir>` | your machine, opt-in |
 | `hpc` | real data and DOMAINcfg | ECMWF Atos, manual |
+| `data_v2` | data version v2 tests (also `unit`, `integration` or `local_data`) | CI job with CDO 2.6 |
 
 - **New or changed function → unit test** on synthetic data.
 - **New step in a pipeline → integration test** (dry run and real run with the `fake` backend).
@@ -348,8 +357,8 @@ to `main`.
 
 - **Ask before adding any dependency.** It must be on conda-forge.
 - Add it to both `environment.yaml` and `pyproject.toml`.
-- Do not bump pinned versions in a non-science PR. CDO is pinned to 2.5.x outside
-  `environment.yaml`; changing it follows [Scientific integrity](#scientific-integrity).
+- Do not bump pinned versions in a non-science PR. CDO is pinned per data version (2.5.x for v1,
+  2.6.x for v2) outside `environment.yaml`; changing it follows [Scientific integrity](#scientific-integrity).
 
 ## Git and pull requests
 

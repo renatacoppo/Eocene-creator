@@ -8,6 +8,9 @@ grid cells) to produce a geographically consistent target grid.
 IMPORTANT: the strait corrections assume a specific source grid, target grid and remapping (eORCA1, remapnn to
 PALEORCA2). Another combination needs its own corrections (``bathymetry_corrections.yaml``); without them the
 step stops.
+
+PresentDayBathymetryV2 (data version v2) has no manual corrections: conservative mask and depth, the geography
+rules and fixed sills. ``BATHYMETRIES`` gives the processor of each data version.
 """
 
 import glob
@@ -41,15 +44,6 @@ class PresentDayBathymetry(BathymetryProcessor):
     variable = "bathy_metry"
     mask_type = "positive_depth"
     remap_method = "remapnn"
-
-    def __init__(self, cfg, paths, grids, params, cdo):
-        super().__init__(cfg, paths, grids, params, cdo)
-        # Derive setgrid from source-grid coordinates, honouring the source staggering of the config
-        src = grids["source"]
-        stagg = grids.get("staggering_source", "T")
-        self.setgrid = os.path.join(paths["coordsdir"], src, f"coords_bounds_{stagg}.nc")
-        # e.g. eORCA1_T_bathy_metry_remapnn_to_PALEORCA2_T.nc
-        self.output_prefix = f"{src}_T"
 
     def reference_domains(self) -> list[str]:
         """The ``domain_cfg.nc`` of every NEMO domain of the input tree, shown next to the result in the plot."""
@@ -123,6 +117,35 @@ class PresentDayBathymetry(BathymetryProcessor):
         plt.savefig(plot_file, dpi=150, bbox_inches="tight")
         logger.debug("Plot saved: %s", plot_file)
         plt.close()
+
+
+class PresentDayBathymetryV2(BathymetryProcessor):
+    """
+    Processor for the present-day bathymetry, data version v2.
+
+    - Source: ``{input}/nemo/domain/<source_grid>/domain_cfg.nc`` (ORCA2 by default in v2), variable bathy_metry.
+    - Remap: conservative land-sea mask and ocean-mean depth, geography rules, fixed sills
+      (:func:`ecefast.components.nemo.bathymetry.geography.apply_rules`). No manual corrections.
+    """
+
+    name = "present_day"
+    source_file = "{input}/nemo/domain/{nemo.source_grid}/domain_cfg.nc"
+    has_source_grid = True
+    variable = "bathy_metry"
+    mask_type = "positive_depth"
+    remap_method = "remapcon"
+    rule_based_geography = True
+    # Straits whose sill sets the exchange of a marginal sea: (lon, lat) of the strait, sill depth (m). The depths
+    # are those of the ORCA2 domain of ECE4-DATA-V3 at the strait, the Camarinal Sill (Gibraltar) and the Hanish
+    # Sill (Bab-el-Mandeb); the conservative mean depth there is several hundred metres too deep.
+    sills = {
+        "Gibraltar": (-5.6, 35.95, 284.0),
+        "Bab-el-Mandeb": (43.3, 12.6, 137.0),
+    }
+
+
+# the processor of each data version (data_version of the configuration)
+BATHYMETRIES = {"v1": PresentDayBathymetry, "v2": PresentDayBathymetryV2}
 
 
 # ======================================================================

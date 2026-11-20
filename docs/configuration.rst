@@ -19,7 +19,7 @@ Layout
 .. code-block:: yaml
 
    schema: 2                  # format of this file
-   data_version: v1           # the data a run reproduces, and the CDO it needs
+   data_version: v2           # the data a run reproduces, and the CDO it needs
    machine: ...               # where the EC-Earth tools run, and the intermediate files
    grids: ...                 # the model resolution, shared by every period
    present: ...               # ecefast present run, ecefast <component> run
@@ -29,7 +29,9 @@ A period has ``input`` (the EC-Earth tree it starts from, read-only), ``output``
 makes, laid out as in ECE4-DATA) and one subsection per component (``oifs``, ``nemo``,
 ``oasis``). A run writes only to its period's ``output`` and to
 ``<machine.tmpdir>/<period>/<component>/``; on Atos DOMAINcfg also writes in its own directory of
-the EC-Earth4 sources. Only ``schema`` and ``machine.tmpdir`` are always required; a command stops
+the EC-Earth4 sources. Keep ``machine.tmpdir`` short: DOMAINcfg reads at most 132 characters of
+the path of the coordinates and 200 of the bathymetry, both in ``tmpdir``; a longer path stops the
+domain steps before they start. Only ``schema`` and ``machine.tmpdir`` are always required; a command stops
 if the section of its period, or of its component in that period, is missing.
 
 Placeholders
@@ -63,9 +65,9 @@ Top level
      - Version of the configuration format: ``2``.
    * - ``data_version``
      - str
-     - ``v1``
-     - Version of the generated data, and the CDO series it needs (below). Only ``v1`` is
-       supported; ``v2`` is reserved and rejected.
+     - ``v2``
+     - Version of the generated data, and the CDO series it needs (below): ``v1`` or ``v2``.
+       Set ``v1`` to reproduce the data of the existing experiments.
 
 .. _data-version:
 
@@ -89,8 +91,12 @@ is written to ``provenance.yml``.
        ``PALEORCA2-definitive``, made with CDO 2.5.0 (2.5.1 and 2.5.3 reproduce them bit for bit);
        the TL63L31 OIFS initial state of the input tree.
    * - ``v2``
-     - (none)
-     - Not defined yet.
+     - 2.6.x
+     - The NEMO bathymetries without manual corrections: conservative land-sea mask and depth,
+       geography rules and fixed sills, the present day from ORCA2 (see :ref:`bathymetry-v2`).
+       The ocean fraction is rounded before the 0.5 threshold, so cells at exactly 0.5 are ocean
+       with any CDO; v2 still pins its CDO series, as every data version. The other components
+       are those of v1.
 
 Why CDO matters: the land-sea mask of a NEMO bathymetry is the ``remapcon`` ocean fraction
 thresholded at 0.5 (see :doc:`bathymetry`), and many PALEORCA2 cells have a fraction of exactly
@@ -100,8 +106,10 @@ compared with 2.5.x. ``REMAP_AREA_MIN`` does not change this.
 
 .. code-block:: bash
 
-   module load cdo/2.5.3                     # ECMWF Atos
-   conda install -c conda-forge "cdo=2.5"    # elsewhere
+   module load cdo/2.6.5                     # ECMWF Atos, data_version v2
+   module load cdo/2.5.3                     # ECMWF Atos, data_version v1
+   conda install -c conda-forge "cdo=2.6"    # elsewhere, data_version v2
+   conda install -c conda-forge "cdo=2.5"    # elsewhere, data_version v1
 
 ``machine``
 -----------
@@ -212,9 +220,10 @@ Read by ``ecefast present run`` and ``ecefast <component> run``. Its final files
        ``nemo`` add theirs.
    * - ``present.nemo.source_grid``
      - str
-     - ``eORCA1``
+     - ``eORCA1`` (v1), ``ORCA2`` (v2)
      - The present-day bathymetry: ``{input}/nemo/domain/<source_grid>/domain_cfg.nc``, which also
-       holds its horizontal grid. It needs strait corrections for this grid (see :doc:`bathymetry`).
+       holds its horizontal grid. In v1 it needs strait corrections for this grid; v2 uses the
+       geography rules (see :doc:`bathymetry`). Example: ``source_grid: ORCA2``.
    * - ``present.nemo.source_staggering``
      - str
      - ``T``
@@ -222,7 +231,7 @@ Read by ``ecefast present run`` and ``ecefast <component> run``. Its final files
    * - ``present.nemo.minimum_depth``
      - float
      - required
-     - Minimum ocean depth (m): depths ``0 < d < minimum_depth`` are raised to it. ``30`` in v1.
+     - Minimum ocean depth (m): depths ``0 < d < minimum_depth`` are raised to it. ``30`` in v1 and v2.
    * - ``present.nemo.steps.<step>``
      - bool
      - ``true``
@@ -246,6 +255,21 @@ Read by ``ecefast present run`` and ``ecefast <component> run``. Its final files
      - bool
      - see below
      - The steps of the OIFS generator (below).
+   * - ``present.rnfm.weights_dir``
+     - str
+     - required
+     - Run directory of an EC-Earth run on ``grids.nemo``, made with the ``runoff_maps.nc`` of
+       ``present.input``: the ``rnfm`` step reads its OASIS weights
+       ``rmp_F128R-ocean_to_<grids.nemo.name>-T_BILINEAR.nc`` and ``areas.nc``. Without a
+       ``present.rnfm`` section the step does not run. Example:
+       ``weights_dir: /path/to/ece4/AA01``.
+   * - ``present.rnfm.max_error``
+     - float
+     - ``0.5``
+     - The ``rnfm`` step rebuilds the arrival and calving points of the basins that deliver a
+       fraction of their water to NEMO outside ``1 +/- max_error``; the rebuilt ones deliver
+       ``1 +/- 0.02``. ``0.5`` fixes the basins whose sea is not in the NEMO grid and those that
+       lose half of their water; ``0.02`` rebuilds almost every basin. Example: ``max_error: 0.1``.
 
 Steps of the NEMO domain pipeline
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -314,8 +338,8 @@ Steps of the OIFS generator
      - ``false``
      - The climate file ``ICMCLECE4``: copies a precomputed one, or merges the monthly fields.
 
-**For** ``data_version: v1`` **all three are off** (as in the templates), or ``present.oifs`` is
-left out: the OIFS initial state of v1 is the TL63L31 one of the input tree, copied by ``stage``.
+**For** ``data_version`` **v1 and v2 all three are off** (as in the templates), or ``present.oifs``
+is left out: the OIFS initial state of both is the TL63L31 one of the input tree, copied by ``stage``.
 It was made by an IFS run (experiment ``i8ak``), not by the generator, and rebuilding it from
 TL255L91 gives a different state.
 
@@ -357,7 +381,7 @@ Read by ``ecefast eocene run`` and ``ecefast <component> run --period eocene``.
    * - ``eocene.nemo.minimum_depth``
      - float
      - required
-     - Minimum ocean depth (m) of the Eocene domain. ``30`` in v1.
+     - Minimum ocean depth (m) of the Eocene domain. ``30`` in v1 and v2.
    * - ``eocene.nemo.steps.<step>``
      - bool
      - ``true``; ``sections``: ``false``
@@ -388,7 +412,6 @@ The ``present`` and ``eocene`` sections of ``configs/atos.tmpl``, without the co
      oifs:
        steps: {spectral: false, gridpoint: false, boundary: false}
      nemo:
-       source_grid: eORCA1
        minimum_depth: 30
        steps:
          coordinates: true

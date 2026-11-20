@@ -3,7 +3,9 @@ Bathymetries
 
 A NEMO domain starts from a bathymetry on the model grid. The ``bathymetry`` step of the NEMO
 domain pipeline makes it from a source dataset, then DOMAINcfg builds the domain from it
-(:doc:`configuration`, *Steps of the NEMO domain pipeline*). Each period has its own bathymetry:
+(:doc:`configuration`, *Steps of the NEMO domain pipeline*). Each period has its own bathymetry,
+and how it is made depends on ``data_version`` (:ref:`data-version`): v1 is described first, v2 in
+:ref:`bathymetry-v2`. With ``data_version: v1``:
 
 .. list-table::
    :header-rows: 1
@@ -34,7 +36,8 @@ How a bathymetry is made
 
 Both are subclasses of
 :class:`~ecefast.components.nemo.bathymetry.base.BathymetryProcessor`, which runs the same CDO
-chain for every source, in ``<machine.tmpdir>/<period>/nemo/bathymetry/PALEORCA2/``:
+chain for every source, in ``<machine.tmpdir>/<period>/nemo/bathymetry/PALEORCA2/`` (v1; v2 keeps
+step 1 and replaces the others, see :ref:`bathymetry-v2`):
 
 1. **Select** the variable of the source, renamed to ``bathy_metry`` if needed, on its own grid
    (or on the grid of ``setgrid``, for a NEMO source grid).
@@ -73,22 +76,97 @@ ocean already is left as it is, with a warning. The corrections of
 ``landsea_mask_comparison.png``, next to the corrected file, shows the result next to every
 domain of the input tree.
 
+.. _bathymetry-v2:
+
+Data version v2: rules instead of corrections
+---------------------------------------------
+
+With ``data_version: v2`` (issue #58) the bathymetry has no manual corrections. The processors are
+``PresentDayBathymetryV2`` (source ``present.nemo.source_grid``, ORCA2 by default) and
+``EoceneBathymetryV2`` (the same Herold source as v1); ``BATHYMETRIES`` in each
+``periods/<period>/bathymetry.py`` gives the processor of each data version.
+
+1. **Mask and depth from one conservative remap.** The ocean indicator and the depth of the
+   source (0 on land) are remapped with ``remapcon``. The ocean fraction is rounded to 1e-6 and a
+   cell is ocean if it is at least 0.5, so a cell at exactly 0.5 is ocean whatever the CDO
+   rounding. Its depth is the mean depth of its ocean part (the remapped depth divided by the ocean
+   fraction), at least ``minimum_depth``. In v1 the depth comes from another remap than the mask,
+   and coastal cells could be ocean in the mask with depth 0.
+2. **Sills.** The present day gives the straits whose sill sets the exchange of a marginal sea a
+   fixed depth, as in ORCA2: Gibraltar 284 m, Bab-el-Mandeb 137 m (``PresentDayBathymetryV2.sills``,
+   by longitude and latitude). The sill cell must be the only link between the two basins.
+3. **Geography rules**, in this order
+   (:mod:`ecefast.components.nemo.bathymetry.geography`). Two cells are connected only through a
+   side (the velocity points of the C grid), across the dateline and the north fold:
+
+   - **open corner contacts**: two water bodies that touch only at a corner are joined, by the
+     land cell between them with the larger ocean fraction, at ``minimum_depth``. A corner inside
+     one water body (across a peninsula such as Italy) is left closed;
+   - **no closed seas**: water not connected to the main ocean becomes land (Caspian, Black Sea,
+     Great Lakes). It runs after the corner contacts, otherwise seas joined only at a corner, such
+     as the Mediterranean or the Baltic in the remapped mask, would be removed;
+   - **no one-cell inlets**: one-cell-wide dead ends become land, in a single pass;
+   - **no isolated islands**: a land cell with no land among its eight neighbours becomes ocean.
+
+The result is ``<prefix>_bathy_metry_remapcon_to_PALEORCA2_T.nc``; the log lists what each rule
+changed. After DOMAINcfg, the domain must keep the land-sea mask of the bathymetry, every row
+included: a difference stops the ``generate_mask`` step.
+
+Before the rules, the north-fold row is made symmetric (its right half copies the mirrored left
+half, as NEMO does), and every rule changes both copies of a fold-row cell.
+
+On the laptop inputs (fake DOMAINcfg, CDO 2.6.4; a fold-row cell counts twice; "only link": the
+cells whose removal would split the ocean, as at Gibraltar):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 22 22 22
+
+   * - PALEORCA2
+     - ocean cells
+     - one-cell-wide cells (only link)
+     - cells at 30 m
+   * - present day, v1
+     - 16870
+     - 97 (10)
+     - 308
+   * - present day, v2
+     - 16733
+     - 11 (8)
+     - 54
+   * - Eocene, v1
+     - 16832
+     - 59 (7)
+     - 501
+   * - Eocene, v2
+     - 17017
+     - 12 (1)
+     - 485
+
+Most Eocene cells at 30 m are real: Herold et al. (2014) have 2.7% of the ocean area at 30 m or
+shallower (the epicontinental seas of Europe and the Tethys).
+
 Adding a bathymetry
 -------------------
 
-Bathymetries are not chosen in the configuration: each period passes its processor class to the
-NEMO domain pipeline in code (``PresentNEMO.from_context`` in ``periods/present/pipeline.py``,
-``EoceneDomain.from_context`` in ``periods/eocene/nemo/domain.py``). Three cases:
+Bathymetries are not chosen in the configuration: each period gives the processor class of each
+data version in ``BATHYMETRIES`` (``periods/<period>/bathymetry.py``), and passes the one of
+``data_version`` to the NEMO domain pipeline (``PresentNEMO.from_context`` in
+``periods/present/pipeline.py``, ``EoceneDomain.from_context`` in ``periods/eocene/nemo/domain.py``).
+Three cases:
 
 **The present day from another source grid** (e.g. a new eORCA domain). If the source has the
-same variable and convention, no code is needed: set ``present.nemo.source_grid`` and add the
-corrections of the new combination to ``bathymetry_corrections.yaml`` (without them the step
-stops). Find the cells with ``--nemo coordinates,bathymetry`` and the land-sea mask plot, edit,
-repeat.
+same variable and convention, no code is needed: set ``present.nemo.source_grid``. In v2 the
+geography rules apply to any source; check the result and whether the sills
+(``PresentDayBathymetryV2.sills``) still hold. In v1 add the corrections of the new combination to
+``bathymetry_corrections.yaml`` (without them the step stops): find the cells with
+``--nemo coordinates,bathymetry`` and the land-sea mask plot, edit, repeat.
 
 **Another bathymetry for an existing period** (e.g. a different Eocene reconstruction, or the
-Herold one with a gateway opened). Write a new class next to the current one, and pass it instead
-of the current one in the period's step:
+Herold one with a gateway opened). Write a new class next to the current one, and put it in the
+period's ``BATHYMETRIES`` (a new data version, or the entry of an existing one after an agreed
+issue). Set ``remap_method = "remapcon"`` and ``rule_based_geography = True`` for the v2 rules
+instead of corrections:
 
 .. code-block:: python
 
@@ -101,19 +179,21 @@ of the current one in the period's step:
        variable = "topo"                      # variable in the source file
        rename_to = "bathy_metry"
        mask_type = "negative_elevation"       # or positive_depth; new conventions go in MASK_PRESETS
-       remap_method = "remapbil"
+       remap_method = "remapcon"              # v2 rules: remapcon only; v1-style: remapbil, remapnn
+       rule_based_geography = True            # conservative mask and depth, then the geography rules
        output_prefix = "MY_EOCENE"
        regional_subbasins = False             # the present-day basin polygons do not fit
        transport_sections = False             # the present-day sections do not fit
 
        def postprocess(self, remap_file, output_dir):
-           """Optional: corrections after remapping; return the path of the final file."""
+           """Optional: corrections after remapping (after the rules in v2); return the path of the final file."""
            return remap_file
 
 .. code-block:: python
 
-   # src/ecefast/periods/eocene/nemo/domain.py, EoceneDomain.from_context
-   workflow = NEMOWorkflow.from_context(ctx, MyEoceneBathymetry, domain_dir, get_backend(ctx.config))
+   # src/ecefast/periods/eocene/bathymetry.py
+   BATHYMETRIES = {"v1": EoceneBathymetry, "v2": EoceneBathymetryV2, "v3": MyEoceneBathymetry}
+   # a new data version also needs its CDO series in DATA_VERSIONS (src/ecefast/core/config.py)
 
 The source file must be one that CDO can remap (a regular lon/lat grid, or a grid given with
 ``setgrid``), and it must be a declared input: a file of ``eocene.herold`` or of the input tree, or a
@@ -133,7 +213,8 @@ Before using it
   and check the remapped bathymetry in ``<machine.tmpdir>/eocene/nemo/bathymetry/PALEORCA2/`` and
   the domain in ``<machine.tmpdir>/eocene/nemo/domain/PALEORCA2/``, e.g. against the current one
   with ``scripts/compare_trees.py`` (ocean cells that change, ``bottom_level``). Closed seas and
-  one-cell straits are what usually needs corrections.
+  one-cell straits are what usually needs corrections (v1) or what the rules change (v2): the
+  ``ecefast <period> plot`` maps show both.
 - **Output changes.** Replacing the bathymetry of a period changes its output: the pull request
   says so, the changelog gets an *Output* entry, and the data no longer is ``v1``. Agree on it in
   an issue first.

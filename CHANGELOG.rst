@@ -15,6 +15,26 @@ Unreleased
 Added
 ~~~~~
 
+- Present-day ``rnfm`` step (``present.rnfm``): moves the runoff-mapper arrival and calving points of the basins
+  whose water does not reach NEMO through the OASIS bilinear weights of an EC-Earth run
+  (``present.rnfm.weights_dir``). The fraction a basin delivers is the area-weighted mean transfer factor of its
+  arrival cells; basins outside ``1 +/- present.rnfm.max_error`` (default 0.5) are rebuilt to deliver 1 +/- 0.02,
+  keeping their cells that deliver and adding the nearest sea cells that bring them closer to 1. Basins whose sea is
+  not in the NEMO grid go to the nearest coast that delivers (logged). ``drainage_basin_id``, and so the OASIS
+  weights, do not change (#?).
+- NEMO domain: two checks against an empty domain from DOMAINcfg. Before any step runs (dry runs included), the
+  paths written to its namelist must fit the tool on Atos (132 characters for the coordinates, 200 for the
+  bathymetry: a longer path, from a long ``machine.tmpdir``, was cut and DOMAINcfg wrote a domain of zeros while
+  the run ended without error). After DOMAINcfg, a raw domain with no ocean cell or with coordinates all zero is
+  an error (#59).
+- ``data_version: v2`` (issue #58), with CDO 2.6.x: NEMO bathymetries without manual corrections. The land-sea mask
+  and the depth come from one conservative remap (ocean fraction rounded to 1e-6, ocean if at least 0.5; depth =
+  mean depth of the ocean part, at least ``minimum_depth``), then four geography rules
+  (``components/nemo/bathymetry/geography.py``): open corner contacts between water bodies, no closed seas, no
+  one-cell inlets, no isolated one-cell islands. The present day comes from ORCA2 and keeps fixed sills at Gibraltar
+  (284 m) and Bab-el-Mandeb (137 m). ``PresentDayBathymetryV2`` and ``EoceneBathymetryV2``; each period chooses its
+  processor by ``data_version`` (``BATHYMETRIES``). After DOMAINcfg, a v2 domain must keep the land-sea mask of its
+  bathymetry; the rules keep the north-fold row symmetric, as NEMO does. CI runs the ``data_v2`` tests in a second job with CDO 2.6 (#59).
 - ``ecefast <period> plot -c CONFIG -o DIR [--reference TREE] [--only nemo,oifs,coupling]``: maps of the output
   of a period against a reference tree (default the period's ``input``, or another run), and ``summary.yml`` with
   the numbers. The figures and the summary name the ``data_version``; the plot directory of
@@ -118,6 +138,18 @@ Added
 
 Changed
 ~~~~~~~
+
+- ``data_version`` defaults to ``v2``, which needs CDO 2.6.x (on Atos ``module load cdo/2.6.5``). A configuration
+  without ``data_version`` now makes v2 data; set ``data_version: v1`` (and CDO 2.5.x) to reproduce the data of the
+  existing experiments. The templates describe both (#59).
+- ``present.nemo.source_grid`` defaults to the source of the data version: ``eORCA1`` in v1 (as before), ``ORCA2``
+  in v2. The templates leave it commented out (#59).
+- ``ecefast <period> plot``: the basins, inlets and one-cell passages of a NEMO domain use the connections of the
+  geography rules (``components/nemo/bathymetry/geography.py``) and the north fold of the domain (its ``jperio``)
+  instead of their own code, which matched fold cells by their coordinates. Only cells of the fold row change
+  class: they are no longer one-cell passages or inlets when their neighbour is across the fold (eORCA1: 18
+  inlet cells along its F-point fold; ORCA2, PALEORCA2 present day and Eocene: 2 to 4 cells). A domain file
+  without ``jperio`` 4 or 6 is refused (#59).
 
 - Documentation published on GitHub Pages (https://renatacoppo.github.io/Eocene-creator/) by the ``docs`` workflow
   on every push to ``main``, instead of Read the Docs: ``.readthedocs.yaml`` removed (#53).
@@ -336,6 +368,19 @@ Removed
 Output
 ~~~~~~
 
+- ``runoff-mapper/runoff_maps.nc`` of the present-day tree, with a ``present.rnfm`` section: new arrival and calving
+  points for the basins that lost their water on PALEORCA2. With the AA01 weights (present-v2 domain) and the
+  default ``max_error``, 10 basins each for runoff and calving: Caspian/Volga (25) to the eastern Mediterranean,
+  Black Sea (30) and Danube (35) to the Aegean, Tigris-Euphrates (39) to the Arabian Sea, and the partly delivering
+  Hudson Bay (11), Ob (20), St Lawrence (34), Congo (55), 14, 40 (and calving 45) near their mouths; no basin delivers
+  less than half of its water (before: four delivered none). Without the section the file is the copy of the input
+  tree, as before; v1 and v2 baselines do not change (#?).
+- New data version v2 (``data_version: v2``): the NEMO PALEORCA2 bathymetry and domain of both periods
+  (``nemo/domain/PALEORCA2/`` and the bathymetry in ``<machine.tmpdir>/<period>/nemo/bathymetry/``) change as
+  described under *Added*. On the laptop inputs (fake DOMAINcfg, CDO 2.6.4) the present day has 16733 ocean cells,
+  11 one-cell-wide cells and 54 cells at 30 m (v1: 16870, 97, 308), the Eocene 17017, 12 and 485 (v1: 16832, 59,
+  501). The other components and every v1 output are unchanged. v2 is the default: a configuration without
+  ``data_version`` makes these data (#59).
 - Present-day tree: ``nemo/domain/<grid>/section_ijglobal.diadct`` is written by default (step ``sections``), as in
   the domain trees of ECE4-DATA-V3; it was missing from the trees made by ``ecefast`` so far (#52).
 - Present-day PALEORCA2 bathymetry and domain (``nemo/domain/PALEORCA2/`` of ``present.output``): the strait

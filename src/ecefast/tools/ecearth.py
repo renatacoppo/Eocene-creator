@@ -81,6 +81,12 @@ def hpc_modules(profile: str) -> list[str]:
     return list(profiles[profile]["modules"])
 
 
+# Longest path that DOMAINcfg reads from its namelist, per namelist key: the length of the character variable in
+# nemo-4.2/tools/DOMAINcfg/src/dom_oce.F90 (cn_fcoord: CHARACTER(LEN=132), cn_topo: CHARACTER(LEN=200)). DOMAINcfg
+# cuts a longer path without a message, does not find the file and writes a domain of zeros
+DOMAINCFG_PATH_LIMITS = {"cn_fcoord": 132, "cn_topo": 200}
+
+
 def output_files(namelist_dir: str | os.PathLike, names: list[str]) -> dict[str, tuple[Path, Path]]:
     """Raw DOMAINcfg outputs per bathymetry name: ``(domain_cfg_<name>.nc, mesh_mask_<name>.nc)``."""
     namelist_dir = Path(namelist_dir)
@@ -97,6 +103,8 @@ class EcEarthTools:
     """Interface of the EC-Earth tools backends."""
 
     name = ""
+    # longest path the backend's DOMAINcfg reads from its namelist, per namelist key; no limit when empty
+    path_limits: dict[str, int] = {}
 
     def available(self) -> bool:
         """Whether DOMAINcfg can run with this backend on this machine."""
@@ -164,6 +172,7 @@ class AtosBackend(EcEarthTools):
     """
 
     name = "atos"
+    path_limits = DOMAINCFG_PATH_LIMITS
 
     def __init__(self, profile: str = "atos", ecearth4_sources: str | None = None):
         hpc_modules(profile)  # fail early on an unknown profile

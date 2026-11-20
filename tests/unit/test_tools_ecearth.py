@@ -137,6 +137,12 @@ def test_atos_without_oasis_and_missing_output(tmp_path: Path, monkeypatch: pyte
         AtosBackend().domaincfg(namelist_dir, ["eocene"])
 
 
+def test_domaincfg_path_limits_only_for_the_real_tool() -> None:
+    """The limits of the character variables of DOMAINcfg (dom_oce.F90) apply to the backend that runs it."""
+    assert AtosBackend().path_limits == {"cn_fcoord": 132, "cn_topo": 200}
+    assert FakeBackend().path_limits == {}
+
+
 def test_atos_needs_domaincfg_folder(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="DOMAINcfg/ folder"):
         AtosBackend().command(tmp_path / "domain", ["eocene"])

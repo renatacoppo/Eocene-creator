@@ -13,6 +13,8 @@ import logging
 import os
 import shutil
 
+import xarray as xr
+
 from ecefast.core.cdo import get_cdo
 from ecefast.core.config import ConfigError
 from ecefast.core.io import atomic_write
@@ -45,6 +47,34 @@ FINAL_FILES = {
     "generate_subbasins": ["subbasins.nc"],
     "sections": [SECTIONS_FILE],
 }
+
+
+def check_raw_domain(domain_file: str, name: str) -> None:
+    """Stop if a raw ``domain_cfg`` of DOMAINcfg is empty: no ocean cell, or coordinates that are all zero.
+
+    DOMAINcfg can crash, or miss its input files, and still leave a readable file full of zeros.
+
+    Parameters
+    ----------
+    domain_file : str
+        The raw ``domain_cfg_<name>.nc``.
+    name : str
+        Bathymetry name, for the message.
+
+    Raises
+    ------
+    PipelineError
+        If the domain has no ocean cell or no coordinates.
+    """
+    with xr.open_dataset(domain_file) as ds:
+        ocean_cells = int((ds["bottom_level"] > 0).sum())
+        no_coordinates = not bool((ds["glamt"] != 0).any() or (ds["gphit"] != 0).any())
+    if ocean_cells == 0 or no_coordinates:
+        raise PipelineError(
+            f"domain_cfg ({name}): DOMAINcfg wrote an empty domain, {domain_file}: {ocean_cells} ocean cells"
+            f"{', coordinates all zero' if no_coordinates else ''}. DOMAINcfg crashed or did not read its input "
+            "files: see its output above and ocean.output next to the file."
+        )
 
 
 class NEMOWorkflow:
@@ -329,7 +359,8 @@ class NEMOWorkflow:
     def run_domain_cfg(self):
         """Run DOMAINcfg on the namelist with the backend; the raw output lands next to the namelist."""
         logger.info("Running DOMAINcfg with the '%s' backend...", self.backend.name)
-        self.backend.domaincfg(self.paths["namelist_dir"], [self.name])
+        outputs = self.backend.domaincfg(self.paths["namelist_dir"], [self.name])
+        check_raw_domain(str(outputs[self.name][0]), self.name)
 
     # ------------------------------------------------------------------
     # Step 5: Post-process domain_cfg + extract maskutil
@@ -345,6 +376,34 @@ class NEMOWorkflow:
 
         # Extract maskutil from mesh_mask
         extract_maskutil(src_dir, tgt_dir, name)
+
+        if self.processor_class.rule_based_geography:
+            self.check_domain_mask()
+
+    def check_domain_mask(self):
+        """Data version v2: the domain keeps the land-sea mask of the bathymetry, so the geography rules hold.
+
+        The geography rules make the north-fold row symmetric, as DOMAINcfg does, so every row is compared.
+
+        Raises
+        ------
+        PipelineError
+            If DOMAINcfg turned ocean cells into land or the other way round.
+        """
+        processor = self._make_processor()
+        bathymetry_file = self.bathymetry.get("output_file") or processor.expected_output()
+        with xr.open_dataset(bathymetry_file) as ds:
+            bathymetry_ocean = ds[processor.variable_name()].squeeze().values > 0
+        with xr.open_dataset(os.path.join(self.domain_dir, "domain_cfg.nc")) as ds:
+            domain_ocean = ds["top_level"].squeeze().values > 0
+        differ = bathymetry_ocean != domain_ocean
+        if differ.any():
+            cells = ", ".join(f"({j}, {i})" for j, i in list(zip(*differ.nonzero()))[:10])
+            raise PipelineError(
+                f"DOMAINcfg changed the land-sea mask of the '{self.name}' bathymetry in {int(differ.sum())} cells "
+                f"(j, i: {cells}). The geography rules no longer hold; check the "
+                f"DOMAINcfg namelist (rn_hmin, closed seas) against {bathymetry_file}."
+            )
 
     # ------------------------------------------------------------------
     # Step 6: Generate subbasin masks
@@ -423,7 +482,10 @@ class NEMOWorkflow:
             "bathymetry": (processor.reads(), [bathymetry_file]),
             "configure_domain": ([self._target_halo(), bathymetry_file], [namelist]),
             "domain_cfg": ([*self.backend.required_paths(), namelist], raw_files),
-            "generate_mask": (raw_files, [os.path.join(self.domain_dir, f) for f in FINAL_FILES["generate_mask"]]),
+            "generate_mask": (
+                raw_files + ([bathymetry_file] if processor.rule_based_geography else []),
+                [os.path.join(self.domain_dir, f) for f in FINAL_FILES["generate_mask"]],
+            ),
             "generate_subbasins": (
                 [str(raw[1])],
                 [os.path.join(self.domain_dir, f) for f in FINAL_FILES["generate_subbasins"]],
@@ -454,6 +516,34 @@ class NEMOWorkflow:
             written.update(writes)
         if missing:
             raise PipelineError(missing_inputs_message(missing))
+        self.check_namelist_paths()
+
+    def check_namelist_paths(self) -> None:
+        """Check that the paths written to the DOMAINcfg namelist fit the tool (``backend.path_limits``).
+
+        DOMAINcfg cuts a path longer than its character variable without a message and writes a domain of zeros.
+        The paths lie in ``machine.tmpdir``, so a long ``tmpdir`` is the cause. Nothing is checked when neither
+        ``configure_domain`` nor ``domain_cfg`` runs.
+
+        Raises
+        ------
+        PipelineError
+            Naming every path that is too long, its length and the limit.
+        """
+        if not (self.steps.get("configure_domain") or self.steps.get("domain_cfg")):
+            return
+        bathymetry_file = self.bathymetry.get("output_file") or self._make_processor().expected_output()
+        paths = {"cn_fcoord": self._target_halo(), "cn_topo": bathymetry_file}
+        too_long = [
+            f"{key} = {paths[key]} ({len(paths[key])} characters, at most {limit})"
+            for key, limit in self.backend.path_limits.items()
+            if len(paths[key]) > limit
+        ]
+        if too_long:
+            raise PipelineError(
+                f"domain ({self.name}): path too long for the DOMAINcfg namelist, the tool would cut it and write an "
+                f"empty domain: {'; '.join(too_long)}. Use a shorter machine.tmpdir."
+            )
 
     # ------------------------------------------------------------------
     # Orchestrator

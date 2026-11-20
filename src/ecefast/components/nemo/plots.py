@@ -1,13 +1,14 @@
 """Checks and maps of a NEMO domain, for ``ecefast <period> plot``.
 
 - **Ocean basins**: the connected ocean regions of a domain. Cells are connected through their faces (where NEMO
-  has a velocity point), across the east-west period and across the north fold. Basins other than the largest are
-  closed seas or lakes: wanted for some (Caspian Sea), a sign of a closed strait for others.
+  has a velocity point), across the east-west period and across the north fold of the domain (its ``jperio``), as
+  in the geography rules of the bathymetries (:mod:`ecefast.components.nemo.bathymetry.geography`). Basins other
+  than the largest are closed seas or lakes: wanted for some (Caspian Sea), a sign of a closed strait for others.
 - **Minimum depth**: the smallest ocean depth of a domain and the cells that have it, the shallowest columns.
 - **Inlets**: dead-end channels one cell wide, where water enters from one side only and nothing flows through
   (:func:`ocean_inlets`).
-- **One-cell passages**: ocean cells with land on both sides along ``x`` or along ``y``, where a strait or a
-  channel is one cell wide.
+- **One-cell passages**: ocean cells with land on both sides along ``x`` or along ``y`` and ocean on the other
+  axis, where a strait or a channel is one cell wide (:func:`~ecefast.components.nemo.bathymetry.geography.one_cell_wide`).
 - **Land-sea mask comparisons** of a domain with another domain on the same grid (cells that change, depth
   differences), or with a mask on another grid (another NEMO domain, the source of a bathymetry, the OIFS
   land-sea mask), remapped conservatively onto the domain's T cells (:func:`write_cell_bounds`, :func:`ocean_on`).
@@ -40,6 +41,7 @@ from ecefast.core.plotting import (
 )
 from ecefast.core.steps import PipelineError
 
+from .bathymetry import geography
 from .bathymetry.base import BathymetryProcessor
 from .orca_bounds import OrcaMesh
 
@@ -106,6 +108,8 @@ class Domain:
         True on ocean columns (``bottom_level > 0``).
     depth : xarray.DataArray
         ``bathy_metry`` (m), NaN on land.
+    jperio : int
+        North fold of the grid (``jperio`` of the file): 4 T-point pivot, 6 F-point pivot.
     """
 
     label: str
@@ -114,6 +118,7 @@ class Domain:
     lat: np.ndarray
     ocean: np.ndarray
     depth: xr.DataArray
+    jperio: int
 
 
 def _first(ds: xr.Dataset, names: tuple[str, ...], path: str, what: str) -> str:
@@ -129,7 +134,8 @@ def read_domain(path: str, label: str) -> Domain:
 
     The depth is the first of ``BATHYMETRY_NAMES`` in the file, the coordinates the first pair of
     ``COORDINATE_NAMES``. Ocean columns are those with ``bottom_level > 0``, or with a depth above 0 in a file
-    without ``bottom_level`` (a bathymetry file).
+    without ``bottom_level`` (a bathymetry file). The north fold is the ``jperio`` of the file, which DOMAINcfg
+    writes; a bathymetry file needs it too.
 
     Parameters
     ----------
@@ -146,19 +152,26 @@ def read_domain(path: str, label: str) -> Domain:
     Raises
     ------
     PipelineError
-        If the file has no depth or coordinate variable of a known name.
+        If the file has no depth or coordinate variable of a known name, or no ``jperio`` of a north fold
+        that the connections handle (4 or 6).
     """
     with xr.open_dataset(path) as ds:
         depth_name = _first(ds, BATHYMETRY_NAMES, path, "bathymetry")
         lon_name = _first(ds, tuple(lon for lon, _ in COORDINATE_NAMES), path, "longitude")
         lat_name = dict(COORDINATE_NAMES)[lon_name]
+        jperio = int(ds["jperio"].values) if "jperio" in ds else None
         names = [lon_name, lat_name, depth_name] + (["bottom_level"] if "bottom_level" in ds else [])
         ds = ds[names].squeeze(drop=True).load()
+    if jperio not in (geography.T_PIVOT, geography.F_PIVOT):
+        raise PipelineError(
+            f"{path}: north fold jperio={jperio}, the plots handle {geography.T_PIVOT} (T-point pivot) and "
+            f"{geography.F_PIVOT} (F-point pivot)"
+        )
     depth = ds[depth_name].fillna(0.0)
     ocean = ds.bottom_level.values > 0 if "bottom_level" in ds else depth.values > 0
     depth = depth.where(ocean).rename("bathy_metry")
     depth.attrs = {"units": "m"}
-    return Domain(label, path, ds[lon_name].values, ds[lat_name].values, ocean, depth)
+    return Domain(label, path, ds[lon_name].values, ds[lat_name].values, ocean, depth, jperio)
 
 
 def write_cell_bounds(domain_file: str, outfile: str, ocean: np.ndarray | None = None) -> None:
@@ -218,51 +231,26 @@ def write_source_ocean(processor: type[BathymetryProcessor], path: str, outfile:
         xr.Dataset({OCEAN_FIELD: ((lat, lon), ocean.astype("f4"))}, coords=coords).to_netcdf(tmp)
 
 
-def ocean_basins(ocean: np.ndarray, lon: np.ndarray, lat: np.ndarray) -> np.ndarray:
+def ocean_basins(ocean: np.ndarray, jperio: int) -> np.ndarray:
     """Number the connected ocean basins of a domain.
 
-    Ocean cells are connected through their east, west, north and south faces, across the east-west period (the
-    first and last columns are neighbours) and where two cells have the same coordinates (the duplicated rows of a
-    T-point north fold). The connections across an F-point fold, whose cells are not duplicated, are not added.
+    Ocean cells are connected through their east, west, north and south faces, across the east-west period and
+    across the north fold (:func:`~ecefast.components.nemo.bathymetry.geography.side_edges`).
 
     Parameters
     ----------
     ocean : numpy.ndarray
         Ocean mask ``(y, x)``.
-    lon, lat : numpy.ndarray
-        T-point coordinates ``(y, x)``, degrees.
+    jperio : int
+        North fold of the grid: 4 (T-point pivot) or 6 (F-point pivot).
 
     Returns
     -------
     numpy.ndarray
         Basin number of every cell: 0 the largest basin, 1 the next largest and so on; -1 on land.
     """
-    ny, nx = ocean.shape
-    a, b = (np.concatenate(pair) for pair in zip(_face_pairs(ocean), _same_cell_pairs(ocean, lon, lat)))
-    graph = coo_matrix((np.ones(a.size), (a, b)), shape=(ny * nx, ny * nx))
-    count, labels = connected_components(graph, directed=False)
-    labels = labels.reshape(ny, nx)
-    return _rank_by_size(ocean, labels, count)
-
-
-def _face_pairs(ocean: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Flat indices of the pairs of ocean cells that share an east or a north face (east-west periodic)."""
-    index = np.arange(ocean.size).reshape(ocean.shape)
-    east = ocean & np.roll(ocean, -1, axis=1)
-    north = ocean[:-1] & ocean[1:]
-    first = np.concatenate([index[east], index[:-1][north]])
-    second = np.concatenate([np.roll(index, -1, axis=1)[east], index[1:][north]])
-    return first, second
-
-
-def _same_cell_pairs(ocean: np.ndarray, lon: np.ndarray, lat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Flat indices of the pairs of ocean cells with the same coordinates: the same cell twice (north fold)."""
-    key = np.round(np.mod(lon, 360.0), 4).ravel() * 1e4 + np.round(lat, 4).ravel()
-    order = np.argsort(key, kind="stable")
-    same = key[order][1:] == key[order][:-1]
-    first, second = order[:-1][same], order[1:][same]
-    both = ocean.ravel()[first] & ocean.ravel()[second]
-    return first[both], second[both]
+    labels = geography.label_bodies(ocean, geography.side_edges(ocean.shape, jperio))
+    return _rank_by_size(ocean, labels, ocean.size)
 
 
 def _rank_by_size(cells: np.ndarray, labels: np.ndarray, count: int) -> np.ndarray:
@@ -273,21 +261,25 @@ def _rank_by_size(cells: np.ndarray, labels: np.ndarray, count: int) -> np.ndarr
     return np.where(cells, rank[labels], -1)
 
 
-def ocean_inlets(ocean: np.ndarray, lon: np.ndarray, lat: np.ndarray) -> np.ndarray:
+def ocean_inlets(ocean: np.ndarray, jperio: int) -> np.ndarray:
     """Number the inlets of a domain: the dead-end channels one cell wide.
 
     A cell with ocean through one face only is the tip of an inlet: water enters it from one side, so nothing
     flows through. Removing the tips and repeating follows each inlet to its mouth, the first cell that opens on
-    wider ocean (which is not part of it). The connections are those of :func:`ocean_basins`; cells with the same
-    coordinates count as one cell. A notch of one cell in a coast is an inlet of length 1. Dead ends two or more
-    cells wide are not found.
+    wider ocean (which is not part of it). The connections are those of :func:`ocean_basins`; the two copies of a
+    cell of a T-point fold row count as one cell. A notch of one cell in a coast is an inlet of length 1. Dead
+    ends two or more cells wide are not found.
+
+    This follows a whole dead end, through bends and branches, to show it; the geography rule of the v2
+    bathymetries (:func:`~ecefast.components.nemo.bathymetry.geography.remove_inlets`) removes, in a single pass,
+    only the straight one-cell-wide segments at the tip.
 
     Parameters
     ----------
     ocean : numpy.ndarray
         Ocean mask ``(y, x)``.
-    lon, lat : numpy.ndarray
-        T-point coordinates ``(y, x)``, degrees.
+    jperio : int
+        North fold of the grid: 4 (T-point pivot) or 6 (F-point pivot).
 
     Returns
     -------
@@ -295,17 +287,16 @@ def ocean_inlets(ocean: np.ndarray, lon: np.ndarray, lat: np.ndarray) -> np.ndar
         Inlet number of every cell: 0 the longest inlet, 1 the next longest and so on; -1 elsewhere.
     """
     size = ocean.size
-    # one node for the cells with the same coordinates
-    first, second = _same_cell_pairs(ocean, lon, lat)
-    same = coo_matrix((np.ones(first.size), (first, second)), shape=(size, size))
-    _, node = connected_components(same, directed=False)
-    a, b = _face_pairs(ocean)
-    a, b = node[a], node[b]
+    flat = ocean.ravel()
+    node = geography.fold_nodes(ocean.shape, jperio).ravel()  # one node for the two copies of a cell
+    a, b = geography.side_edges(ocean.shape, jperio)
+    both = flat[a] & flat[b]
+    a, b = node[a[both]], node[b[both]]
     faces = coo_matrix((np.ones(a.size), (a, b)), shape=(size, size)).tocsr()
     neighbours = ((faces + faces.T) > 0).astype(np.int32)
     neighbours.setdiag(0)
     alive = np.zeros(size, dtype=bool)
-    alive[node[ocean.ravel()]] = True
+    alive[node[flat]] = True
     inlet = np.zeros(size, dtype=bool)
     while True:
         tips = alive & (neighbours @ alive.astype(np.int32) == 1)
@@ -322,37 +313,20 @@ def ocean_inlets(ocean: np.ndarray, lon: np.ndarray, lat: np.ndarray) -> np.ndar
     return _rank_by_size(cells, labels[node].reshape(ocean.shape), max(count, 1))
 
 
-def one_cell_passages(ocean: np.ndarray) -> np.ndarray:
-    """Ocean cells with land on both sides along ``x`` (east-west periodic) or along ``y``.
-
-    Parameters
-    ----------
-    ocean : numpy.ndarray
-        Ocean mask ``(y, x)``.
-
-    Returns
-    -------
-    numpy.ndarray
-        True on the one-cell passages.
-    """
-    west, east = np.roll(ocean, 1, axis=1), np.roll(ocean, -1, axis=1)
-    south, north = np.zeros_like(ocean), np.zeros_like(ocean)
-    south[1:], north[:-1] = ocean[:-1], ocean[1:]
-    return ocean & ((~west & ~east) | (~south & ~north))
-
-
 def domain_classes(domain: Domain) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Classes of the domain map (``DOMAIN_CATEGORIES``), the basin numbers (:func:`ocean_basins`) and the inlet
     numbers (:func:`ocean_inlets`).
 
-    A cell of an inlet is drawn as an inlet, not as a one-cell passage: the passages left are those with ocean at
-    both ends. A cell of a basin other than the largest is drawn as that.
+    One-cell passages are the one-cell-wide cells of the geography rules
+    (:func:`~ecefast.components.nemo.bathymetry.geography.one_cell_wide`). A cell of an inlet is drawn as an inlet,
+    not as a one-cell passage: the passages left are those with ocean at both ends. A cell of a basin other than
+    the largest is drawn as that.
     """
-    basins = ocean_basins(domain.ocean, domain.lon, domain.lat)
-    inlets = ocean_inlets(domain.ocean, domain.lon, domain.lat)
+    basins = ocean_basins(domain.ocean, domain.jperio)
+    inlets = ocean_inlets(domain.ocean, domain.jperio)
     classes = np.full(domain.ocean.shape, LAND)
     classes[domain.ocean] = OCEAN
-    classes[one_cell_passages(domain.ocean)] = PASSAGE
+    classes[geography.one_cell_wide(domain.ocean, domain.jperio)] = PASSAGE
     classes[inlets >= 0] = INLET
     classes[basins > 0] = ISOLATED
     return classes, basins, inlets

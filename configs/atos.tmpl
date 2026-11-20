@@ -11,10 +11,11 @@
 # Any string may refer to another value with a {section.key} placeholder, e.g. {present.input}.
 
 schema: 2                       # configuration schema version (required)
-# data_version: v1              # version of the generated data. v1 = the data of the existing experiments
-                                # (PALEORCA2 domains of ECE4-DATA-V3 / PALEORCA2-definitive). It needs CDO 2.5.x:
-                                # another CDO moves land-sea mask cells of the NEMO bathymetries, so the run stops
-                                # (on Atos: module load cdo/2.5.3). v2 is not supported yet.
+# data_version: v2              # version of the generated data. v2 = NEMO bathymetries from geography rules
+                                # instead of manual corrections (issue #58); it needs CDO 2.6.x (on Atos: module
+                                # load cdo/2.6.5). v1 = the data of the existing experiments (PALEORCA2 domains of
+                                # ECE4-DATA-V3 / PALEORCA2-definitive); it needs CDO 2.5.x (module load cdo/2.5.3).
+                                # Another CDO moves land-sea mask cells of the NEMO bathymetries, so the run stops.
 
 machine:
   name: atos                    # where DOMAINcfg runs: atos (here), local (laptop, not available) or fake (tests)
@@ -39,8 +40,8 @@ present:
   input: /path/to/ECE4-DATA-V3        # EC-Earth4 input tree, read-only (required)
   output: /path/to/OUTPUT/present     # the present-day tree: stage copies the input, then oifs/, nemo/domain/ (required)
   oifs:                               # OIFS base data of grids.oifs made from a finer grid
-    # All steps are off for data_version v1: its OIFS initial state is the TL63L31 one shipped in the input tree,
-    # copied by stage. It was made by an IFS run (experiment i8ak), and rebuilding it from TL255L91 gives another
+    # All steps are off for data_version v1 and v2: their OIFS initial state is the TL63L31 one shipped in the input
+    # tree, copied by stage. It was made by an IFS run (experiment i8ak), and rebuilding it from TL255L91 gives another
     # state. Turn the steps on to make the OIFS base data from source_grid instead.
     source_grid: TL255L91             # read from {input}/initial_state/oifs/<source_grid>/<startdate>
     climate_dir: /path/to/climate/climate.v020   # ECMWF monthly climate fields; read by the boundary step
@@ -50,7 +51,8 @@ present:
       gridpoint: false                # remap ICMGGECE4INIT, ICMGGECE4INIUA
       boundary: false                 # climate file ICMCLECE4
   nemo:                               # present-day NEMO domain, bathymetry of {input}/nemo/domain/<source_grid>/
-    source_grid: eORCA1               # NEMO grid of the present-day bathymetry (needs strait corrections for it)
+    # source_grid: ORCA2              # NEMO grid of the present-day bathymetry; default ORCA2 in v2 (geography
+                                      # rules), eORCA1 in v1 (with its strait corrections)
     # source_staggering: T            # staggering of its coordinate bounds (used in setgrid), T or F
     minimum_depth: 30                 # m; depths 0 < d < minimum_depth are raised to it (required)
     steps:                            # on Atos the whole pipeline runs, DOMAINcfg included
@@ -61,6 +63,9 @@ present:
       generate_mask: true             # post-process domain_cfg.nc and extract maskutil.nc
       generate_subbasins: true        # ocean subbasin masks
       sections: true                  # diadct transport sections section_ijglobal.diadct (SECTIONS_DIADCT)
+  # rnfm:                             # runoff-mapper arrival points that deliver their water to grids.nemo (optional)
+  #   weights_dir: /path/to/ecearth/run   # run dir of an EC-Earth run on grids.nemo: rmp_F128R-ocean_to_<grid>-T_BILINEAR.nc, areas.nc (required)
+  #   max_error: 0.5                  # rebuild the basins delivering outside 1 +/- max_error of their water
 
 # Eocene (DeepMIP) period: `ecefast eocene run`
 eocene:

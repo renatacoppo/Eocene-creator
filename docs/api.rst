@@ -53,6 +53,9 @@ NEMO
 .. automodule:: ecefast.components.nemo.bathymetry.base
    :members: BathymetryProcessor, MASK_PRESETS
 
+.. automodule:: ecefast.components.nemo.bathymetry.geography
+   :members:
+
 .. automodule:: ecefast.components.nemo.config.loader
    :members: get_corrections_for_grid
 

@@ -36,6 +36,7 @@ def test_fake_domain_pipeline_on_real_inputs(tmp_path: Path) -> None:
     assert coords_ori.is_file(), f"missing test data: {coords_ori}"
     config = {
         "schema": 2,
+        "data_version": "v1",
         "machine": {"name": "fake", "tmpdir": str(tmp_path / "tmp")},
         "grids": {"nemo": {"coords_ori": str(coords_ori)}},
         "present": {

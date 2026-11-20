@@ -31,10 +31,13 @@ TEMPLATE = "configs/laptop.tmpl"
 # of the NEMO bathymetries: cells whose remapcon ocean fraction is exactly 0.5 fall on either side by floating-point
 # rounding, which changes between CDO versions. v1 is the data of the existing experiments (the PALEORCA2 domains of
 # ECE4-DATA-V3 and PALEORCA2-definitive), made with CDO 2.5.0; 2.5.1 and 2.5.3 reproduce it, 2.6.x does not.
-DATA_VERSIONS = {"v1": "2.5"}
-DEFAULT_DATA_VERSION = "v1"
-# Versions that may be supported in the future, rejected with their own message
-PLANNED_DATA_VERSIONS = ("v2",)
+# v2 (issue #58): conservative mask and depth with rule-based geography instead of manual corrections; it rounds the
+# ocean fraction before the threshold, so a cell at exactly 0.5 is ocean.
+DATA_VERSIONS = {"v1": "2.5", "v2": "2.6"}
+DEFAULT_DATA_VERSION = "v2"
+# Default of present.nemo.source_grid in each data version: the NEMO domain of the input tree the present-day
+# bathymetry comes from (v1: eORCA1, remapped by nearest neighbour; v2: ORCA2, remapped conservatively)
+PRESENT_NEMO_SOURCE_GRIDS = {"v1": "eORCA1", "v2": "ORCA2"}
 
 
 class ConfigError(ValueError):
@@ -149,9 +152,21 @@ class PresentNEMO:
     """The present-day NEMO domain: bathymetry of ``{input}/nemo/domain/<source_grid>/domain_cfg.nc``."""
 
     minimum_depth: float
-    source_grid: str = "eORCA1"
+    source_grid: str | None = None  # None: the default of the data version (PRESENT_NEMO_SOURCE_GRIDS)
     source_staggering: str = "T"  # staggering of the source-grid coordinate bounds (used in setgrid)
     steps: DomainSteps = field(default_factory=DomainSteps)
+
+
+@dataclass
+class PresentRNFM:
+    """The runoff-mapper arrival points: moved so that each basin delivers its water to the NEMO grid."""
+
+    # Directory of an EC-Earth run on grids.nemo holding the OASIS weights rmp_F128R-ocean_to_<grid>-T_BILINEAR.nc
+    # and areas.nc (made by rdy2cpl from the runoff_maps.nc of present.input)
+    weights_dir: str
+    # Basins delivering a fraction of their water outside 1 +/- max_error are rebuilt. 0.5: the basins whose sea is
+    # missing from the NEMO grid and those that lose half of their water (the runoff-maps plan)
+    max_error: float = 0.5
 
 
 @dataclass
@@ -162,6 +177,7 @@ class Present:
     output: str
     oifs: PresentOIFS | None = None
     nemo: PresentNEMO | None = None
+    rnfm: PresentRNFM | None = None
 
 
 # --- eocene ---------------------------------------------------------------------------------------------------------
@@ -304,7 +320,7 @@ SECTIONS = {"machine": Machine, "grids": Grids, "present": Present, "eocene": Eo
 NESTED = {
     "machine": {"atos": Atos},
     "grids": {"oifs": OIFSGrid, "nemo": NemoGrid},
-    "present": {"oifs": PresentOIFS, "nemo": PresentNEMO},
+    "present": {"oifs": PresentOIFS, "nemo": PresentNEMO, "rnfm": PresentRNFM},
     "present.oifs": {"steps": OIFSDataSteps},
     "present.nemo": {"steps": DomainSteps},
     "eocene": {"nemo": EoceneNEMO, "oifs": EoceneOIFS, "oasis": EoceneOASIS},
@@ -528,6 +544,11 @@ def _validate(config: Config) -> None:
             _check_type(present.nemo.minimum_depth, (int, float), "present.nemo.minimum_depth", file)
             _check_steps(present.nemo.steps, "present.nemo.steps", file)
             staggering["present.nemo.source_staggering"] = present.nemo.source_staggering
+        if present.rnfm is not None:
+            _check_type(present.rnfm.weights_dir, str, "present.rnfm.weights_dir", file)
+            _check_type(present.rnfm.max_error, (int, float), "present.rnfm.max_error", file)
+            if not 0 < present.rnfm.max_error:
+                raise ConfigError(f"{file}: 'present.rnfm.max_error' must be positive, got {present.rnfm.max_error!r}")
 
     eocene = config.eocene
     if eocene is not None:
@@ -558,11 +579,6 @@ def _validate(config: Config) -> None:
 def _check_data_version(version: Any, file: str) -> None:
     """``data_version`` is a supported version of the generated data (see ``DATA_VERSIONS``)."""
     _check_type(version, str, "data_version", file)
-    if version in PLANNED_DATA_VERSIONS:
-        raise ConfigError(
-            f"{file}: 'data_version: {version}' is not supported yet. Supported: "
-            f"{', '.join(DATA_VERSIONS)} (see docs/configuration.rst)"
-        )
     if version not in DATA_VERSIONS:
         raise ConfigError(f"{file}: 'data_version' must be one of {', '.join(DATA_VERSIONS)}, got {version!r}")
 
@@ -665,6 +681,10 @@ def load_config(path: str | Path) -> Config:
         values = {name: _build(cls, raw[name], name, file) for name, cls in SECTIONS.items() if raw.get(name)}
         if "data_version" in raw:
             values["data_version"] = raw["data_version"]
+        nemo = values["present"].nemo if values.get("present") else None
+        if nemo is not None and nemo.source_grid is None:
+            # an unknown data_version is reported by _validate
+            nemo.source_grid = PRESENT_NEMO_SOURCE_GRIDS.get(raw.get("data_version", DEFAULT_DATA_VERSION))
         return Config(file=file, **values)
 
     # build once to fill in the defaults, so placeholders can refer to them; then build from the resolved values

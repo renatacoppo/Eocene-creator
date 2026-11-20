@@ -27,6 +27,7 @@ def write_config(tmp_path: Path, data: dict | None = None, grid: str = "TL63L31"
     (tmp_path / "input").mkdir(exist_ok=True)
     raw = {
         "schema": 2,
+        "data_version": "v1",  # the dry run checks CDO: the CDO 2.5 of the v1 CI job
         "machine": {"tmpdir": str(tmp_path / "tmp")},
         "grids": {"oifs": {"name": grid}},
         "present": {"input": str(tmp_path / "input"), "output": str(tmp_path / "out"), "oifs": data or {}},

@@ -23,7 +23,7 @@ request.
 
 .. code-block:: bash
 
-   module load cdo/2.5.3
+   module load cdo/2.6.5          # data_version v2 (the default); v1: module load cdo/2.5.3
    ECEFAST_HPC_DOMAINCFG_DIR=/path/to/ecearth4/sources/nemo-4.2/tools/DOMAINcfg \
        pytest -m hpc tests/hpc/test_domaincfg_contract.py      # fake backend still matches DOMAINcfg
    ecefast present run -c configs/atos.yml --overwrite

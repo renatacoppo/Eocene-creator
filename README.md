@@ -16,7 +16,8 @@ git clone https://github.com/renatacoppo/Eocene-creator.git && cd Eocene-creator
 module load conda
 mamba env create -f environment.yaml           # once
 conda activate ecefast
-module load cdo/2.5.3                          # data_version v1 needs CDO 2.5.x
+module load cdo/2.6.5                          # data_version v2 (the default) needs CDO 2.6.x
+# module load cdo/2.5.3                        # data_version v1 (the existing experiments) needs CDO 2.5.x
 
 cp configs/atos.tmpl configs/atos.yml          # set the /path/to/... values
 ecefast present run -c configs/atos.yml --dry-run

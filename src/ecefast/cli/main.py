@@ -26,7 +26,7 @@ COMPONENTS = {
     "oifs": "OIFS: base data (present), Eocene initial and climate files (eocene)",
     "nemo": "NEMO: domain (present), Eocene domain and NEMO input files (eocene)",
     "oasis": "OASIS: Eocene restart rstos.nc (eocene)",
-    "rnfm": "runoff-mapper: Eocene basins (eocene)",
+    "rnfm": "runoff-mapper: arrival points on the NEMO grid (present), Eocene basins (eocene)",
 }
 # components whose section has steps to select on the command line
 STEP_COMPONENTS = ("oifs", "nemo")
