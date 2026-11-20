@@ -103,6 +103,13 @@ What the steps make
        strait corrections, DOMAINcfg, masks, basins, ``diadct`` transport sections.
      - ``nemo/domain/PALEORCA2/``: ``domain_cfg.nc``, ``maskutil.nc``, ``subbasins.nc``,
        ``section_ijglobal.diadct``
+   * - ``rnfm``
+     - Moves the runoff-mapper arrival and calving points of the basins whose water does not reach
+       NEMO through the OASIS bilinear weights of an EC-Earth run (``present.rnfm.weights_dir``):
+       basins whose sea is not in the NEMO grid (Caspian, Black Sea, Persian Gulf on PALEORCA2)
+       go to the nearest coast that delivers. The drainage basins, and so the OASIS weights, do
+       not change. Only with a ``present.rnfm`` section.
+     - ``runoff-mapper/runoff_maps.nc``
 
 .. list-table:: ``ecefast eocene run`` (section ``eocene``)
    :header-rows: 1

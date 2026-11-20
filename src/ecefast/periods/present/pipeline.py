@@ -1,5 +1,5 @@
 """The present-day pipeline: a copy of the input tree, then the OIFS base data and the NEMO domain of the model
-grids, used by ``ecefast present run`` and by ``ecefast <component> run`` (``--period present`` is the default).
+grids and the runoff-mapper arrival points that fit the NEMO grid, used by ``ecefast present run`` and by ``ecefast <component> run`` (``--period present`` is the default).
 
 ``stage`` copies the base files of the present-day input tree (``present.input``) into ``present.output``, so the
 output is a complete tree the Eocene can start from (``eocene.input: "{present.output}"``). The component steps
@@ -10,9 +10,13 @@ write their final files into it, laid out as in ECE4-DATA; intermediate files go
 import logging
 import os
 
+import xarray as xr
+
 from ecefast.components.nemo.domain.pipeline import NEMOWorkflow
 from ecefast.components.oifs.generator import OIFSData
+from ecefast.components.rnfm.arrival import fix_runoff_maps, log_changes, read_transfer_factors, write_runoff_maps
 from ecefast.core.config import load_config
+from ecefast.core.io import atomic_write
 from ecefast.core.runner import run_period
 from ecefast.core.steps import ComponentStep
 from ecefast.core.workspace import Context, Stage, pause_before_overwrite
@@ -90,6 +94,68 @@ class PresentNEMO(ComponentStep):
         return [path for _, _, writes in self.workflow.plan() for path in writes]
 
 
+class PresentRNFM(ComponentStep):
+    """Move the runoff-mapper arrival points of the basins whose water does not reach the NEMO grid."""
+
+    name = "rnfm"
+    component = "rnfm"
+    needs = ["stage"]
+    reads = [
+        "{input}/runoff-mapper/runoff_maps.nc",
+        "{rnfm.weights_dir}/rmp_F128R-ocean_to_{grids.nemo.name}-T_BILINEAR.nc",
+        "{rnfm.weights_dir}/areas.nc",
+    ]
+    writes = ["{output}/runoff-mapper/runoff_maps.nc"]
+    sources = {
+        "{rnfm.weights_dir}/rmp_F128R-ocean_to_{grids.nemo.name}-T_BILINEAR.nc": "the run directory of an EC-Earth "
+        "run on grids.nemo (rdy2cpl writes it at the first leg)",
+        "{rnfm.weights_dir}/areas.nc": "the run directory of an EC-Earth run on grids.nemo",
+    }
+
+    # OASIS grid names of the runoff-mapper ocean grid and of the NEMO T grid (namcouple of EC-Earth4)
+    RNFM_GRID = "F128R-ocean"
+
+    def __init__(
+        self, maps_file: str, rmp_file: str, areas_file: str, nemo_grid: str, output_file: str, max_error: float
+    ):
+        self.maps_file = maps_file
+        self.rmp_file = rmp_file
+        self.areas_file = areas_file
+        self.nemo_grid = nemo_grid
+        self.output_file = output_file
+        self.max_error = max_error
+
+    @classmethod
+    def from_context(cls, ctx: Context) -> "PresentRNFM":
+        rmp, areas = (ctx.expand(t) for t in cls.reads[1:])
+        return cls(
+            ctx.expand(cls.reads[0]),
+            rmp,
+            areas,
+            f"{ctx.config.grids.nemo.name}-T",
+            ctx.expand(cls.writes[0]),
+            ctx.section.rnfm.max_error,
+        )
+
+    def run(self) -> None:
+        self.create_runoff_maps()
+
+    def create_runoff_maps(self) -> None:
+        """Write ``runoff_maps.nc`` with the arrival and calving points that deliver badly moved
+        (:func:`~ecefast.components.rnfm.arrival.fix_runoff_maps`); ``drainage_basin_id`` is unchanged."""
+        factors = read_transfer_factors(self.rmp_file, self.areas_file, self.RNFM_GRID, self.nemo_grid)
+        with xr.open_dataset(self.areas_file) as areas:
+            # the runoff-mapper spreads the water with the cell areas of F128R-land.srf (same as F128R-ocean.srf)
+            area = areas[f"{self.RNFM_GRID}.srf"].values.astype("float64")
+        maps = xr.load_dataset(self.maps_file)
+        changes = fix_runoff_maps(maps, factors, area, self.max_error)
+        logger.info("Rebuilt the arrival points of %d basin(s) (runoff and calving)", len(changes))
+        log_changes(changes)
+        os.makedirs(os.path.dirname(self.output_file), exist_ok=True)
+        with atomic_write(self.output_file) as tmp:
+            write_runoff_maps(self.maps_file, maps, tmp)
+
+
 class PresentStage(Stage):
     """Copy base files from the input tree to the output tree, with the ORCA2 domain the Eocene reads."""
 
@@ -100,7 +166,7 @@ class PresentStage(Stage):
     writes = Stage.writes + ["{output}/nemo/domain/ORCA2"]
 
 
-PIPELINE: list[type[ComponentStep]] = [PresentStage, PresentOIFS, PresentNEMO]
+PIPELINE: list[type[ComponentStep]] = [PresentStage, PresentOIFS, PresentNEMO, PresentRNFM]
 
 
 def run(
@@ -118,7 +184,7 @@ def run(
     config_file : str
         Configuration file (schema 2) with a ``present`` section.
     select : list of str, optional
-        Names of the steps to run (``stage``, ``oifs``, ``nemo``). ``None`` runs all of them.
+        Names of the steps to run (``stage``, ``oifs``, ``nemo``, ``rnfm``). ``None`` runs all of them.
     component : str, optional
         Run only the step of this component (``ecefast <component> run``).
     substeps : dict, optional

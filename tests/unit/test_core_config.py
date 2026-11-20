@@ -63,6 +63,20 @@ def test_present_section_loads_with_defaults(tmp_path: Path) -> None:
     assert all(steps.values())
 
 
+def test_present_rnfm_default_and_override(tmp_path: Path) -> None:
+    raw = minimal(tmp_path) | {"present": present(tmp_path) | {"rnfm": {"weights_dir": "/run"}}}
+    rnfm = load_config(write(tmp_path, raw)).present.rnfm
+    assert (rnfm.weights_dir, rnfm.max_error) == ("/run", 0.5)
+    raw["present"]["rnfm"]["max_error"] = 0.02
+    assert load_config(write(tmp_path, raw)).present.rnfm.max_error == 0.02
+
+
+def test_present_rnfm_needs_weights_dir(tmp_path: Path) -> None:
+    raw = minimal(tmp_path) | {"present": present(tmp_path) | {"rnfm": {"max_error": 0.1}}}
+    with pytest.raises(ConfigError, match="present.rnfm.weights_dir"):
+        load_config(write(tmp_path, raw))
+
+
 def test_eocene_section_loads_with_defaults(tmp_path: Path) -> None:
     config = load_config(write(tmp_path, minimal(tmp_path) | {"eocene": eocene(tmp_path)}))
     assert config.eocene.output == str(tmp_path / "out" / "eocene")
@@ -417,6 +431,8 @@ def test_unknown_key_in_section(tmp_path: Path, section: str, value: dict, where
         ("present", {"nemo": {"minimum_depth": 30, "source_staggering": "U"}}, "present.nemo.source_staggering"),
         ("present", {"nemo": {"minimum_depth": "deep"}}, "present.nemo.minimum_depth"),
         ("present", {"oifs": {"steps": {"boundary": "yes"}}}, "present.oifs.steps.boundary"),
+        ("present", {"rnfm": {"weights_dir": "/run", "max_error": "big"}}, "present.rnfm.max_error"),
+        ("present", {"rnfm": {"weights_dir": "/run", "max_error": 0}}, "present.rnfm.max_error"),
         ("eocene", {"oifs": {"aerosols": "no"}}, "eocene.oifs.aerosols"),
         ("eocene", {"oasis": {"constant_sst": "warm"}}, "eocene.oasis.constant_sst"),
     ],
