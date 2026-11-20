@@ -10,7 +10,7 @@ import xarray as xr
 from ecefast.core.steps import PipelineError
 from ecefast.core.workspace import Context
 from ecefast.periods.eocene.nemo.domain import EoceneDomain, check_vertical_grid
-from ecefast.periods.eocene.nemo.eoceneNEMO import DEEPMIP_PROFILES, EoceneNEMO
+from ecefast.periods.eocene.nemo.eoceneNEMO import DEEPMIP_PROFILES, EoceneNEMO, check_same_cells
 from synthetic import _woa, make_config
 
 pytestmark = pytest.mark.unit
@@ -197,3 +197,16 @@ def test_from_context_passes_the_grid(ctx: Context) -> None:
         ctx.section.input,
         ctx.section.output,
     )
+
+
+def test_check_same_cells_accepts_half_cell_labels_and_rejects_flips() -> None:
+    """CDO's r720x360 centres (-89.75 ...) on the cells of zdfiwm_forcing_r720x360.nc (-90 ...) pass; a field with
+    reversed latitude or another shape does not."""
+    lat, lon = np.arange(-90.0, 90.0, 0.5), np.arange(0.0, 360.0, 0.5)
+    cdo_lat = lat + 0.25
+    field = xr.DataArray(np.zeros((lat.size, lon.size)), coords={"lat": cdo_lat, "lon": lon}, dims=("lat", "lon"))
+    check_same_cells(field.rename("m2"), lat, lon)
+    with pytest.raises(ValueError, match="lat runs from"):
+        check_same_cells(field.isel(lat=slice(None, None, -1)).rename("m2"), lat, lon)
+    with pytest.raises(ValueError, match="shape"):
+        check_same_cells(field.isel(lon=slice(1, None)).rename("m2"), lat, lon)

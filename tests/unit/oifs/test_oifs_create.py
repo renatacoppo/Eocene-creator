@@ -261,9 +261,3 @@ def test_create_init(oifs: SimpleNamespace) -> None:
 
 def test_herold_folder_untouched(oifs: SimpleNamespace) -> None:
     assert sorted(p.name for p in Path(oifs.step.herold).iterdir()) == oifs.herold_before
-
-
-@pytest.mark.parametrize("method", ["create_sic", "create_sst"])
-@pytest.mark.xfail(strict=True, raises=AttributeError, reason="idir_amip is commented out in __init__ (dead code)")
-def test_amip_methods_are_broken(oifs: SimpleNamespace, method: str) -> None:
-    getattr(oifs.step, method)()

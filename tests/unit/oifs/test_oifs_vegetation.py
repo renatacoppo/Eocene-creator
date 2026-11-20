@@ -14,7 +14,7 @@ import xarray as xr
 from oifs_helpers import needs_cdo
 
 from ecefast.periods.eocene.oifs.biomes import hp_dict, land_cover_types
-from ecefast.periods.eocene.oifs.vegetation import prepare_vegetation, vegetation_zhang
+from ecefast.periods.eocene.oifs.vegetation import vegetation_zhang
 
 pytestmark = pytest.mark.unit
 
@@ -90,21 +90,3 @@ def test_vegetation_zhang_mapping(tmp_path: Path) -> None:
             np.testing.assert_allclose(value, expected[v], err_msg=f"{v} for biome {biome_id}")
     # output vegetation types are IFS land cover types
     assert set(np.unique(result["tvh"].values)) | set(np.unique(result["tvl"].values)) <= set(land_cover_types)
-
-
-@needs_cdo
-@pytest.mark.xfail(
-    strict=True, raises=NameError, reason="prepare_vegetation uses NC4, which vegetation.py never imports"
-)
-def test_prepare_vegetation_is_broken(tmp_path: Path) -> None:
-    """``prepare_vegetation`` is unused: it fails on the undefined ``NC4`` (and would write into the Herold folder)."""
-    grid = gaussian_grid(tmp_path)
-    herold = tmp_path / "herold"
-    herold.mkdir()
-    shape = (grid.sizes["lat"], grid.sizes["lon"])
-    xr.Dataset(
-        {"eocene_biome_hp": (("lat", "lon"), np.ones(shape)), "prei_biome_hp": (("lat", "lon"), np.ones(shape))},
-        coords={"lat": grid["lat"], "lon": grid["lon"]},
-    ).to_netcdf(herold / "herold_etal_eocene_biome_1x1.nc")
-    step = SimpleNamespace(herold=str(herold), idir_init=str(tmp_path), odir_init=str(tmp_path), gaussian=GAUSSIAN)
-    prepare_vegetation(step)

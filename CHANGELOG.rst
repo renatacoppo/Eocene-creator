@@ -274,6 +274,14 @@ Changed
 Fixed
 ~~~~~
 
+- Leftovers of the code audit (#11), output unchanged: ``replace_value`` (OIFS) and the tidal ``power_cri`` (NEMO)
+  copy fields by position, so they now check first that the new field is on the same grid in the same order
+  (``check_same_grid``, ``check_same_cells``) and stop with an error otherwise; ``EoceneRNFM`` checks that the Herold
+  flow directions are on the 1-degree grid the river tracking assumes (``NLAT``, ``NLON``); ``truncate_grib_file``
+  pads the spectral fields back to the truncation of ``grids.oifs`` instead of a hardcoded T63 and removes its
+  temporary file; the geothermal step logs "geothermal flux file" (was "tidal file"), the tidal step closes its
+  datasets and no longer names unused remapped files inside the read-only Herold folder; the GDH1 coefficients of the
+  geothermal flux are named constants citing Stein and Stein (1992) (#57).
 - The OIFS vertical interpolation (``ecefast oifs run`` and ``present run`` from TL255L91 of ECE4-DATA 4.1.11) no
   longer stops at ``gp2spl`` ("Variable name t not found"): the source ``ICMGGECE4INIUA`` also holds ~130 composition
   fields, some with the same shortName, and with them ``remapeta`` dropped the hybrid levels. Only the fields that are
@@ -305,6 +313,11 @@ Fixed
 Removed
 ~~~~~~~
 
+- Dead code (#11): ``EoceneOIFS.create_sic`` and ``create_sst`` (they used the removed ``idir_amip``),
+  ``vegetation.prepare_vegetation`` (failed on an undefined ``NC4``), ``fields.modify_grib`` (wrote ``tmp_grib*`` into
+  the working directory), ``eoceneRNFM.track_rivers_vct`` (marked "Don't use", called ``find_sea`` without
+  ``flowdir``) and the commented-out ``__main__`` of ``eoceneRNFM.py``, with the tests that only showed they fail
+  (#57).
 - Documentation pages ``overview.rst``, ``installation.rst``, ``workflow.rst`` and ``external_tools.rst`` (their
   content is in the quickstart, the configuration page and the docstrings), the refactor plan
   ``docs/refactor-plan.md`` and the issue draft ``docs/issue-refactor.md``, and the tutorial notebooks

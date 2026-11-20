@@ -81,6 +81,37 @@ TS_STATE_OUT = nemo_ts_state_dir("{output}")
 # written in ts_state gets a relative link there (nemo/initial/<file> -> ../../initial_state/nemo/ts_state/<file>)
 NEMO_INITIAL = "nemo/initial"
 
+# GDH1 plate model of oceanic heat flow (Stein and Stein, 1992, Nature 359, 123-129), in mW m-2 for crust of age t
+# (Myr): q = 510 t^-1/2 for t <= 55, q = 48 + 96 exp(-0.0278 t) for older crust
+GDH1_YOUNG_COEFF = 510.0
+GDH1_AGE_LIMIT = 55.0
+GDH1_OLD_BASE = 48.0
+GDH1_OLD_AMPLITUDE = 96.0
+GDH1_OLD_DECAY = 0.0278
+
+
+def check_same_cells(field: xr.DataArray, lat: np.ndarray, lon: np.ndarray) -> None:
+    """Check that a 2D (lat, lon) field covers the cells of the grid ``lat``, ``lon`` in the same order.
+
+    The field is copied by position, so its shape and the order of its coordinates must match. Its coordinates may
+    sit up to half a cell away from ``lat``, ``lon``: the present-day ``zdfiwm_forcing_r720x360.nc`` labels its cells
+    -90 ... 89.5, CDO's ``r720x360`` grid -89.75 ... 89.75.
+
+    Raises
+    ------
+    ValueError
+        If the shape differs, or a coordinate is reversed or shifted by more than half a cell.
+    """
+    if field.shape != (lat.size, lon.size):
+        raise ValueError(f"'{field.name}' has shape {field.shape}, the target grid {(lat.size, lon.size)}")
+    for name, own, target in (("lat", field["lat"].values, lat), ("lon", field["lon"].values, lon)):
+        half_cell = 0.5 * np.abs(np.diff(target)).min()
+        if np.abs(own - target).max() > half_cell + 1e-6:
+            raise ValueError(
+                f"'{field.name}': {name} runs from {own[0]} to {own[-1]}, the target grid from {target[0]} to "
+                f"{target[-1]}: the field is not on the same cells in the same order"
+            )
+
 
 class EoceneNEMO(ComponentStep):
     """Modify NEMO input files for the Eocene: tidal mixing, geothermal flux, ocean initial state, runoff."""
@@ -148,9 +179,7 @@ class EoceneNEMO(ComponentStep):
         m2_varname = "eo_tidal_dissipation"
 
         herold_file_orig = os.path.join(self.herold_folder, "Green_Huber_eocene_tidal_dissipation_1x1.nc")
-        herold_file_remap = os.path.join(self.herold_folder, "Green_Huber_eocene_tidal_dissipation_r720x360.nc")
         herold_bath_orig = os.path.join(self.herold_folder, "herold_etal_eocene_topo_1x1.nc")
-        herold_bath_remap = os.path.join(self.herold_folder, "herold_etal_eocene_topo_1x1_r720x360.nc")
         zdfiwm_file = os.path.join(self.input_folder, "nemo/initial/zdfiwm_forcing_r720x360.nc")
         output_file = os.path.join(self.output_folder, "nemo/initial/zdfiwm_forcing_r720x360.nc")
 
@@ -175,7 +204,8 @@ class EoceneNEMO(ComponentStep):
         # make a copy of present-day file
         ds_out = ds_pd.copy(deep=True)
 
-        # inject M2 into power_cri (1/3 only)
+        # inject M2 into power_cri (1/3 only), copied by position
+        check_same_cells(m2, ds_pd.latitude.values, ds_pd.longitude.values)
         ds_out["power_cri"][:] = (1.0 / 3.0) * m2.values
 
         # modify bathymetry
@@ -200,6 +230,7 @@ class EoceneNEMO(ComponentStep):
         logger.debug("Written NEMO 4.2 tidal file: %s", output_file)
 
         ds_m2.close()
+        ds_bt.close()
         ds_pd.close()
 
         return None
@@ -222,7 +253,11 @@ class EoceneNEMO(ComponentStep):
         age = pd.read_csv(age_file, sep=r"\s+", header=None, usecols=[0, 1, 2], names=["lon", "lat", "age"], engine="c")
         t = age.set_index(["lat", "lon"])["age"].to_xarray()
 
-        q = xr.where(t <= 55, 510 * t ** (-0.5), 48 + 96 * np.exp(-0.0278 * t))
+        q = xr.where(
+            t <= GDH1_AGE_LIMIT,
+            GDH1_YOUNG_COEFF * t ** (-0.5),
+            GDH1_OLD_BASE + GDH1_OLD_AMPLITUDE * np.exp(-GDH1_OLD_DECAY * t),
+        )
 
         q_min = float(q.min())
         q = q.fillna(q_min)
@@ -255,7 +290,7 @@ class EoceneNEMO(ComponentStep):
 
         with atomic_write(gh_file_out) as tmp:
             ds_gh.to_netcdf(tmp)
-        logger.debug("Written NEMO 4.2 tidal file: %s", gh_file_out)
+        logger.debug("Written NEMO 4.2 geothermal flux file: %s", gh_file_out)
         ds_gh.close()
 
         return None

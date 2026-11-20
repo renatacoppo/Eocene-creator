@@ -13,8 +13,10 @@ from oifs_helpers import (
     grib_data,
     grib_keys,
     make_grib,
+    make_spectral_grib,
     needs_grib_tools,
     run,
+    spectral_coefficients,
 )
 
 from ecefast.periods.eocene.oifs.fields import (
@@ -23,6 +25,7 @@ from ecefast.periods.eocene.oifs.fields import (
     modify_value,
     nullify_grib,
     replace_field,
+    truncate_grib_file,
 )
 
 pytestmark = [pytest.mark.unit, needs_grib_tools]
@@ -175,3 +178,26 @@ def test_flatten_grib_steps_grib2_only(tmp_path: Path) -> None:
     with pytest.raises(subprocess.CalledProcessError):
         flatten_grib_steps(str(clim))
     assert clim.read_bytes() == before
+
+
+# --- truncate_grib_file --------------------------------------------------------------------------------------------
+
+
+def test_truncate_grib_file_keeps_the_given_truncation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A T31 file stays T31 (``orig``), only the first harmonic of the listed fields is kept, no temporary file is
+    left behind."""
+    system_tmp = tmp_path / "system_tmp"
+    system_tmp.mkdir()
+    monkeypatch.setattr("tempfile.tempdir", str(system_tmp))
+    spectral = make_spectral_grib(tmp_path / "ICMSH", [("t", "topo", 2), ("z", "topo", 2)], gaussian=16)
+    z_before = spectral_coefficients(spectral, "z")
+
+    truncate_grib_file(str(spectral), str(spectral), variables=["t"], orig=31)
+
+    # truncated fields first, all at the original truncation
+    assert grib_keys(spectral, "shortName,gridType,J") == [("t", "sh", "31"), ("z", "sh", "31")]
+    t = spectral_coefficients(spectral, "t")
+    # (m, n) = (0,0), (0,1), (1,1): real and imaginary parts at 0-1, 2-3 and 64-65 (after the 32 of m = 0)
+    assert set(np.flatnonzero(t)) <= {0, 1, 2, 3, 64, 65}
+    np.testing.assert_array_equal(spectral_coefficients(spectral, "z"), z_before)
+    assert list(system_tmp.iterdir()) == []
