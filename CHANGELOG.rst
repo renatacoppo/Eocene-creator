@@ -15,6 +15,13 @@ Unreleased
 Added
 ~~~~~
 
+- Present-day ``rnfm`` step (``present.rnfm``): moves the runoff-mapper arrival and calving points of the basins
+  whose water does not reach NEMO through the OASIS bilinear weights of an EC-Earth run
+  (``present.rnfm.weights_dir``). The fraction a basin delivers is the area-weighted mean transfer factor of its
+  arrival cells; basins outside ``1 +/- present.rnfm.max_error`` (default 0.5) are rebuilt to deliver 1 +/- 0.02,
+  keeping their cells that deliver and adding the nearest sea cells that bring them closer to 1. Basins whose sea is
+  not in the NEMO grid go to the nearest coast that delivers (logged). ``drainage_basin_id``, and so the OASIS
+  weights, do not change (#?).
 - NEMO domain: two checks against an empty domain from DOMAINcfg. Before any step runs (dry runs included), the
   paths written to its namelist must fit the tool on Atos (132 characters for the coordinates, 200 for the
   bathymetry: a longer path, from a long ``machine.tmpdir``, was cut and DOMAINcfg wrote a domain of zeros while
@@ -361,6 +368,13 @@ Removed
 Output
 ~~~~~~
 
+- ``runoff-mapper/runoff_maps.nc`` of the present-day tree, with a ``present.rnfm`` section: new arrival and calving
+  points for the basins that lost their water on PALEORCA2. With the AA01 weights (present-v2 domain) and the
+  default ``max_error``, 10 basins each for runoff and calving: Caspian/Volga (25) to the eastern Mediterranean,
+  Black Sea (30) and Danube (35) to the Aegean, Tigris-Euphrates (39) to the Arabian Sea, and the partly delivering
+  Hudson Bay (11), Ob (20), St Lawrence (34), Congo (55), 14, 40 (and calving 45) near their mouths; no basin delivers
+  less than half of its water (before: four delivered none). Without the section the file is the copy of the input
+  tree, as before; v1 and v2 baselines do not change (#?).
 - New data version v2 (``data_version: v2``): the NEMO PALEORCA2 bathymetry and domain of both periods
   (``nemo/domain/PALEORCA2/`` and the bathymetry in ``<machine.tmpdir>/<period>/nemo/bathymetry/``) change as
   described under *Added*. On the laptop inputs (fake DOMAINcfg, CDO 2.6.4) the present day has 16733 ocean cells,

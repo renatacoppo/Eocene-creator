@@ -158,6 +158,18 @@ class PresentNEMO:
 
 
 @dataclass
+class PresentRNFM:
+    """The runoff-mapper arrival points: moved so that each basin delivers its water to the NEMO grid."""
+
+    # Directory of an EC-Earth run on grids.nemo holding the OASIS weights rmp_F128R-ocean_to_<grid>-T_BILINEAR.nc
+    # and areas.nc (made by rdy2cpl from the runoff_maps.nc of present.input)
+    weights_dir: str
+    # Basins delivering a fraction of their water outside 1 +/- max_error are rebuilt. 0.5: the basins whose sea is
+    # missing from the NEMO grid and those that lose half of their water (the runoff-maps plan)
+    max_error: float = 0.5
+
+
+@dataclass
 class Present:
     """The present-day period: what is built on the present-day EC-Earth tree."""
 
@@ -165,6 +177,7 @@ class Present:
     output: str
     oifs: PresentOIFS | None = None
     nemo: PresentNEMO | None = None
+    rnfm: PresentRNFM | None = None
 
 
 # --- eocene ---------------------------------------------------------------------------------------------------------
@@ -307,7 +320,7 @@ SECTIONS = {"machine": Machine, "grids": Grids, "present": Present, "eocene": Eo
 NESTED = {
     "machine": {"atos": Atos},
     "grids": {"oifs": OIFSGrid, "nemo": NemoGrid},
-    "present": {"oifs": PresentOIFS, "nemo": PresentNEMO},
+    "present": {"oifs": PresentOIFS, "nemo": PresentNEMO, "rnfm": PresentRNFM},
     "present.oifs": {"steps": OIFSDataSteps},
     "present.nemo": {"steps": DomainSteps},
     "eocene": {"nemo": EoceneNEMO, "oifs": EoceneOIFS, "oasis": EoceneOASIS},
@@ -531,6 +544,11 @@ def _validate(config: Config) -> None:
             _check_type(present.nemo.minimum_depth, (int, float), "present.nemo.minimum_depth", file)
             _check_steps(present.nemo.steps, "present.nemo.steps", file)
             staggering["present.nemo.source_staggering"] = present.nemo.source_staggering
+        if present.rnfm is not None:
+            _check_type(present.rnfm.weights_dir, str, "present.rnfm.weights_dir", file)
+            _check_type(present.rnfm.max_error, (int, float), "present.rnfm.max_error", file)
+            if not 0 < present.rnfm.max_error:
+                raise ConfigError(f"{file}: 'present.rnfm.max_error' must be positive, got {present.rnfm.max_error!r}")
 
     eocene = config.eocene
     if eocene is not None:
