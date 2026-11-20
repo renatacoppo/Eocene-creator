@@ -34,7 +34,7 @@ TEMPLATE = "configs/laptop.tmpl"
 # v2 (issue #58): conservative mask and depth with rule-based geography instead of manual corrections; it rounds the
 # ocean fraction before the threshold, so a cell at exactly 0.5 is ocean.
 DATA_VERSIONS = {"v1": "2.5", "v2": "2.6"}
-DEFAULT_DATA_VERSION = "v1"
+DEFAULT_DATA_VERSION = "v2"
 # Default of present.nemo.source_grid in each data version: the NEMO domain of the input tree the present-day
 # bathymetry comes from (v1: eORCA1, remapped by nearest neighbour; v2: ORCA2, remapped conservatively)
 PRESENT_NEMO_SOURCE_GRIDS = {"v1": "eORCA1", "v2": "ORCA2"}

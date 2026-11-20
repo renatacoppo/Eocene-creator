@@ -19,7 +19,7 @@ Layout
 .. code-block:: yaml
 
    schema: 2                  # format of this file
-   data_version: v1           # the data a run reproduces, and the CDO it needs
+   data_version: v2           # the data a run reproduces, and the CDO it needs
    machine: ...               # where the EC-Earth tools run, and the intermediate files
    grids: ...                 # the model resolution, shared by every period
    present: ...               # ecefast present run, ecefast <component> run
@@ -65,8 +65,9 @@ Top level
      - Version of the configuration format: ``2``.
    * - ``data_version``
      - str
-     - ``v1``
+     - ``v2``
      - Version of the generated data, and the CDO series it needs (below): ``v1`` or ``v2``.
+       Set ``v1`` to reproduce the data of the existing experiments.
 
 .. _data-version:
 
@@ -105,9 +106,10 @@ compared with 2.5.x. ``REMAP_AREA_MIN`` does not change this.
 
 .. code-block:: bash
 
+   module load cdo/2.6.5                     # ECMWF Atos, data_version v2
    module load cdo/2.5.3                     # ECMWF Atos, data_version v1
-   conda install -c conda-forge "cdo=2.5"    # elsewhere, data_version v1
    conda install -c conda-forge "cdo=2.6"    # elsewhere, data_version v2
+   conda install -c conda-forge "cdo=2.5"    # elsewhere, data_version v1
 
 ``machine``
 -----------
@@ -229,7 +231,7 @@ Read by ``ecefast present run`` and ``ecefast <component> run``. Its final files
    * - ``present.nemo.minimum_depth``
      - float
      - required
-     - Minimum ocean depth (m): depths ``0 < d < minimum_depth`` are raised to it. ``30`` in v1.
+     - Minimum ocean depth (m): depths ``0 < d < minimum_depth`` are raised to it. ``30`` in v1 and v2.
    * - ``present.nemo.steps.<step>``
      - bool
      - ``true``
@@ -321,8 +323,8 @@ Steps of the OIFS generator
      - ``false``
      - The climate file ``ICMCLECE4``: copies a precomputed one, or merges the monthly fields.
 
-**For** ``data_version: v1`` **all three are off** (as in the templates), or ``present.oifs`` is
-left out: the OIFS initial state of v1 is the TL63L31 one of the input tree, copied by ``stage``.
+**For** ``data_version`` **v1 and v2 all three are off** (as in the templates), or ``present.oifs``
+is left out: the OIFS initial state of both is the TL63L31 one of the input tree, copied by ``stage``.
 It was made by an IFS run (experiment ``i8ak``), not by the generator, and rebuilding it from
 TL255L91 gives a different state.
 
@@ -364,7 +366,7 @@ Read by ``ecefast eocene run`` and ``ecefast <component> run --period eocene``.
    * - ``eocene.nemo.minimum_depth``
      - float
      - required
-     - Minimum ocean depth (m) of the Eocene domain. ``30`` in v1.
+     - Minimum ocean depth (m) of the Eocene domain. ``30`` in v1 and v2.
    * - ``eocene.nemo.steps.<step>``
      - bool
      - ``true``; ``sections``: ``false``

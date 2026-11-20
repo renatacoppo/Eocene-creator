@@ -11,11 +11,11 @@
 # Any string may refer to another value with a {section.key} placeholder, e.g. {present.input}.
 
 schema: 2                       # configuration schema version (required)
-# data_version: v1              # version of the generated data. v1 = the data of the existing experiments
-                                # (PALEORCA2 domains of ECE4-DATA-V3 / PALEORCA2-definitive). It needs CDO 2.5.x:
-                                # another CDO moves land-sea mask cells of the NEMO bathymetries, so the run stops
-                                # (on Atos: module load cdo/2.5.3). v2 = NEMO bathymetries from geography rules instead of
-                                # manual corrections (issue #58); it needs CDO 2.6.x.
+# data_version: v2              # version of the generated data. v2 = NEMO bathymetries from geography rules
+                                # instead of manual corrections (issue #58); it needs CDO 2.6.x (on Atos: module
+                                # load cdo/2.6.5). v1 = the data of the existing experiments (PALEORCA2 domains of
+                                # ECE4-DATA-V3 / PALEORCA2-definitive); it needs CDO 2.5.x (module load cdo/2.5.3).
+                                # Another CDO moves land-sea mask cells of the NEMO bathymetries, so the run stops.
 
 machine:
   # name: local                 # where DOMAINcfg runs: local (not available), atos (ECMWF Atos) or fake (tests)
@@ -37,13 +37,13 @@ present:
   input: /path/to/ECE4-DATA-V3        # EC-Earth4 input tree, read-only (required)
   output: /path/to/OUTPUT/present     # the present-day tree: stage copies the input, then nemo/domain/ (required)
   oifs:                               # OIFS base data from a finer grid: its inputs are on Atos only, see atos.tmpl
-    steps:                            # all off: data_version v1 uses the TL63L31 initial state of the input tree
+    steps:                            # all off: data_version v1 and v2 use the TL63L31 initial state of the input tree
       spectral: false                 # truncate ICMSHECE4INIT
       gridpoint: false                # remap ICMGGECE4INIT, ICMGGECE4INIUA
       boundary: false                 # climate file ICMCLECE4
   nemo:                               # present-day NEMO domain, bathymetry of {input}/nemo/domain/<source_grid>/
-    # source_grid: eORCA1             # NEMO grid of the present-day bathymetry; default eORCA1 in v1 (with its
-                                      # strait corrections), ORCA2 in v2 (geography rules)
+    # source_grid: ORCA2              # NEMO grid of the present-day bathymetry; default ORCA2 in v2 (geography
+                                      # rules), eORCA1 in v1 (with its strait corrections)
     # source_staggering: T            # staggering of its coordinate bounds (used in setgrid), T or F
     minimum_depth: 30                 # m; depths 0 < d < minimum_depth are raised to it (required)
     steps:                            # DOMAINcfg runs only on Atos: its steps are off on a laptop

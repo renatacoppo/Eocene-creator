@@ -19,7 +19,7 @@ Added
   paths written to its namelist must fit the tool on Atos (132 characters for the coordinates, 200 for the
   bathymetry: a longer path, from a long ``machine.tmpdir``, was cut and DOMAINcfg wrote a domain of zeros while
   the run ended without error). After DOMAINcfg, a raw domain with no ocean cell or with coordinates all zero is
-  an error.
+  an error (#59).
 - ``data_version: v2`` (issue #58), with CDO 2.6.x: NEMO bathymetries without manual corrections. The land-sea mask
   and the depth come from one conservative remap (ocean fraction rounded to 1e-6, ocean if at least 0.5; depth =
   mean depth of the ocean part, at least ``minimum_depth``), then four geography rules
@@ -132,6 +132,9 @@ Added
 Changed
 ~~~~~~~
 
+- ``data_version`` defaults to ``v2``, which needs CDO 2.6.x (on Atos ``module load cdo/2.6.5``). A configuration
+  without ``data_version`` now makes v2 data; set ``data_version: v1`` (and CDO 2.5.x) to reproduce the data of the
+  existing experiments. The templates describe both (#59).
 - ``present.nemo.source_grid`` defaults to the source of the data version: ``eORCA1`` in v1 (as before), ``ORCA2``
   in v2. The templates leave it commented out (#59).
 - ``ecefast <period> plot``: the basins, inlets and one-cell passages of a NEMO domain use the connections of the
@@ -362,7 +365,8 @@ Output
   (``nemo/domain/PALEORCA2/`` and the bathymetry in ``<machine.tmpdir>/<period>/nemo/bathymetry/``) change as
   described under *Added*. On the laptop inputs (fake DOMAINcfg, CDO 2.6.4) the present day has 16733 ocean cells,
   11 one-cell-wide cells and 54 cells at 30 m (v1: 16870, 97, 308), the Eocene 17017, 12 and 485 (v1: 16832, 59,
-  501). The other components and every v1 output are unchanged (#59).
+  501). The other components and every v1 output are unchanged. v2 is the default: a configuration without
+  ``data_version`` makes these data (#59).
 - Present-day tree: ``nemo/domain/<grid>/section_ijglobal.diadct`` is written by default (step ``sections``), as in
   the domain trees of ECE4-DATA-V3; it was missing from the trees made by ``ecefast`` so far (#52).
 - Present-day PALEORCA2 bathymetry and domain (``nemo/domain/PALEORCA2/`` of ``present.output``): the strait

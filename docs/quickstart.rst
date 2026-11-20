@@ -22,7 +22,9 @@ Eocene starts from its tree:
 
 What a run needs on Atos:
 
-- **CDO 2.5.x**, outside the environment: ``module load cdo/2.5.3`` (the default module is newer).
+- **CDO**, outside the environment, in the series of the data version (:ref:`data-version`):
+  ``module load cdo/2.6.5`` for ``data_version: v2`` (the default), ``module load cdo/2.5.3`` for
+  ``data_version: v1``.
   The run stops with any other CDO, see :ref:`data-version`.
 - **An EC-Earth4 build**: its source tree, holding ``nemo-4.2/tools`` (``maketools``,
   ``DOMAINcfg/``, ``SECTIONS_DIADCT/``) and ``oasis3-mct-5.2/arch_ecearth/lib``. ``ecefast``
@@ -52,7 +54,8 @@ What a run needs on Atos:
 Set the paths marked ``/path/to/...``: ``machine.tmpdir`` (intermediate files),
 ``machine.atos.ecearth4_sources``, ``grids.nemo.coords_ori``, ``present.input`` (the ECE4-DATA
 tree), ``present.output``, ``eocene.herold`` and ``eocene.output``. Leave the rest as it is: the
-template reproduces the existing data (``data_version: v1``). The steps of every component are
+template makes ``data_version: v2`` (the default, :ref:`bathymetry-v2`); set ``data_version: v1``
+(and load CDO 2.5.3) to reproduce the data of the existing experiments. The steps of every component are
 listed in full; set one to ``false`` to skip it. :doc:`configuration` describes every key.
 
 3. Run
@@ -63,7 +66,7 @@ On an interactive node (``ecinteractive``) or in a batch job, not on a login nod
 .. code-block:: bash
 
    conda activate ecefast
-   module load cdo/2.5.3
+   module load cdo/2.6.5          # data_version v2 (the default); v1: module load cdo/2.5.3
 
    ecefast present run -c configs/atos.yml --dry-run   # check every input, show the plan, write nothing
    ecefast present run -c configs/atos.yml
@@ -96,7 +99,7 @@ What the steps make
      - the EC-Earth tree
    * - ``oifs``
      - The OIFS generator: OIFS base data of ``grids.oifs`` from a finer grid. Off for
-       ``data_version: v1``, whose TL63L31 initial state is the one of the input tree.
+       ``data_version`` v1 and v2, whose TL63L31 initial state is the one of the input tree.
      - ``initial_state/oifs/TL63L31/``, ``oifs/TL63L31/climate.v020/``
    * - ``nemo``
      - The NEMO domain pipeline with the present-day bathymetry: eORCA1 remapped to PALEORCA2,
@@ -189,7 +192,9 @@ of them, identical files and, for each file that differs, where and by how much;
 
 With ``data_version: v1`` the domains match those of the existing experiments
 (``PALEORCA2-definitive``): the same 16870 present-day and 16832 Eocene ocean columns, the same
-levels and depths.
+levels and depths. With ``data_version: v2`` the bathymetries come from the geography rules
+(:ref:`bathymetry-v2`, which lists the expected numbers), and ``generate_mask`` stops if DOMAINcfg
+changed the land-sea mask of the bathymetry.
 
 ``ecefast <period> plot`` draws maps of the output of a period next to a reference tree, by
 default the period's ``input`` (the present-day tree); ``--reference`` takes any other tree, for
@@ -212,7 +217,9 @@ files is refused.
      - What it draws (``--only`` selects groups)
    * - ``nemo``
      - ``nemo/domain.png``: depth, ocean basins, one-cell passages, inlets and the cells at the
-       minimum depth of the NEMO domain. Basins other than the main one are closed seas or
+       minimum depth of the NEMO domain. Cells are connected through their sides, across the
+       dateline and across the north fold of the domain (its ``jperio``), as in the geography
+       rules of v2 (:ref:`bathymetry-v2`). Basins other than the main one are closed seas or
        closed straits. An inlet is a dead-end channel one cell wide, followed from its tip (a
        cell with ocean through one face only) to its mouth: nothing flows through it; a notch
        of one cell in a coast is an inlet of length 1, and dead ends two or more cells wide are

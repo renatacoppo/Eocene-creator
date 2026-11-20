@@ -82,6 +82,7 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
         yaml.safe_dump(
             {
                 "schema": 2,
+                "data_version": "v1",  # the runner with the CDO 2.5 of the v1 CI job
                 "machine": {"tmpdir": str(tmp_path / "tmp")},
                 "eocene": {
                     "input": str(data),

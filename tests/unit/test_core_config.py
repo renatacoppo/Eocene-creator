@@ -48,7 +48,7 @@ def test_minimal_config_loads_with_defaults(tmp_path: Path) -> None:
     assert (oifs.name, oifs.startdate, oifs.climate_version) == ("TL63L31", "19900101", "climate.v020")
     assert (nemo.name, nemo.coords_ori, nemo.staggering) == ("PALEORCA2", None, "T")
     assert config.present is None and config.eocene is None
-    assert config.data_version == "v1"
+    assert config.data_version == "v2"
 
 
 def test_present_section_loads_with_defaults(tmp_path: Path) -> None:
@@ -57,7 +57,7 @@ def test_present_section_loads_with_defaults(tmp_path: Path) -> None:
     assert section.oifs.source_grid == "TL255L91"
     assert (section.oifs.climate_dir, section.oifs.precomputed_climate_dir) == (None, None)
     assert vars(section.oifs.steps) == {"spectral": True, "gridpoint": True, "boundary": False}
-    assert (section.nemo.source_grid, section.nemo.source_staggering, section.nemo.minimum_depth) == ("eORCA1", "T", 30)
+    assert (section.nemo.source_grid, section.nemo.source_staggering, section.nemo.minimum_depth) == ("ORCA2", "T", 30)
     steps = vars(section.nemo.steps)
     assert steps.pop("sections") is True  # the diadct sections, as in the domain trees of ECE4-DATA
     assert all(steps.values())
@@ -112,14 +112,14 @@ def test_data_version_explicit(tmp_path: Path) -> None:
 def test_data_version_in_placeholder(tmp_path: Path) -> None:
     raw = minimal(tmp_path)
     raw["machine"]["tmpdir"] = str(tmp_path / "tmp-{data_version}")
-    assert load_config(write(tmp_path, raw)).machine.tmpdir == str(tmp_path / "tmp-v1")
+    assert load_config(write(tmp_path, raw)).machine.tmpdir == str(tmp_path / "tmp-v2")
 
 
 def test_data_version_v2(tmp_path: Path) -> None:
     assert load_config(write(tmp_path, minimal(tmp_path) | {"data_version": "v2"})).data_version == "v2"
 
 
-@pytest.mark.parametrize("version, source_grid", [(None, "eORCA1"), ("v1", "eORCA1"), ("v2", "ORCA2")])
+@pytest.mark.parametrize("version, source_grid", [(None, "ORCA2"), ("v1", "eORCA1"), ("v2", "ORCA2")])
 def test_present_nemo_source_grid_default_by_data_version(tmp_path: Path, version, source_grid: str) -> None:
     """The present-day bathymetry comes from eORCA1 in v1 and from ORCA2 in v2, unless the file says otherwise."""
     raw = minimal(tmp_path) | {"present": present(tmp_path) | {"nemo": {"minimum_depth": 30}}}
@@ -443,8 +443,8 @@ def test_templates_load(tmp_path: Path, template: str) -> None:
     # on Atos the Eocene starts from the present-day tree of `ecefast present run`; on a laptop from ECE4-DATA
     start = config.present.output if template == "atos.tmpl" else config.present.input
     assert config.eocene.input == start
-    assert config.present.nemo.source_grid == "eORCA1"
-    # data_version v1: the shipped OIFS initial state, not the generator; the steps are listed, all off
+    assert config.data_version == "v2" and config.present.nemo.source_grid == "ORCA2"
+    # the shipped OIFS initial state (v1 and v2), not the generator; the steps are listed, all off
     assert vars(config.present.oifs.steps) == {"spectral": False, "gridpoint": False, "boundary": False}
     assert config.present.nemo.steps.sections == (template == "atos.tmpl")  # SECTIONS_DIADCT runs on Atos only
     assert config.eocene.nemo.steps.sections is False

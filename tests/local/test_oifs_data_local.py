@@ -33,6 +33,7 @@ def test_tl63l31_from_itself(tmp_path: Path) -> None:
     output = tmp_path / "OUTPUT" / "present"
     config = {
         "schema": 2,
+        "data_version": "v1",
         "machine": {"tmpdir": str(tmp_path / "tmp")},
         "present": {"input": str(data / "ECE4-DATA-V3"), "output": str(output), "oifs": {"source_grid": "TL63L31"}},
     }

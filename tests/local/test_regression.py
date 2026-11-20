@@ -54,7 +54,7 @@ def test_eocene_workflow_matches_baseline(tmp_path: Path) -> None:
         "output": str(output),
         "nemo": {"domain_dir": str(data / "data" / "domain" / "PALEORCA2" / "eocene"), "minimum_depth": 30},
     }
-    config = {"schema": 2, "machine": {"tmpdir": str(tmp_path / "tmp")}, "eocene": eocene}
+    config = {"schema": 2, "data_version": "v1", "machine": {"tmpdir": str(tmp_path / "tmp")}, "eocene": eocene}
     for path in (eocene["input"], eocene["herold"], eocene["nemo"]["domain_dir"]):
         assert Path(path).is_dir(), f"missing test data: {path}"
     assert baseline.is_dir(), f"missing test data: {baseline}"
